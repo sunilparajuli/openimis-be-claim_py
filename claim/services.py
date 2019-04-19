@@ -1,6 +1,7 @@
 from django.db import connection
 import xml.etree.ElementTree as ET
 from django.core.exceptions import PermissionDenied
+import core
 
 
 class ClaimElementSubmit(object):
@@ -160,5 +161,95 @@ class ClaimSubmitService(object):
             cur.nextset()  # skip 'EXEC...' (non) result
             if cur.description is None:  # 0 is considered as 'no result' by pyodbc
                 return
-            res = cur.fetchone()[0]  # FETCH 'SELECT @res' returned value
+            res = cur.fetchone()[0]  # FETCH 'SELECT @ret' returned value
             raise ClaimSubmitError(res)
+
+
+class EligibilityRequest(object):
+
+    def __init__(self, chfid, service_code=None, item_code=None):
+        self.chfid = chfid
+        self.service_code = service_code
+        self.item_code = item_code
+
+
+class EligibilityResponse(object):
+
+    def __init__(self, eligibility_request, prod_id, total_admissions_left, total_visits_left, total_consultations_left, total_surgeries_left,
+                 total_delivieries_left, total_antenatal_left, consultation_amount_left, surgery_amount_left, delivery_amount_left,
+                 hospitalization_amount_left, antenatal_amount_left,
+                 min_date_service, min_date_item, service_left, item_left, is_item_ok, is_service_ok):
+        self.eligibility_request = eligibility_request
+        self.prod_id = prod_id
+        self.total_admissions_left = total_admissions_left
+        self.total_visits_left = total_visits_left
+        self.total_consultations_left = total_consultations_left
+        self.total_surgeries_left = total_surgeries_left
+        self.total_delivieries_left = total_delivieries_left
+        self.total_antenatal_left = total_antenatal_left
+        self.consultation_amount_left = consultation_amount_left
+        self.surgery_amount_left = surgery_amount_left
+        self.delivery_amount_left = delivery_amount_left
+        self.hospitalization_amount_left = hospitalization_amount_left
+        self.antenatal_amount_left = antenatal_amount_left
+        self.min_date_service = min_date_service
+        self.min_date_item = min_date_item
+        self.service_left = service_left
+        self.item_left = item_left
+        self.is_item_ok = is_item_ok
+        self.is_service_ok = is_service_ok
+
+
+class EligibilityService(object):
+
+    def __init__(self, user):
+        self.user = user
+
+    def request(self, eligibility_request):
+        if self.user.is_anonymous or not self.user.has_perm('claim.can_view'):
+            raise PermissionDenied
+
+        with connection.cursor() as cur:
+            sql = """\
+                DECLARE @MinDateService DATE, @MinDateItem DATE,
+                        @ServiceLeft INT, @ItemLeft INT,
+                        @isItemOK BIT, @isServiceOK BIT;
+                EXEC [dbo].[uspServiceItemEnquiry] @CHFID = %s, @ServiceCode = %s, @ItemCode = %s,
+                     @MinDateService = @MinDateService, @MinDateItem = @MinDateItem,
+                     @ServiceLeft = @ServiceLeft, @ItemLeft = @ItemLeft,
+                     @isItemOK = @isItemOK, @isServiceOK = @isServiceOK;
+                SELECT @MinDateService, @MinDateItem, @ServiceLeft, @ItemLeft, @isItemOK, @isServiceOK
+            """
+            cur.execute(sql, (eligibility_request.chfid,
+                              eligibility_request.service_code,
+                              eligibility_request.item_code))
+
+            (prod_id, total_admissions_left, total_visits_left, total_consultations_left, total_surgeries_left,
+             total_delivieries_left, total_antenatal_left, consultation_amount_left, surgery_amount_left, delivery_amount_left,
+             hospitalization_amount_left, antenatal_amount_left) = cur.fetchone()  # retrieve the stored proc @Result table
+            cur.nextset()
+            (min_date_service, min_date_item, service_left,
+             item_left, is_item_ok, is_service_ok) = cur.fetchone()
+
+            return EligibilityResponse(
+                eligibility_request=eligibility_request,
+                prod_id=prod_id or None,
+                total_admissions_left=total_admissions_left or 0,
+                total_visits_left=total_visits_left or 0,
+                total_consultations_left=total_consultations_left or 0,
+                total_surgeries_left=total_surgeries_left or 0,
+                total_delivieries_left=total_delivieries_left or 0,
+                total_antenatal_left=total_antenatal_left or 0,
+                consultation_amount_left=consultation_amount_left or 0.0,
+                surgery_amount_left=surgery_amount_left or 0.0,
+                delivery_amount_left=delivery_amount_left or 0.0,
+                hospitalization_amount_left=hospitalization_amount_left or 0.0,
+                antenatal_amount_left=antenatal_amount_left or 0.0,
+                min_date_service=core.datetime.date.from_ad_date(
+                    min_date_service),
+                min_date_item=core.datetime.date.from_ad_date(min_date_item),
+                service_left=service_left or 0,
+                item_left=item_left or 0,
+                is_item_ok=is_item_ok == True,
+                is_service_ok=is_service_ok == True
+            )
