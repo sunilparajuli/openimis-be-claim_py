@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 from django.core.exceptions import PermissionDenied
 import core
 
-
+@core.comparable
 class ClaimElementSubmit(object):
     def __init__(self, type, code, quantity, price=None):
         self.type = type
@@ -19,7 +19,7 @@ class ClaimElementSubmit(object):
         ET.SubElement(item, "%sQuantity" %
                       self.type).text = "%s" % self.quantity
 
-
+@core.comparable
 class ClaimItemSubmit(ClaimElementSubmit):
     def __init__(self, code, quantity, price=None):
         super().__init__(type='Item',
@@ -27,15 +27,14 @@ class ClaimItemSubmit(ClaimElementSubmit):
                          price=price,
                          quantity=quantity)
 
-
+@core.comparable
 class ClaimServiceSubmit(ClaimElementSubmit):
     def __init__(self, code, quantity, price=None):
         super().__init__(type='Service',
                          code=code,
                          price=price,
                          quantity=quantity)
-
-
+@core.comparable
 class ClaimSubmit(object):
     def __init__(self, date, code, icd_code, total, start_date,
                  insuree_chf_id, health_facility_code,
@@ -97,27 +96,26 @@ class ClaimSubmit(object):
         if self.guarantee_no:
             ET.SubElement(
                 xmlelt, 'GuaranteeNo').text = "%s" % self.guarantee_no
+    
+    def add_elt_list_to_xmlelt(self, xmlelt, elts_name, elts):
+        if elts and len(elts) > 0:
+            elts_xml = ET.SubElement(xmlelt, elts_name)
+            for item in elts:
+                item.add_to_xmlelt(elts_xml)
 
     def add_to_xmlelt(self, xmlelt):
         details = ET.SubElement(xmlelt, 'Details')
         self._details_to_xmlelt(details)
 
-        if self.items and len(self.items) > 0:
-            items = ET.SubElement(xmlelt, 'Items')
-            for item in self.items:
-                item.add_to_xmlelt(items)
-
-        if self.services and len(self.services) > 0:
-            services = ET.SubElement(xmlelt, 'Services')
-            for service in self.services:
-                service.add_to_xmlelt(services)
+        self.add_elt_list_to_xmlelt(xmlelt, 'Items', self.items)
+        self.add_elt_list_to_xmlelt(xmlelt, 'Services', self.services)
 
     def to_xml(self):
         claim_xml = ET.Element('Claim')
         self.add_to_xmlelt(claim_xml)
         return ET.tostring(claim_xml, encoding='utf-8', method='xml').decode()
 
-
+@core.comparable
 class ClaimSubmitError(Exception):
     ERROR_CODES = {
         -1: "Fatal Error",
@@ -164,7 +162,7 @@ class ClaimSubmitService(object):
             res = cur.fetchone()[0]  # FETCH 'SELECT @ret' returned value
             raise ClaimSubmitError(res)
 
-
+@core.comparable
 class EligibilityRequest(object):
 
     def __init__(self, chfid, service_code=None, item_code=None):
@@ -172,7 +170,11 @@ class EligibilityRequest(object):
         self.service_code = service_code
         self.item_code = item_code
 
+    def __eq__(self, other):
+        import pdb; pdb.set_trace()        
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__        
 
+@core.comparable
 class EligibilityResponse(object):
 
     def __init__(self, eligibility_request, prod_id, total_admissions_left, total_visits_left, total_consultations_left, total_surgeries_left,
@@ -208,7 +210,6 @@ class EligibilityService(object):
     def request(self, eligibility_request):
         if self.user.is_anonymous or not self.user.has_perm('claim.can_view'):
             raise PermissionDenied
-
         with connection.cursor() as cur:
             sql = """\
                 DECLARE @MinDateService DATE, @MinDateItem DATE,
@@ -223,14 +224,12 @@ class EligibilityService(object):
             cur.execute(sql, (eligibility_request.chfid,
                               eligibility_request.service_code,
                               eligibility_request.item_code))
-
             (prod_id, total_admissions_left, total_visits_left, total_consultations_left, total_surgeries_left,
              total_delivieries_left, total_antenatal_left, consultation_amount_left, surgery_amount_left, delivery_amount_left,
              hospitalization_amount_left, antenatal_amount_left) = cur.fetchone()  # retrieve the stored proc @Result table
             cur.nextset()
             (min_date_service, min_date_item, service_left,
              item_left, is_item_ok, is_service_ok) = cur.fetchone()
-
             return EligibilityResponse(
                 eligibility_request=eligibility_request,
                 prod_id=prod_id or None,
