@@ -1,11 +1,12 @@
 from django.test import TestCase
+from django.core.exceptions import PermissionDenied
 from unittest import mock
 import xml.etree.ElementTree as ET
 from .services import *
 import core
 
 
-class SubmitClaimsTestCase(TestCase):
+class ClaimSubmitServiceTestCase(TestCase):
 
     def test_minimal_item_claim_submit_xml(self):
         items = [
@@ -14,11 +15,11 @@ class SubmitClaimsTestCase(TestCase):
         item = "<Item><ItemCode>aa</ItemCode><ItemQuantity>2</ItemQuantity></Item>"
 
         claim = ClaimSubmit(
-            date=core.datetime.date(2076, 9, 24),
+            date=core.datetime.date(2020, 1, 9),
             code="code_ABVC",
             icd_code="ICD_CODE_WWQ",
             total=334,
-            start_date=core.datetime.date(2076, 9, 28),
+            start_date=core.datetime.date(2020, 1, 13),
             claim_admin_code='ADM_CODE_ADKJ',
             insuree_chf_id='CHFID_UUZIS',
             health_facility_code="HFCode_JQL",
@@ -44,11 +45,11 @@ class SubmitClaimsTestCase(TestCase):
         service = "<Service><ServiceCode>aa</ServiceCode><ServiceQuantity>2</ServiceQuantity></Service>"
 
         claim = ClaimSubmit(
-            date=core.datetime.date(2076, 9, 24),
+            date=core.datetime.date(2020, 1, 9),
             code="code_ABVC",
             icd_code="ICD_CODE_WWQ",
             total=334,
-            start_date=core.datetime.date(2076, 9, 28),
+            start_date=core.datetime.date(2020, 1, 13),
             claim_admin_code='ADM_CODE_ADKJ',
             insuree_chf_id='CHFID_UUZIS',
             health_facility_code="HFCode_JQL",
@@ -84,11 +85,11 @@ class SubmitClaimsTestCase(TestCase):
         service_b = "<Service><ServiceCode>a&lt;a\'-serv</ServiceCode><ServicePrice>35</ServicePrice><ServiceQuantity>1</ServiceQuantity></Service>"
 
         claim = ClaimSubmit(
-            date=core.datetime.date(2076, 9, 24),
+            date=core.datetime.date(2020, 1, 9),
             code="code_ABVC",
             icd_code="ICD_CODE_WWQ",
             total=334,
-            start_date=core.datetime.date(2076, 9, 28),
+            start_date=core.datetime.date(2020, 1, 13),
             claim_admin_code='ADM_CODE_ADKJ',
             insuree_chf_id='CHFID_UUZIS',
             health_facility_code="HFCode_JQL",
@@ -112,41 +113,116 @@ class SubmitClaimsTestCase(TestCase):
         expected = expected + "</Claim>"
         self.assertEquals(expected, claim.to_xml())
 
+    def test_claim_submit_permission_denied(self):
+        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
+            mock_cursor.return_value.__enter__.return_value.fetchone.return_value = [
+                2]
+            mock_user = mock.Mock(is_anonymous=False)
+            mock_user.has_perm = mock.MagicMock(return_value=False)
+            claim = ClaimSubmit(
+                date=core.datetime.date(2020, 1, 9),
+                code="code_ABVC",
+                icd_code="ICD_CODE_WWQ",
+                total=334,
+                start_date=core.datetime.date(2020, 1, 13),
+                claim_admin_code='ADM_CODE_ADKJ',
+                insuree_chf_id='CHFID_UUZIS',
+                health_facility_code="HFCode_JQL"
+            )
+            service = ClaimSubmitService(user=mock_user)
+            with self.assertRaises(PermissionDenied) as cm:
+                service.submit(claim)
 
-    mock_cursor = mock.MagicMock()    
+    def test_claim_submit_error(self):
+        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
+            mock_cursor.return_value.__enter__.return_value.fetchone.return_value = [
+                2]
+            mock_user = mock.Mock(is_anonymous=False)
+            mock_user.has_perm = mock.MagicMock(return_value=True)
+            claim = ClaimSubmit(
+                date=core.datetime.date(2020, 1, 9),
+                code="code_ABVC",
+                icd_code="ICD_CODE_WWQ",
+                total=334,
+                start_date=core.datetime.date(2020, 1, 13),
+                claim_admin_code='ADM_CODE_ADKJ',
+                insuree_chf_id='CHFID_UUZIS',
+                health_facility_code="HFCode_JQL"
+            )
+            service = ClaimSubmitService(user=mock_user)
+            with self.assertRaises(ClaimSubmitError) as cm:
+                service.submit(claim)
+            self.assertEquals(cm.exception.code, 2)
+            mock_user.has_perm.assert_called_with('claim.can_add')
 
-    @mock.patch("django.db.backends.utils.CursorWrapper")
-    def test_claim_submit_error(self, mock_cursor):
-        mock_cursor.return_value.__enter__.return_value.fetchone.return_value = [2]
+    def test_claim_submit_allgood(self):
+        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
+            mock_cursor.return_value.__enter__.return_value.description = None
+            mock_user = mock.Mock(is_anonymous=False)
+            mock_user.has_perm = mock.MagicMock(return_value=True)
+            claim = ClaimSubmit(
+                date=core.datetime.date(2020, 1, 9),
+                code="code_ABVC",
+                icd_code="ICD_CODE_WWQ",
+                total=334,
+                start_date=core.datetime.date(2020, 1, 13),
+                claim_admin_code='ADM_CODE_ADKJ',
+                insuree_chf_id='CHFID_UUZIS',
+                health_facility_code="HFCode_JQL"
+            )
+            service = ClaimSubmitService(user=mock_user)
+            service.submit(claim)  # doesn't raise an error
+            mock_user.has_perm.assert_called_with('claim.can_add')
 
-        claim = ClaimSubmit(
-            date=core.datetime.date(2076, 9, 24),
-            code="code_ABVC",
-            icd_code="ICD_CODE_WWQ",
-            total=334,
-            start_date=core.datetime.date(2076, 9, 28),
-            claim_admin_code='ADM_CODE_ADKJ',
-            insuree_chf_id='CHFID_UUZIS',
-            health_facility_code="HFCode_JQL"            
-        )
-        with self.assertRaises(ClaimSubmitError) as cm:
-            submit_claim(claim)
-        self.assertEquals(cm.exception.code, 2)
 
-    mock_cursor = mock.MagicMock()    
+class EligibilityServiceTestCase(TestCase):
 
-    @mock.patch("django.db.backends.utils.CursorWrapper")
-    def test_claim_submit_allgood(self, mock_cursor):
-        mock_cursor.return_value.__enter__.return_value.description = None
+    def test_eligibility_request_permission_denied(self):
+        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
+            mock_cursor.return_value.__enter__.return_value.description = None
+            mock_user = mock.Mock(is_anonymous=False)
+            mock_user.has_perm = mock.MagicMock(return_value=False)
+            req = EligibilityRequest(chfid='a')
+            service = EligibilityService(mock_user)
+            with self.assertRaises(PermissionDenied) as cm:
+                service.request(req)
+            mock_user.has_perm.assert_called_with('claim.can_view')
 
-        claim = ClaimSubmit(
-            date=core.datetime.date(2076, 9, 24),
-            code="code_ABVC",
-            icd_code="ICD_CODE_WWQ",
-            total=334,
-            start_date=core.datetime.date(2076, 9, 28),
-            claim_admin_code='ADM_CODE_ADKJ',
-            insuree_chf_id='CHFID_UUZIS',
-            health_facility_code="HFCode_JQL"            
-        )
-        submit_claim(claim)
+    def test_eligibility_request_all_good(self):
+        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
+            return_values = [
+                list(range(1, 13)),
+                [core.datetime.date(2020, 1, 9),
+                 core.datetime.date(2020, 1, 10),
+                 20, 21, True, True]
+            ][::-1]
+
+            mock_cursor.return_value.__enter__.return_value.fetchone = lambda: return_values.pop()
+            mock_user = mock.Mock(is_anonymous=False)
+            mock_user.has_perm = mock.MagicMock(return_value=True)
+            req = EligibilityRequest(chfid='a')
+            service = EligibilityService(mock_user)
+            res = service.request(req)
+
+            excpected = EligibilityResponse(
+                eligibility_request=req,
+                prod_id=1,
+                total_admissions_left=2,
+                total_visits_left=3,
+                total_consultations_left=4,
+                total_surgeries_left=5,
+                total_delivieries_left=6,
+                total_antenatal_left=7,
+                consultation_amount_left=8,
+                surgery_amount_left=9,
+                delivery_amount_left=10,
+                hospitalization_amount_left=11,
+                antenatal_amount_left=12,
+                min_date_service=core.datetime.date(2020, 1, 9),
+                min_date_item=core.datetime.date(2020, 1, 10),
+                service_left=20,
+                item_left=21,
+                is_item_ok=True,
+                is_service_ok= True
+            )
+            self.assertEquals(excpected, res)
