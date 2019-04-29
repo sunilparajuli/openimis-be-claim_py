@@ -96,7 +96,7 @@ class ClaimSubmit(object):
         if self.guarantee_no:
             ET.SubElement(
                 xmlelt, 'GuaranteeNo').text = "%s" % self.guarantee_no
-    
+   
     def add_elt_list_to_xmlelt(self, xmlelt, elts_name, elts):
         if elts and len(elts) > 0:
             elts_xml = ET.SubElement(xmlelt, elts_name)
@@ -106,7 +106,6 @@ class ClaimSubmit(object):
     def add_to_xmlelt(self, xmlelt):
         details = ET.SubElement(xmlelt, 'Details')
         self._details_to_xmlelt(details)
-
         self.add_elt_list_to_xmlelt(xmlelt, 'Items', self.items)
         self.add_elt_list_to_xmlelt(xmlelt, 'Services', self.services)
 
