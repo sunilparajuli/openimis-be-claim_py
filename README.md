@@ -22,3 +22,13 @@ Current version provides the following ORM mapping:
 It also provides the following services
 * ClaimSubmitService.submit (requires claim.can_add permission)
 * EligibilityService.request (requires claim.can_view permission)
+
+## Dependencies
+
+This module depends on the following modules and entities:
+* core.InteractiveUser
+* location.HealthFacility
+* insuree.Insuree
+* medical.Item
+* medical.Service
+* policy.Policy
