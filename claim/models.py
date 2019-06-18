@@ -32,7 +32,7 @@ class ClaimAdmin(models.Model):
 
     audit_user_id = models.IntegerField(
         db_column='AuditUserId', blank=True, null=True)
-    row_id = models.BinaryField(db_column='RowId', blank=True, null=True)
+    # row_id = models.BinaryField(db_column='RowId', blank=True, null=True)
 
     class Meta:
         managed = False
@@ -50,7 +50,7 @@ class ClaimDiagnosisCode(models.Model):
         db_column='ValidityTo', blank=True, null=True)
 
     audit_user_id = models.IntegerField(db_column='AuditUserID')
-    row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
+    # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     class Meta:
         managed = False
@@ -165,7 +165,7 @@ class Claim(models.Model):
         db_column='AuditUserIDSubmit', blank=True, null=True)
     audit_user_id_process = models.IntegerField(
         db_column='AuditUserIDProcess', blank=True, null=True)
-    row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
+    # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     class Meta:
         managed = False
