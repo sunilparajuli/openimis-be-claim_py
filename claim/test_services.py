@@ -4,7 +4,7 @@ from unittest import mock
 import xml.etree.ElementTree as ET
 from .services import *
 import core
-
+import json
 
 class ClaimSubmitServiceTestCase(TestCase):
 
@@ -204,7 +204,7 @@ class EligibilityServiceTestCase(TestCase):
             service = EligibilityService(mock_user)
             res = service.request(req)
 
-            excpected = EligibilityResponse(
+            expected = EligibilityResponse(
                 eligibility_request=req,
                 prod_id=1,
                 total_admissions_left=2,
@@ -223,6 +223,35 @@ class EligibilityServiceTestCase(TestCase):
                 service_left=20,
                 item_left=21,
                 is_item_ok=True,
-                is_service_ok= True
+                is_service_ok=True
             )
-            self.assertEquals(excpected, res)
+            self.assertEquals(expected, res)
+
+    def test_eligibility_sp_call(self):
+            mock_user = mock.Mock(is_anonymous=False)
+            mock_user.has_perm = mock.MagicMock(return_value=True)
+            req = EligibilityRequest(chfid='070707070')
+            service = EligibilityService(mock_user)
+            res = service.request(req)
+            expected = EligibilityResponse(
+                eligibility_request=req,
+                prod_id=4,
+                total_admissions_left=0,
+                total_visits_left=0,
+                total_consultations_left=0,
+                total_surgeries_left=0,
+                total_delivieries_left=0,
+                total_antenatal_left=0,
+                consultation_amount_left=0.0,
+                surgery_amount_left=0.0,
+                delivery_amount_left=0.0,
+                hospitalization_amount_left=0.0,
+                antenatal_amount_left=0.0,
+                min_date_service=None,
+                min_date_item=None,
+                service_left=0,
+                item_left=0,
+                is_item_ok=False,
+                is_service_ok=False
+            )
+            self.assertEquals(expected, res)
