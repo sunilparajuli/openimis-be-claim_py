@@ -170,7 +170,6 @@ class EligibilityRequest(object):
         self.item_code = item_code
 
     def __eq__(self, other):
-        import pdb; pdb.set_trace()        
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__        
 
 @core.comparable
