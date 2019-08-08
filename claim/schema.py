@@ -1,13 +1,23 @@
 import graphene
+from core import prefix_filterset
 from graphene_django import DjangoObjectType
+from graphene_django.filter import DjangoFilterConnectionField
+from insuree.schema import InsureeGQLType
 
 from .models import Claim, ClaimDiagnosisCode, ClaimAdmin, Feedback, ClaimItem, ClaimService
 
 
-class ClaimType(DjangoObjectType):
+class ClaimGQLType(DjangoObjectType):
+
     class Meta:
         model = Claim
         exclude_fields = ('row_id',)
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "status": ["exact"],
+            **prefix_filterset("insuree__", InsureeGQLType._meta.filter_fields)
+        }
 
     @classmethod
     def get_queryset(cls, queryset, info):
@@ -20,41 +30,41 @@ class ClaimType(DjangoObjectType):
     #     return 'sample extra!'
 
 
-class ClaimAdminType(DjangoObjectType):
+class ClaimAdminGQLType(DjangoObjectType):
     class Meta:
         model = ClaimAdmin
         exclude_fields = ('row_id',)
 
 
-class ClaimDiagnosisCodeType(DjangoObjectType):
+class ClaimDiagnosisCodeGQLType(DjangoObjectType):
     class Meta:
         model = ClaimDiagnosisCode
         exclude_fields = ('row_id',)
 
 
-class FeedbackType(DjangoObjectType):
+class FeedbackGQLType(DjangoObjectType):
     class Meta:
         model = Feedback
         exclude_fields = ('row_id',)
 
 
-class ClaimItemType(DjangoObjectType):
+class ClaimItemGQLType(DjangoObjectType):
     class Meta:
         model = ClaimItem
         exclude_fields = ('row_id',)
 
 
-class ClaimServiceType(DjangoObjectType):
+class ClaimServiceGQLType(DjangoObjectType):
     class Meta:
         model = ClaimService
         exclude_fields = ('row_id',)
 
 
 class Query(graphene.ObjectType):
-    claim = graphene.Field(ClaimType,
-                           id=graphene.Int(),
-                           name=graphene.String())
-    all_claims = graphene.List(ClaimType)
+    claim = graphene.relay.node.Field(ClaimGQLType,
+                                      id=graphene.Int(),
+                                      name=graphene.String())
+    all_claims = DjangoFilterConnectionField(ClaimGQLType)
 
     def resolve_all_claims(self, info, **kwargs):
         if info.context.user.is_authenticated:
