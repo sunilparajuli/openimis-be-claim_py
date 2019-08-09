@@ -15,7 +15,13 @@ class ClaimGQLType(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact"],
+            "code": ["exact", "istartswith", "icontains", "iexact"],
             "status": ["exact"],
+            "feedback_status": ["exact"],
+            "review_status": ["exact"],
+            "admin": ["exact"],
+            "health_facility": ["exact"],
+            "visit_type":["exact"],
             **prefix_filterset("insuree__", InsureeGQLType._meta.filter_fields)
         }
 
@@ -34,6 +40,13 @@ class ClaimAdminGQLType(DjangoObjectType):
     class Meta:
         model = ClaimAdmin
         exclude_fields = ('row_id',)
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "code": ["exact", "icontains"],
+            "last_name": ["exact", "icontains"],
+            "other_names": ["exact", "icontains"],
+        }
 
 
 class ClaimDiagnosisCodeGQLType(DjangoObjectType):
@@ -64,16 +77,8 @@ class Query(graphene.ObjectType):
     claim = graphene.relay.node.Field(ClaimGQLType,
                                       id=graphene.Int(),
                                       name=graphene.String())
-    all_claims = DjangoFilterConnectionField(ClaimGQLType)
-
-    def resolve_all_claims(self, info, **kwargs):
-        if info.context.user.is_authenticated:
-            if info.context.user:
-                return Claim.objects.filter(id__gte=0)  # TODO find how to filter
-            else:
-                return Claim.objects.all()
-        else:
-            return Claim.objects.all()
+    claims = DjangoFilterConnectionField(ClaimGQLType)
+    claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
 
     def resolve_claim(self, info, **kwargs):
         id = kwargs.get('id')
