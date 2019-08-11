@@ -27,8 +27,9 @@ class ClaimAdmin(models.Model):
     validity_from = fields.DateTimeField(
         db_column='ValidityFrom', blank=True, null=True)
     validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)    
-    has_login = models.BooleanField(db_column='HasLogin', blank=True, null=True)
+        db_column='ValidityTo', blank=True, null=True)
+    has_login = models.BooleanField(
+        db_column='HasLogin', blank=True, null=True)
 
     audit_user_id = models.IntegerField(
         db_column='AuditUserId', blank=True, null=True)
@@ -85,6 +86,27 @@ class Feedback(models.Model):
         db_table = 'tblFeedback'
 
 
+class BatchRun(models.Model):
+    id = models.AutoField(db_column='RunID', primary_key=True)
+    legacy_id = models.IntegerField(
+        db_column='LegacyID', blank=True, null=True)
+    location = models.ForeignKey(
+        location_models.Location, models.DO_NOTHING,
+        db_column='LocationId', blank=True, null=True)
+    run_date = fields.DateTimeField(db_column='RunDate')
+    validity_from = fields.DateTimeField(db_column='ValidityFrom')
+    validity_to = fields.DateTimeField(
+        db_column='ValidityTo', blank=True, null=True)
+
+    audit_user_id = models.IntegerField(db_column='AuditUserID')
+    run_year = models.IntegerField(db_column='RunYear')
+    run_month = models.SmallIntegerField(db_column='RunMonth')
+
+    class Meta:
+        managed = False
+        db_table = 'tblBatchRun'
+
+
 class Claim(models.Model):
     id = models.AutoField(db_column='ClaimID', primary_key=True)
     legacy_id = models.IntegerField(
@@ -98,15 +120,19 @@ class Claim(models.Model):
     date_to = fields.DateField(db_column='DateTo', blank=True, null=True)
     status = models.SmallIntegerField(db_column='ClaimStatus')
     adjuster = models.ForeignKey(
-        core_models.InteractiveUser, models.DO_NOTHING, db_column='Adjuster', blank=True, null=True)
+        core_models.InteractiveUser, models.DO_NOTHING,
+        db_column='Adjuster', blank=True, null=True)
     adjustment = models.TextField(
         db_column='Adjustment', blank=True, null=True)
     claimed = models.DecimalField(
-        db_column='Claimed', max_digits=18, decimal_places=2, blank=True, null=True)
+        db_column='Claimed',
+        max_digits=18, decimal_places=2, blank=True, null=True)
     approved = models.DecimalField(
-        db_column='Approved', max_digits=18, decimal_places=2, blank=True, null=True)
+        db_column='Approved',
+        max_digits=18, decimal_places=2, blank=True, null=True)
     reinsured = models.DecimalField(
-        db_column='Reinsured', max_digits=18, decimal_places=2, blank=True, null=True)
+        db_column='Reinsured',
+        max_digits=18, decimal_places=2, blank=True, null=True)
     valuated = models.DecimalField(
         db_column='Valuated', max_digits=18, decimal_places=2, blank=True, null=True)
     date_claimed = fields.DateField(db_column='DateClaimed')
@@ -114,7 +140,8 @@ class Claim(models.Model):
         db_column='DateProcessed', blank=True, null=True)
     feedback = models.BooleanField(db_column='Feedback')
     feedback = models.OneToOneField(
-        Feedback, models.DO_NOTHING, db_column='FeedbackID', blank=True, null=True)
+        Feedback, models.DO_NOTHING,
+        db_column='FeedbackID', blank=True, null=True)
     explanation = models.TextField(
         db_column='Explanation', blank=True, null=True)
     feedback_status = models.SmallIntegerField(
@@ -138,7 +165,9 @@ class Claim(models.Model):
 
     health_facility = models.ForeignKey(
         location_models.HealthFacility, models.DO_NOTHING, db_column='HFID')
-    # runid = models.ForeignKey(Tblbatchrun, models.DO_NOTHING, db_column='RunID', blank=True, null=True)
+    batch_run = models.ForeignKey(
+        BatchRun, models.DO_NOTHING,
+        db_column='RunID', blank=True, null=True)
 
     submit_stamp = fields.DateTimeField(
         db_column='SubmitStamp', blank=True, null=True)
@@ -149,13 +178,27 @@ class Claim(models.Model):
     guarantee_id = models.CharField(
         db_column='GuaranteeId', max_length=50, blank=True, null=True)
     admin = models.ForeignKey(
-        ClaimAdmin, models.DO_NOTHING, db_column='ClaimAdminId', blank=True, null=True)
+        ClaimAdmin, models.DO_NOTHING, db_column='ClaimAdminId',
+        blank=True, null=True)
     icd = models.ForeignKey(
-        ClaimDiagnosisCode, models.DO_NOTHING, db_column='ICDID')
-    icd_1 = models.IntegerField(db_column='ICDID1', blank=True, null=True)
-    icd_2 = models.IntegerField(db_column='ICDID2', blank=True, null=True)
-    icd_3 = models.IntegerField(db_column='ICDID3', blank=True, null=True)
-    icd_4 = models.IntegerField(db_column='ICDID4', blank=True, null=True)
+        medical_models.Diagnosis, models.DO_NOTHING, db_column='ICDID',
+        related_name="claim_icds")
+    icd_1 = models.ForeignKey(
+        medical_models.Diagnosis, models.DO_NOTHING, db_column='ICDID1',
+        related_name="claim_icd1s",
+        blank=True, null=True)
+    icd_2 = models.ForeignKey(
+        medical_models.Diagnosis, models.DO_NOTHING, db_column='ICDID2',
+        related_name="claim_icd2s",
+        blank=True, null=True)
+    icd_3 = models.ForeignKey(
+        medical_models.Diagnosis, models.DO_NOTHING, db_column='ICDID3',
+        related_name="claim_icd3s",
+        blank=True, null=True)
+    icd_4 = models.ForeignKey(
+        medical_models.Diagnosis, models.DO_NOTHING, db_column='ICDID4',
+        related_name="claim_icd4s",
+        blank=True, null=True)
 
     visit_type = models.CharField(
         db_column='VisitType', max_length=1, blank=True, null=True)
