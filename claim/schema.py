@@ -1,6 +1,6 @@
 from django.conf import settings
 import graphene
-from core import prefix_filterset
+from core import prefix_filterset, ExtendedConnection
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 from insuree.schema import InsureeGQLType
@@ -20,6 +20,7 @@ class BatchRunGQLType(DjangoObjectType):
             "run_date": ["exact", "lt", "lte", "gt", "gte"],
             **prefix_filterset("location__", LocationGQLType._meta.filter_fields),
         }
+        connection_class = ExtendedConnection
 
 
 class ClaimAdminGQLType(DjangoObjectType):
@@ -33,6 +34,7 @@ class ClaimAdminGQLType(DjangoObjectType):
             "last_name": ["exact", "icontains"],
             "other_names": ["exact", "icontains"],
         }
+        connection_class = ExtendedConnection
 
 
 class ClaimGQLType(DjangoObjectType):
@@ -59,6 +61,7 @@ class ClaimGQLType(DjangoObjectType):
             **prefix_filterset("insuree__", InsureeGQLType._meta.filter_fields),
             **prefix_filterset("batch_run__", BatchRunGQLType._meta.filter_fields)
         }
+        connection_class = ExtendedConnection
 
     @classmethod
     def get_queryset(cls, queryset, info):
