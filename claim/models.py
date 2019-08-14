@@ -40,6 +40,13 @@ class ClaimAdmin(models.Model):
         db_table = 'tblClaimAdmin'
 
 
+"""
+ClaimDiagnosisCode is DEPRECATED.
+it has been moved to medical models.Diagnosis
+It is kept over for api_fhir module backward compatibility...
+"""
+
+
 class ClaimDiagnosisCode(models.Model):
     id = models.AutoField(db_column='ICDID', primary_key=True)
     legacy_id = models.IntegerField(
