@@ -226,7 +226,7 @@ class ClaimItem(models.Model):
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
     legacy_id = models.IntegerField(
         db_column='LegacyID', blank=True, null=True)
-    claim = models.ForeignKey(Claim, models.DO_NOTHING, db_column='ClaimID')
+    claim = models.ForeignKey(Claim, models.DO_NOTHING, db_column='ClaimID', related_name='items')
     item = models.ForeignKey(
         medical_models.Item, models.DO_NOTHING, db_column='ItemID')
     # prodid = models.ForeignKey('Tblproduct', models.DO_NOTHING, db_column='ProdID', blank=True, null=True)
@@ -287,7 +287,7 @@ class ClaimService(models.Model):
     legacy_id = models.IntegerField(
         db_column='LegacyID', blank=True, null=True)
     claim = models.ForeignKey(
-        Claim, models.DO_NOTHING, db_column='ClaimID')
+        Claim, models.DO_NOTHING, db_column='ClaimID', related_name='services')
     service = models.ForeignKey(
         medical_models.Service, models.DO_NOTHING, db_column='ServiceID')
     # prod = models.ForeignKey('Tblproduct', models.DO_NOTHING, db_column='ProdID', blank=True, null=True)
