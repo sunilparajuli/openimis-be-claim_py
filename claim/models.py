@@ -1,8 +1,8 @@
-from django.db import models
 from core import fields
 from core import models as core_models
-from location import models as location_models
+from django.db import models
 from insuree import models as insuree_models
+from location import models as location_models
 from medical import models as medical_models
 from policy import models as policy_models
 
@@ -67,6 +67,9 @@ class ClaimDiagnosisCode(models.Model):
 
 class Feedback(models.Model):
     id = models.AutoField(db_column='FeedbackID', primary_key=True)
+    claim = models.OneToOneField(
+        "Claim", models.DO_NOTHING,
+        db_column='ClaimID', blank=True, null=True, related_name="+")
     legacy_id = models.IntegerField(
         db_column='LegacyID', blank=True, null=True)
     care_rendered = models.BooleanField(
@@ -145,10 +148,11 @@ class Claim(models.Model):
     date_claimed = fields.DateField(db_column='DateClaimed')
     date_processed = fields.DateField(
         db_column='DateProcessed', blank=True, null=True)
-    feedback = models.BooleanField(db_column='Feedback')
+    # Django uses the feedback_id column to create the feedback column, which conflicts with the boolean field
+    feedback_available = models.BooleanField(db_column='Feedback', default=False)
     feedback = models.OneToOneField(
         Feedback, models.DO_NOTHING,
-        db_column='FeedbackID', blank=True, null=True)
+        db_column='FeedbackID', blank=True, null=True, related_name="+")
     explanation = models.TextField(
         db_column='Explanation', blank=True, null=True)
     feedback_status = models.SmallIntegerField(
