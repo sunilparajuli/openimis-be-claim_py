@@ -1,6 +1,6 @@
 from django.conf import settings
 import graphene
-from core import prefix_filterset, ExtendedConnection
+from core import prefix_filterset, ExtendedConnection, filter_validity
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 from insuree.schema import InsureeGQLType
@@ -65,6 +65,7 @@ class ClaimGQLType(DjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
+        queryset = queryset.filter(*filter_validity())
         if settings.ROW_SECURITY & info.context.user.is_anonymous:
             return queryset.filter(id=-1)
         return queryset
