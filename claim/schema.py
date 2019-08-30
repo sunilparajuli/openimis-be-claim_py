@@ -10,21 +10,9 @@ from graphene_django.filter import DjangoFilterConnectionField
 from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType, LocationGQLType
 from medical.schema import DiagnosisGQLType
+from claim_batch.schema import BatchRunGQLType
 
-from .models import BatchRun, Claim, ClaimDiagnosisCode, ClaimAdmin, Feedback, ClaimItem, ClaimService
-
-
-class BatchRunGQLType(DjangoObjectType):
-    class Meta:
-        model = BatchRun
-        exclude_fields = ('row_id',)
-        interfaces = (graphene.relay.Node,)
-        filter_fields = {
-            "id": ["exact"],
-            "run_date": ["exact", "lt", "lte", "gt", "gte"],
-            **prefix_filterset("location__", LocationGQLType._meta.filter_fields),
-        }
-        connection_class = ExtendedConnection
+from .models import Claim, ClaimDiagnosisCode, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
 
 
 class ClaimAdminGQLType(DjangoObjectType):
@@ -34,6 +22,24 @@ class ClaimAdminGQLType(DjangoObjectType):
 
     class Meta:
         model = ClaimAdmin
+        exclude_fields = ('row_id',)
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "code": ["exact", "icontains"],
+            "last_name": ["exact", "icontains"],
+            "other_names": ["exact", "icontains"],
+        }
+        connection_class = ExtendedConnection
+
+
+class ClaimOfficerGQLType(DjangoObjectType):
+    """
+    Details about a Claim Officer
+    """
+
+    class Meta:
+        model = ClaimOfficer
         exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
@@ -123,7 +129,7 @@ class ClaimServiceGQLType(DjangoObjectType):
 class Query(graphene.ObjectType):
     claims = DjangoFilterConnectionField(ClaimGQLType)
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
-    batch_runs = DjangoFilterConnectionField(BatchRunGQLType)
+    claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
 
 
 class ClaimItemInputType(InputObjectType):
@@ -131,26 +137,37 @@ class ClaimItemInputType(InputObjectType):
     item_id = graphene.Int(required=True)
     availability = graphene.Boolean(required=True)
     status = TinyInt(required=True)
-    qty_provided = graphene.Decimal(max_digits=18, decimal_places=2, required=True)
-    qty_approved = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
-    price_asked = graphene.Decimal(max_digits=18, decimal_places=2, required=True)
-    price_adjusted = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
-    price_approved = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
-    price_valuated = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    qty_provided = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=True)
+    qty_approved = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
+    price_asked = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=True)
+    price_adjusted = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
+    price_approved = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
+    price_valuated = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     explanation = graphene.String(required=False)
     justification = graphene.String(required=False)
     rejection_reason = graphene.String(required=False)
 
     validity_from_review = graphene.DateTime(required=False)
     validity_to_review = graphene.DateTime(required=False)
-    limitation_value = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    limitation_value = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     limitation = graphene.String(required=False)
     # policy_id
-    remunerated_amount = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
-    deductable_amount = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
-    exceed_ceiling_amount = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    remunerated_amount = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
+    deductable_amount = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
+    exceed_ceiling_amount = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     price_origin = graphene.String(required=False)
-    exceed_ceiling_amount_category = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    exceed_ceiling_amount_category = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
 
 
 class ClaimServiceInputType(InputObjectType):
@@ -159,27 +176,36 @@ class ClaimServiceInputType(InputObjectType):
     service_id = graphene.Int(required=True)
     status = TinyInt(required=True)
     qty_provided = graphene.Decimal(max_digits=18, decimal_places=2)
-    qty_approved = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    qty_approved = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     price_asked = graphene.Decimal(max_digits=18, decimal_places=2)
-    price_adjusted = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
-    price_approved = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
-    price_valuated = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    price_adjusted = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
+    price_approved = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
+    price_valuated = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     explanation = graphene.String(required=False)
     justification = graphene.String(required=False)
-    rejectionreason = SmallInt(required=False, description="rejectionreason is in one word for historical reasons")
+    rejectionreason = SmallInt(
+        required=False, description="rejectionreason is in one word for historical reasons")
     validity_to = graphene.DateTime(required=False)
     validity_from_review = graphene.DateTime(required=False)
     validity_to_review = graphene.DateTime(required=False)
     audit_user_id_review = graphene.Int(required=False)
-    limitation_value = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    limitation_value = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     limitation = graphene.String(max_length=1, required=False)
     policy_id = graphene.Int(required=False)
-    remunerated_amount = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    remunerated_amount = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     deductable_amount = graphene.Decimal(max_digits=18, decimal_places=2, required=False,
                                          description="deductable is spelled with a, not deductible")
-    exceed_ceiling_amount = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    exceed_ceiling_amount = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     price_origin = graphene.String(max_length=1, required=False)
-    exceed_ceiling_amount_category = graphene.Decimal(max_digits=18, decimal_places=2, required=False)
+    exceed_ceiling_amount_category = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
 
 
 class FeedbackInputType(InputObjectType):
@@ -188,7 +214,8 @@ class FeedbackInputType(InputObjectType):
     payment_asked = graphene.Boolean(required=False)
     drug_prescribed = graphene.Boolean(required=False)
     drug_received = graphene.Boolean(required=False)
-    asessment = SmallInt(required=False, description="Be careful, this field name has a typo")
+    asessment = SmallInt(
+        required=False, description="Be careful, this field name has a typo")
     chf_officer_code = graphene.Int(required=False)
     feedback_date = graphene.DateTime(required=False)
     validity_from = graphene.DateTime(required=False)
@@ -233,7 +260,8 @@ class CreateClaimMutation(OpenIMISMutation):
         user = info.context.user
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
-            raise ValidationError("User needs to be authenticated for this operation")
+            raise ValidationError(
+                "User needs to be authenticated for this operation")
         # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
         # data['audit_user_id'] = user.id
         data['audit_user_id'] = -1

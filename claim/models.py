@@ -5,6 +5,8 @@ from insuree import models as insuree_models
 from location import models as location_models
 from medical import models as medical_models
 from policy import models as policy_models
+from product import models as product_models
+from claim_batch import models as claim_batch_models
 
 
 class ClaimAdmin(models.Model):
@@ -96,27 +98,6 @@ class Feedback(models.Model):
         db_table = 'tblFeedback'
 
 
-class BatchRun(models.Model):
-    id = models.AutoField(db_column='RunID', primary_key=True)
-    legacy_id = models.IntegerField(
-        db_column='LegacyID', blank=True, null=True)
-    location = models.ForeignKey(
-        location_models.Location, models.DO_NOTHING,
-        db_column='LocationId', blank=True, null=True)
-    run_date = fields.DateTimeField(db_column='RunDate')
-    validity_from = fields.DateTimeField(db_column='ValidityFrom')
-    validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)
-
-    audit_user_id = models.IntegerField(db_column='AuditUserID')
-    run_year = models.IntegerField(db_column='RunYear')
-    run_month = models.SmallIntegerField(db_column='RunMonth')
-
-    class Meta:
-        managed = False
-        db_table = 'tblBatchRun'
-
-
 class Claim(models.Model):
     id = models.AutoField(db_column='ClaimID', primary_key=True)
     legacy_id = models.IntegerField(
@@ -149,7 +130,8 @@ class Claim(models.Model):
     date_processed = fields.DateField(
         db_column='DateProcessed', blank=True, null=True)
     # Django uses the feedback_id column to create the feedback column, which conflicts with the boolean field
-    feedback_available = models.BooleanField(db_column='Feedback', default=False)
+    feedback_available = models.BooleanField(
+        db_column='Feedback', default=False)
     feedback = models.OneToOneField(
         Feedback, models.DO_NOTHING,
         db_column='FeedbackID', blank=True, null=True, related_name="+")
@@ -177,7 +159,7 @@ class Claim(models.Model):
     health_facility = models.ForeignKey(
         location_models.HealthFacility, models.DO_NOTHING, db_column='HFID')
     batch_run = models.ForeignKey(
-        BatchRun, models.DO_NOTHING,
+        claim_batch_models.BatchRun, models.DO_NOTHING,
         db_column='RunID', blank=True, null=True)
 
     submit_stamp = fields.DateTimeField(
@@ -230,7 +212,8 @@ class ClaimItem(models.Model):
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
     legacy_id = models.IntegerField(
         db_column='LegacyID', blank=True, null=True)
-    claim = models.ForeignKey(Claim, models.DO_NOTHING, db_column='ClaimID', related_name='items')
+    claim = models.ForeignKey(Claim, models.DO_NOTHING,
+                              db_column='ClaimID', related_name='items')
     item = models.ForeignKey(
         medical_models.Item, models.DO_NOTHING, db_column='ItemID')
     # prodid = models.ForeignKey('Tblproduct', models.DO_NOTHING, db_column='ProdID', blank=True, null=True)
@@ -312,7 +295,7 @@ class ClaimService(models.Model):
         db_column='Explanation', blank=True, null=True)
     justification = models.TextField(
         db_column='Justification', blank=True, null=True)
-    rejectionreason = models.SmallIntegerField(
+    rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
     validity_from = fields.DateTimeField(db_column='ValidityFrom')
     validity_to = fields.DateTimeField(
@@ -344,3 +327,33 @@ class ClaimService(models.Model):
     class Meta:
         managed = False
         db_table = 'tblClaimServices'
+
+
+class ClaimOfficer(models.Model):
+    id = models.AutoField(db_column='OfficerID', primary_key=True)
+    code = models.CharField(db_column='Code', max_length=8)
+    last_name = models.CharField(db_column='LastName', max_length=100)
+    other_names = models.CharField(db_column='OtherNames', max_length=100)
+    # dob = models.DateField(db_column='DOB', blank=True, null=True)
+    # phone = models.CharField(db_column='Phone', max_length=50, blank=True, null=True)
+    # location = models.ForeignKey(Tbllocations, models.DO_NOTHING, db_column='LocationId', blank=True, null=True)
+    # officeridsubst = models.ForeignKey('self', models.DO_NOTHING, db_column='OfficerIDSubst', blank=True, null=True)
+    # worksto = models.DateTimeField(db_column='WorksTo', blank=True, null=True)
+    # veocode = models.CharField(db_column='VEOCode', max_length=8, blank=True, null=True)
+    # veolastname = models.CharField(db_column='VEOLastName', max_length=100, blank=True, null=True)
+    # veoothernames = models.CharField(db_column='VEOOtherNames', max_length=100, blank=True, null=True)
+    # veodob = models.DateField(db_column='VEODOB', blank=True, null=True)
+    # veophone = models.CharField(db_column='VEOPhone', max_length=25, blank=True, null=True)
+    # validityfrom = models.DateTimeField(db_column='ValidityFrom')
+    # validityto = models.DateTimeField(db_column='ValidityTo', blank=True, null=True)
+    # legacyid = models.IntegerField(db_column='LegacyID', blank=True, null=True)
+    # audituserid = models.IntegerField(db_column='AuditUserID')
+    # rowid = models.TextField(db_column='RowID', blank=True, null=True)   This field type is a guess.
+    # emailid = models.CharField(db_column='EmailId', max_length=200, blank=True, null=True)
+    # phonecommunication = models.BooleanField(db_column='PhoneCommunication', blank=True, null=True)
+    # permanentaddress = models.CharField(max_length=100, blank=True, null=True)
+    # haslogin = models.BooleanField(db_column='HasLogin', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tblOfficer'
