@@ -135,7 +135,6 @@ class Query(graphene.ObjectType):
 class ClaimItemInputType(InputObjectType):
     id = graphene.Int(required=False)
     item_id = graphene.Int(required=True)
-    availability = graphene.Boolean(required=True)
     status = TinyInt(required=True)
     qty_provided = graphene.Decimal(
         max_digits=18, decimal_places=2, required=True)
@@ -227,7 +226,7 @@ class CreateClaimMutation(OpenIMISMutation):
     Create a new claim. The claim items and services can all be submitted with this call
     """
 
-    class Input:
+    class Input(OpenIMISMutation.Input):
         id = graphene.Int(required=False, read_only=True)
         code = graphene.String(max_length=8, required=True)
         insuree_id = graphene.Int(required=True)
@@ -272,6 +271,7 @@ class CreateClaimMutation(OpenIMISMutation):
         items = data.pop('items') if 'items' in data else []
         services = data.pop('services') if 'services' in data else []
         data.pop('client_mutation_id')
+        data.pop('client_mutation_label')
         try:
             claim = Claim.objects.create(**data)
         except Exception as exc:
@@ -281,6 +281,8 @@ class CreateClaimMutation(OpenIMISMutation):
             # item['validity_from'] = datetime.date.today()
             from datetime import date
             item['validity_from'] = date.today()
+            # TODO: investigate 'availability' is mandatory, but not in UI > alsways true?
+            item['availability'] = True
             # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
             # item['audit_user_id'] = user.id
             item['audit_user_id'] = -1
