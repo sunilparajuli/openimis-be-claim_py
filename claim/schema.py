@@ -223,7 +223,7 @@ class FeedbackInputType(InputObjectType):
 
 class CreateClaimMutation(OpenIMISMutation):
     """
-    Create a new claim. The claim items and services can all be submitted with this call
+    Create a new claim. The claim items and services can all be entered with this call
     """
 
     class Input(OpenIMISMutation.Input):
@@ -281,7 +281,7 @@ class CreateClaimMutation(OpenIMISMutation):
             # item['validity_from'] = datetime.date.today()
             from datetime import date
             item['validity_from'] = date.today()
-            # TODO: investigate 'availability' is mandatory, but not in UI > alsways true?
+            # TODO: investigate 'availability' is mandatory, but not in UI > always true?
             item['availability'] = True
             # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
             # item['audit_user_id'] = user.id
@@ -313,5 +313,116 @@ class CreateClaimMutation(OpenIMISMutation):
         return claim
 
 
+class SubmitClaimsMutation(OpenIMISMutation):
+    """
+    Submit one or several claims.
+    """
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.Int)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: trigger claim status change...
+        # gather error claim per claim (validations)
+        # raise Exception
+        # if one or more claim could not be submitted,
+        # with claim id & code of the claims in error
+        pass
+
+
+class SelectClaimsForFeedbackMutation(OpenIMISMutation):
+    """
+    Select one or several claims for feedback.
+    """
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.Int)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: trigger claim feedback status change...
+        # gather error claim per claim (validations)
+        # raise Exception
+        # if one or more claim could not be updated,
+        # with claim id & code of the claims in error
+        pass
+
+
+class DeliverClaimFeedbackMutation(OpenIMISMutation):
+    """
+    Deliver feedback of a claim
+    """
+
+    class Input(OpenIMISMutation.Input):
+        id = graphene.Int(required=False, read_only=True)
+        feedback = graphene.Field(FeedbackInputType, required=True)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: record claim feedback ... and switch status
+        pass
+
+
+class SelectClaimsForReviewMutation(OpenIMISMutation):
+    """
+    Select one or several claims for review.
+    """
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.Int)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: trigger claim review status change...
+        # gather error claim per claim (validations)
+        # raise Exception
+        # if one or more claim could not be updated,
+        # with claim id & code of the claims in error
+        pass
+
+
+class DeliverClaimReviewMutation(OpenIMISMutation):
+    """
+    Deliver review of a claim (items and services)
+    """
+
+    class Input(OpenIMISMutation.Input):
+        id = graphene.Int(required=False, read_only=True)
+        items = graphene.List(ClaimItemInputType, required=False)
+        services = graphene.List(ClaimServiceInputType, required=False)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: record claim review ... and switch status
+        pass
+
+
+class ProcessClaimsMutation(OpenIMISMutation):
+    """
+    Process one or several claims.
+    """
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.Int)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: trigger claim status change...
+        # gather error claim per claim (validations)
+        # raise Exception
+        # if one or more claim could not be submitted,
+        # with claim id & code of the claims in error
+        pass
+
+
 class Mutation(graphene.ObjectType):
     create_claim = CreateClaimMutation.Field()
+    submit_claims = SubmitClaimsMutation.Field()
+    select_claims_for_feedback = SelectClaimsForFeedbackMutation.Field()
+    deliver_claim_feedback = DeliverClaimFeedbackMutation.Field()
+    bypass_claims_feedback = BypassClaimsFeedbackMutation.Field()
+    select_claims_for_review = SelectClaimsForReviewMutation.Field()
+    deliver_claim_review = DeliverClaimReviewMutation.Field()
+    bypass_claims_review = BypassClaimsReviewMutation.Field()
+    process_claims = ProcessClaimsMutation.Field()
