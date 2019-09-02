@@ -349,6 +349,24 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
         pass
 
 
+class BypassClaimsFeedbackMutation(OpenIMISMutation):
+    """
+    Bypass feedback for one or several claims
+    """
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.Int)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: trigger claim review status change...
+        # gather error claim per claim (validations)
+        # raise Exception
+        # if one or more claim could not be updated,
+        # with claim id & code of the claims in error
+        pass
+
+
 class DeliverClaimFeedbackMutation(OpenIMISMutation):
     """
     Deliver feedback of a claim
@@ -367,6 +385,24 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
 class SelectClaimsForReviewMutation(OpenIMISMutation):
     """
     Select one or several claims for review.
+    """
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.Int)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: trigger claim review status change...
+        # gather error claim per claim (validations)
+        # raise Exception
+        # if one or more claim could not be updated,
+        # with claim id & code of the claims in error
+        pass
+
+
+class BypassClaimsReviewMutation(OpenIMISMutation):
+    """
+    Bypass review for one or several claims
     """
 
     class Input(OpenIMISMutation.Input):
