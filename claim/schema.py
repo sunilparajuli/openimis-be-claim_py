@@ -367,6 +367,25 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
         pass
 
 
+class SkipClaimsFeedbackMutation(OpenIMISMutation):
+    """
+    Skip feedback for one or several claims
+    Skip indicates that the claim is not selected for feedback
+    """
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.Int)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: trigger claim review status change...
+        # gather error claim per claim (validations)
+        # raise Exception
+        # if one or more claim could not be updated,
+        # with claim id & code of the claims in error
+        pass
+
+
 class DeliverClaimFeedbackMutation(OpenIMISMutation):
     """
     Deliver feedback of a claim
@@ -403,6 +422,26 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
 class BypassClaimsReviewMutation(OpenIMISMutation):
     """
     Bypass review for one or several claims
+    Bypass indicates that review of a previously selected claim won't be delivered
+    """
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.Int)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        # TODO: trigger claim review status change...
+        # gather error claim per claim (validations)
+        # raise Exception
+        # if one or more claim could not be updated,
+        # with claim id & code of the claims in error
+        pass
+
+
+class SkipClaimsReviewMutation(OpenIMISMutation):
+    """
+    Skip review for one or several claims
+    Skip indicates that the claim is not selected for review
     """
 
     class Input(OpenIMISMutation.Input):
@@ -458,7 +497,9 @@ class Mutation(graphene.ObjectType):
     select_claims_for_feedback = SelectClaimsForFeedbackMutation.Field()
     deliver_claim_feedback = DeliverClaimFeedbackMutation.Field()
     bypass_claims_feedback = BypassClaimsFeedbackMutation.Field()
+    skip_claims_feedback = SkipClaimsFeedbackMutation.Field()
     select_claims_for_review = SelectClaimsForReviewMutation.Field()
     deliver_claim_review = DeliverClaimReviewMutation.Field()
     bypass_claims_review = BypassClaimsReviewMutation.Field()
+    skip_claims_review = SkipClaimsReviewMutation.Field()
     process_claims = ProcessClaimsMutation.Field()
