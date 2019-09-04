@@ -137,11 +137,11 @@ class ClaimItemInputType(InputObjectType):
     item_id = graphene.Int(required=True)
     status = TinyInt(required=True)
     qty_provided = graphene.Decimal(
-        max_digits=18, decimal_places=2, required=True)
+        max_digits=18, decimal_places=2, required=False)
     qty_approved = graphene.Decimal(
         max_digits=18, decimal_places=2, required=False)
     price_asked = graphene.Decimal(
-        max_digits=18, decimal_places=2, required=True)
+        max_digits=18, decimal_places=2, required=False)
     price_adjusted = graphene.Decimal(
         max_digits=18, decimal_places=2, required=False)
     price_approved = graphene.Decimal(
@@ -150,7 +150,7 @@ class ClaimItemInputType(InputObjectType):
         max_digits=18, decimal_places=2, required=False)
     explanation = graphene.String(required=False)
     justification = graphene.String(required=False)
-    rejection_reason = graphene.String(required=False)
+    rejection_reason = SmallInt(required=False)
 
     validity_from_review = graphene.DateTime(required=False)
     validity_to_review = graphene.DateTime(required=False)
@@ -174,10 +174,12 @@ class ClaimServiceInputType(InputObjectType):
     legacy_id = graphene.Int(required=False)
     service_id = graphene.Int(required=True)
     status = TinyInt(required=True)
-    qty_provided = graphene.Decimal(max_digits=18, decimal_places=2)
+    qty_provided = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     qty_approved = graphene.Decimal(
         max_digits=18, decimal_places=2, required=False)
-    price_asked = graphene.Decimal(max_digits=18, decimal_places=2)
+    price_asked = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False)
     price_adjusted = graphene.Decimal(
         max_digits=18, decimal_places=2, required=False)
     price_approved = graphene.Decimal(
@@ -186,8 +188,7 @@ class ClaimServiceInputType(InputObjectType):
         max_digits=18, decimal_places=2, required=False)
     explanation = graphene.String(required=False)
     justification = graphene.String(required=False)
-    rejectionreason = SmallInt(
-        required=False, description="rejectionreason is in one word for historical reasons")
+    rejection_reason = SmallInt(required=False)
     validity_to = graphene.DateTime(required=False)
     validity_from_review = graphene.DateTime(required=False)
     validity_to_review = graphene.DateTime(required=False)
@@ -221,38 +222,87 @@ class FeedbackInputType(InputObjectType):
     validity_to = graphene.DateTime(required=False)
 
 
+class ClaimInputType(OpenIMISMutation.Input):
+    id = graphene.Int(required=False, read_only=True)
+    code = graphene.String(max_length=8, required=True)
+    insuree_id = graphene.Int(required=True)
+    date_from = graphene.Date(required=True)
+    date_to = graphene.Date(required=False)
+    icd_id = graphene.Int(required=True)
+    icd_1_id = graphene.Int(required=False)
+    icd_2_id = graphene.Int(required=False)
+    icd_3_id = graphene.Int(required=False)
+    icd_4_id = graphene.Int(required=False)
+    review_status = TinyInt(required=False)
+    status = TinyInt(required=True)
+    date_claimed = graphene.Date(required=True)
+    date_processed = graphene.Date(required=False)
+    health_facility_id = graphene.Int(required=True)
+    batch_run_id = graphene.Int(required=False)
+    category = graphene.String(max_length=1, required=False)
+    visit_type = graphene.String(max_length=1, required=False)
+    admin_id = graphene.Int(required=False)
+
+    feedback_available = graphene.Boolean(default=False)
+    feedback_status = TinyInt(required=False)
+    feedback = graphene.Field(FeedbackInputType, required=False)
+
+    items = graphene.List(ClaimItemInputType, required=False)
+    services = graphene.List(ClaimServiceInputType, required=False)
+
+
+def update_or_create_claim(data):
+    items = data.pop('items') if 'items' in data else []
+    services = data.pop('services') if 'services' in data else []
+    data.pop('client_mutation_id')
+    data.pop('client_mutation_label')
+    claim_id = data.pop('id') if 'id' in data else None
+    try:
+        claim, created = Claim.objects.update_or_create(
+            id=claim_id,
+            defaults=data)
+    except Exception as exc:
+        raise
+    claimed = 0
+    for item in items:
+        claimed += item.qty_provided * item.price_asked
+        item_id = item.pop('id') if 'id' in item else None
+        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
+        # item['audit_user_id'] = user.id
+        item['audit_user_id'] = -1
+        if (item_id):
+            claim.items.filter(id=item_id).update(**item)
+        else:
+            from datetime import date
+            item['validity_from'] = date.today()
+            # TODO: investigate 'availability' is mandatory, but not in UI > always true?
+            item['availability'] = True
+            ClaimItem.objects.create(claim=claim, **item)
+
+    for service in services:
+        claimed += service.qty_provided * service.price_asked
+        service_id = service.pop('id') if 'id' in service else None
+        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
+        # service['audit_user_id'] = user.id
+        service['audit_user_id'] = -1
+        if (service_id):
+            claim.services.filter(id=service_id).update(**service)
+        else:
+            from datetime import date
+            service['validity_from'] = date.today()
+            ClaimService.objects.create(claim=claim, **service)
+
+    claim.claimed = claimed
+    claim.save()
+
+
 class CreateClaimMutation(OpenIMISMutation):
     """
     Create a new claim. The claim items and services can all be entered with this call
     """
 
-    class Input(OpenIMISMutation.Input):
-        id = graphene.Int(required=False, read_only=True)
-        code = graphene.String(max_length=8, required=True)
-        insuree_id = graphene.Int(required=True)
-        date_from = graphene.Date(required=True)
-        date_to = graphene.Date(required=False)
-        icd_id = graphene.Int(required=True)
-        icd_1_id = graphene.Int(required=False)
-        icd_2_id = graphene.Int(required=False)
-        icd_3_id = graphene.Int(required=False)
-        icd_4_id = graphene.Int(required=False)
-        review_status = TinyInt(required=False)
-        status = TinyInt(required=True)
-        date_claimed = graphene.Date(required=True)
-        date_processed = graphene.Date(required=False)
-        health_facility_id = graphene.Int(required=True)
-        batch_run_id = graphene.Int(required=False)
-        category = graphene.String(max_length=1, required=False)
-        visit_type = graphene.String(max_length=1, required=False)
-        admin_id = graphene.Int(required=False)
-
-        feedback_available = graphene.Boolean(default=False)
-        feedback_status = TinyInt(required=False)
-        feedback = graphene.Field(FeedbackInputType, required=False)
-
-        items = graphene.List(ClaimItemInputType, required=False)
-        services = graphene.List(ClaimServiceInputType, required=False)
+    class Input(ClaimInputType):
+        pass
 
     @classmethod
     def async_mutate(cls, root, info, **data):
@@ -266,51 +316,28 @@ class CreateClaimMutation(OpenIMISMutation):
         data['audit_user_id'] = -1
         from core import datetime
         data['validity_from'] = datetime.date.today()
+        update_or_create_claim(data)
 
-        feedback = data.pop('feedback') if 'feedback' in data else []
-        items = data.pop('items') if 'items' in data else []
-        services = data.pop('services') if 'services' in data else []
-        data.pop('client_mutation_id')
-        data.pop('client_mutation_label')
-        try:
-            claim = Claim.objects.create(**data)
-        except Exception as exc:
-            raise
 
-        for item in items:
-            # item['validity_from'] = datetime.date.today()
-            from datetime import date
-            item['validity_from'] = date.today()
-            # TODO: investigate 'availability' is mandatory, but not in UI > always true?
-            item['availability'] = True
-            # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
-            # item['audit_user_id'] = user.id
-            item['audit_user_id'] = -1
+class UpdateClaimMutation(OpenIMISMutation):
+    """
+    Update a claim. The claim items and services can all be updated with this call
+    """
 
-            ClaimItem.objects.create(claim=claim, **item)
+    class Input(ClaimInputType):
+        pass
 
-        for service in services:
-            # service['validity_from'] = datetime.date.today()
-            from datetime import date
-            service['validity_from'] = date.today()
-            # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
-            # service['audit_user_id'] = user.id
-            service['audit_user_id'] = -1
-
-            ClaimService.objects.create(claim=claim, **service)
-
-        if feedback:
-            from datetime import date
-            feedback['validity_from'] = date.today()
-            # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
-            # service['audit_user_id'] = user.id
-            feedback['audit_user_id'] = -1
-            # The legacy model has a Foreign key on both sides of this one-to-one relationship
-            claim.feedback = Feedback.objects.create(claim=claim, **feedback)
-            claim.save()
-
-        claim.refresh_from_db()
-        return claim
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        user = info.context.user
+        # TODO move this verification to OIMutation
+        if type(user) is AnonymousUser or not user.id:
+            raise ValidationError(
+                "User needs to be authenticated for this operation")
+        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
+        # data['audit_user_id'] = user.id
+        data['audit_user_id'] = -1
+        update_or_create_claim(data)
 
 
 class SubmitClaimsMutation(OpenIMISMutation):
@@ -331,6 +358,17 @@ class SubmitClaimsMutation(OpenIMISMutation):
         pass
 
 
+def set_claims_status(ids, field, status):
+    affected_rows = Claim.objects.filter(id__in=ids).update(**{field: status})
+    if (affected_rows != len(ids)):
+        errors = ['Claims in error:']
+        errors.extend(map(
+            lambda c: c.code,
+            Claim.objects.filter(Q(id__in=ids), ~Q(**{field: 4}))
+        ))
+        raise Exception("\n".join(errors))
+
+
 class SelectClaimsForFeedbackMutation(OpenIMISMutation):
     """
     Select one or several claims for feedback.
@@ -341,12 +379,7 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: trigger claim feedback status change...
-        # gather error claim per claim (validations)
-        # raise Exception
-        # if one or more claim could not be updated,
-        # with claim id & code of the claims in error
-        pass
+        set_claims_status(data['ids'], 'feedback_status', 4)
 
 
 class BypassClaimsFeedbackMutation(OpenIMISMutation):
@@ -359,12 +392,7 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: trigger claim review status change...
-        # gather error claim per claim (validations)
-        # raise Exception
-        # if one or more claim could not be updated,
-        # with claim id & code of the claims in error
-        pass
+        set_claims_status(data['ids'], 'feedback_status', 16)
 
 
 class SkipClaimsFeedbackMutation(OpenIMISMutation):
@@ -378,12 +406,7 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: trigger claim review status change...
-        # gather error claim per claim (validations)
-        # raise Exception
-        # if one or more claim could not be updated,
-        # with claim id & code of the claims in error
-        pass
+        set_claims_status(data['ids'], 'feedback_status', 2)
 
 
 class DeliverClaimFeedbackMutation(OpenIMISMutation):
@@ -392,13 +415,28 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        id = graphene.Int(required=False, read_only=True)
+        claim_id = graphene.Int(required=False, read_only=True)
         feedback = graphene.Field(FeedbackInputType, required=True)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: record claim feedback ... and switch status
-        pass
+        claim = Claim.objects.get(id=data['claim_id'])
+        feedback = data['feedback']
+        feedbackclaim = claim
+        from datetime import date
+        feedback['validity_from'] = date.today()
+        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
+        # service['audit_user_id'] = user.id
+        feedback['audit_user_id'] = -1
+        # The legacy model has a Foreign key on both sides of this one-to-one relationship
+        f, created = Feedback.objects.update_or_create(
+            claim=claim,
+            defaults=feedback
+        )
+        claim.feedback = f
+        claim.feedback_status = 8
+        claim.feedback_available = True
+        claim.save()
 
 
 class SelectClaimsForReviewMutation(OpenIMISMutation):
@@ -411,12 +449,7 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: trigger claim review status change...
-        # gather error claim per claim (validations)
-        # raise Exception
-        # if one or more claim could not be updated,
-        # with claim id & code of the claims in error
-        pass
+        set_claims_status(data['ids'], 'review_status', 4)
 
 
 class BypassClaimsReviewMutation(OpenIMISMutation):
@@ -430,12 +463,7 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: trigger claim review status change...
-        # gather error claim per claim (validations)
-        # raise Exception
-        # if one or more claim could not be updated,
-        # with claim id & code of the claims in error
-        pass
+        set_claims_status(data['ids'], 'review_status', 16)
 
 
 class SkipClaimsReviewMutation(OpenIMISMutation):
@@ -449,12 +477,7 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: trigger claim review status change...
-        # gather error claim per claim (validations)
-        # raise Exception
-        # if one or more claim could not be updated,
-        # with claim id & code of the claims in error
-        pass
+        set_claims_status(data['ids'], 'review_status', 2)
 
 
 class DeliverClaimReviewMutation(OpenIMISMutation):
@@ -463,14 +486,23 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        id = graphene.Int(required=False, read_only=True)
+        claim_id = graphene.Int(required=False, read_only=True)
         items = graphene.List(ClaimItemInputType, required=False)
         services = graphene.List(ClaimServiceInputType, required=False)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: record claim review ... and switch status
-        pass
+        claim = Claim.objects.get(id=data['claim_id'])
+        items = data.pop('items') if 'items' in data else []
+        for item in items:
+            id = item.pop('id')
+            claim.items.filter(id=id).update(**item)
+        services = data.pop('services') if 'services' in data else []
+        for service in services:
+            id = service.pop('id')
+            claim.services.filter(id=id).update(**service)
+        claim.review_status = 8
+        claim.save()
 
 
 class ProcessClaimsMutation(OpenIMISMutation):
@@ -493,6 +525,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
 class Mutation(graphene.ObjectType):
     create_claim = CreateClaimMutation.Field()
+    update_claim = UpdateClaimMutation.Field()
     submit_claims = SubmitClaimsMutation.Field()
     select_claims_for_feedback = SelectClaimsForFeedbackMutation.Field()
     deliver_claim_feedback = DeliverClaimFeedbackMutation.Field()
