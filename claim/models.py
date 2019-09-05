@@ -6,7 +6,7 @@ from location import models as location_models
 from medical import models as medical_models
 from policy import models as policy_models
 from product import models as product_models
-from claim_batch import models as claim_batch_models
+# from claim_batch import models as claim_batch_models
 
 
 class ClaimAdmin(models.Model):
@@ -158,9 +158,9 @@ class Claim(models.Model):
 
     health_facility = models.ForeignKey(
         location_models.HealthFacility, models.DO_NOTHING, db_column='HFID')
-    batch_run = models.ForeignKey(
-        claim_batch_models.BatchRun, models.DO_NOTHING,
-        db_column='RunID', blank=True, null=True)
+    # batch_run = models.ForeignKey(
+    #     claim_batch_models.BatchRun, models.DO_NOTHING,
+    #     db_column='RunID', blank=True, null=True)
 
     submit_stamp = fields.DateTimeField(
         db_column='SubmitStamp', blank=True, null=True)
