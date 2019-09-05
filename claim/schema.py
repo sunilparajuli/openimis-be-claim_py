@@ -300,6 +300,8 @@ class CreateClaimMutation(OpenIMISMutation):
     """
     Create a new claim. The claim items and services can all be entered with this call
     """
+    _mutation_module = "claim"
+    _mutation_class = "CreateClaimMutation"
 
     class Input(ClaimInputType):
         pass
