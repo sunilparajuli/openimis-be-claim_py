@@ -373,7 +373,8 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 continue
             result_code, result_details = validate_claim(claim)
             if result_code:
-                results[claim_id] = {"error": result_details, "error_code": result_code}
+                results[claim_id] = {
+                    "error": result_details, "error_code": result_code}
             else:
                 set_claim_submitted(claim)
                 results[claim_id] = {"success": True}
@@ -394,7 +395,8 @@ def set_claims_status(ids, field, status):
             lambda c: c.code,
             Claim.objects.filter(Q(id__in=ids), ~Q(**{field: 4}))
         ))
-        raise Exception("\n".join(errors))
+        return json.dump(errors)
+    return None
 
 
 class SelectClaimsForFeedbackMutation(OpenIMISMutation):
@@ -407,7 +409,7 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        set_claims_status(data['ids'], 'feedback_status', 4)
+        return set_claims_status(data['ids'], 'feedback_status', 4)
 
 
 class BypassClaimsFeedbackMutation(OpenIMISMutation):
@@ -420,7 +422,7 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        set_claims_status(data['ids'], 'feedback_status', 16)
+        return set_claims_status(data['ids'], 'feedback_status', 16)
 
 
 class SkipClaimsFeedbackMutation(OpenIMISMutation):
@@ -434,7 +436,7 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        set_claims_status(data['ids'], 'feedback_status', 2)
+        return set_claims_status(data['ids'], 'feedback_status', 2)
 
 
 class DeliverClaimFeedbackMutation(OpenIMISMutation):
@@ -464,6 +466,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
         claim.feedback_status = 8
         claim.feedback_available = True
         claim.save()
+        return None
 
 
 class SelectClaimsForReviewMutation(OpenIMISMutation):
@@ -476,7 +479,7 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        set_claims_status(data['ids'], 'review_status', 4)
+        return set_claims_status(data['ids'], 'review_status', 4)
 
 
 class BypassClaimsReviewMutation(OpenIMISMutation):
@@ -490,7 +493,7 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        set_claims_status(data['ids'], 'review_status', 16)
+        return set_claims_status(data['ids'], 'review_status', 16)
 
 
 class SkipClaimsReviewMutation(OpenIMISMutation):
@@ -504,7 +507,7 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        set_claims_status(data['ids'], 'review_status', 2)
+        return set_claims_status(data['ids'], 'review_status', 2)
 
 
 class DeliverClaimReviewMutation(OpenIMISMutation):
@@ -521,15 +524,23 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
     def async_mutate(cls, root, info, **data):
         claim = Claim.objects.get(id=data['claim_id'])
         items = data.pop('items') if 'items' in data else []
+        all_rejected = True
         for item in items:
             item_id = item.pop('id')
             claim.items.filter(id=item_id).update(**item)
+            if item.status == 1:
+                all_rejected = False
         services = data.pop('services') if 'services' in data else []
         for service in services:
             service_id = service.pop('id')
             claim.services.filter(id=service_id).update(**service)
+            if service.status == 1:
+                all_rejected = False
         claim.review_status = 8
+        if all_rejected:
+            claim.status = 1
         claim.save()
+        return None
 
 
 class ProcessClaimsMutation(OpenIMISMutation):
@@ -542,12 +553,8 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: trigger claim status change...
-        # gather error claim per claim (validations)
-        # raise Exception
-        # if one or more claim could not be submitted,
-        # with claim id & code of the claims in error
-        pass
+        # TODO: validations, calculations,...
+        return set_claims_status(data['ids'], 'status', 8)
 
 
 class Mutation(graphene.ObjectType):
