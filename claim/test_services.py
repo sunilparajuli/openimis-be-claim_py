@@ -6,6 +6,7 @@ from .services import *
 import core
 import json
 
+
 class ClaimSubmitServiceTestCase(TestCase):
 
     def test_minimal_item_claim_submit_xml(self):

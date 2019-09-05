@@ -1,5 +1,9 @@
+import json
+
 import graphene
-from core import prefix_filterset, ExtendedConnection, filter_validity
+from claim.validations import validate_claim, get_claim_category
+from claim_batch.schema import BatchRunGQLType
+from core import prefix_filterset, ExtendedConnection, filter_validity, Q
 from core.schema import TinyInt, SmallInt, OpenIMISMutation
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
@@ -8,9 +12,8 @@ from graphene import InputObjectType
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 from insuree.schema import InsureeGQLType
-from location.schema import HealthFacilityGQLType, LocationGQLType
+from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
-from claim_batch.schema import BatchRunGQLType
 
 from .models import Claim, ClaimDiagnosisCode, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
 
@@ -342,6 +345,16 @@ class UpdateClaimMutation(OpenIMISMutation):
         update_or_create_claim(data)
 
 
+def set_claim_submitted(claim):
+    claim.status = 4
+    # TODO investigate proper use of audit_user_id
+    claim.audit_user_id_submit = -1
+    from datetime import datetime
+    claim.submit_stamp = datetime.now()
+    claim.category = get_claim_category(claim)
+    claim.save()
+
+
 class SubmitClaimsMutation(OpenIMISMutation):
     """
     Submit one or several claims.
@@ -352,12 +365,19 @@ class SubmitClaimsMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: trigger claim status change...
-        # gather error claim per claim (validations)
-        # raise Exception
-        # if one or more claim could not be submitted,
-        # with claim id & code of the claims in error
-        pass
+        results = {}
+        for claim_id in data["ids"]:
+            claim = Claim.objects.filter(pk=claim_id).first()
+            if claim is None:
+                results[claim_id] = {"error": f"id ${claim_id} does not exist"}
+                continue
+            result_code, result_details = validate_claim(claim)
+            if result_code:
+                results[claim_id] = {"error": result_details, "error_code": result_code}
+            else:
+                set_claim_submitted(claim)
+                results[claim_id] = {"success": True}
+        return json.dumps(results)
 
 
 def set_claims_status(ids, field, status):
@@ -424,7 +444,6 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, root, info, **data):
         claim = Claim.objects.get(id=data['claim_id'])
         feedback = data['feedback']
-        feedbackclaim = claim
         from datetime import date
         feedback['validity_from'] = date.today()
         # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
@@ -497,12 +516,12 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
         claim = Claim.objects.get(id=data['claim_id'])
         items = data.pop('items') if 'items' in data else []
         for item in items:
-            id = item.pop('id')
-            claim.items.filter(id=id).update(**item)
+            item_id = item.pop('id')
+            claim.items.filter(id=item_id).update(**item)
         services = data.pop('services') if 'services' in data else []
         for service in services:
-            id = service.pop('id')
-            claim.services.filter(id=id).update(**service)
+            service_id = service.pop('id')
+            claim.services.filter(id=service_id).update(**service)
         claim.review_status = 8
         claim.save()
 
