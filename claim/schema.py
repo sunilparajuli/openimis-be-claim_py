@@ -369,7 +369,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
         for claim_id in data["ids"]:
             claim = Claim.objects.filter(pk=claim_id).first()
             if claim is None:
-                results[claim_id] = {"error": f"id ${claim_id} does not exist"}
+                results[claim_id] = {"error": f"id {claim_id} does not exist"}
                 continue
             result_code, result_details = validate_claim(claim)
             if result_code:
@@ -377,7 +377,13 @@ class SubmitClaimsMutation(OpenIMISMutation):
             else:
                 set_claim_submitted(claim)
                 results[claim_id] = {"success": True}
-        return json.dumps(results)
+
+        # For now, the response should only contain errors, not successful updates
+        errors = {k: v for k, v in results.items() if "success" not in v}
+        if len(errors) > 0:
+            return json.dumps(errors)
+        else:
+            return None
 
 
 def set_claims_status(ids, field, status):
