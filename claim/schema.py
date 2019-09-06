@@ -2,7 +2,6 @@ import json
 
 import graphene
 from claim.validations import validate_claim, get_claim_category
-from claim_batch.schema import BatchRunGQLType
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q
 from core.schema import TinyInt, SmallInt, OpenIMISMutation
 from django.conf import settings
@@ -81,7 +80,6 @@ class ClaimGQLType(DjangoObjectType):
             **prefix_filterset("admin__", ClaimAdminGQLType._meta.filter_fields),
             **prefix_filterset("health_facility__", HealthFacilityGQLType._meta.filter_fields),
             **prefix_filterset("insuree__", InsureeGQLType._meta.filter_fields),
-            **prefix_filterset("batch_run__", BatchRunGQLType._meta.filter_fields)
         }
         connection_class = ExtendedConnection
 
