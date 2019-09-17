@@ -14,7 +14,7 @@ from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 
-from .models import Claim, ClaimDiagnosisCode, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
+from .models import Claim, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
 
 
 class ClaimAdminGQLType(DjangoObjectType):
