@@ -145,7 +145,7 @@ class Migration(migrations.Migration):
                 ('price_valuated', models.DecimalField(blank=True, db_column='PriceValuated', decimal_places=2, max_digits=18, null=True)),
                 ('explanation', models.TextField(blank=True, db_column='Explanation', null=True)),
                 ('justification', models.TextField(blank=True, db_column='Justification', null=True)),
-                ('rejectionreason', models.SmallIntegerField(blank=True, db_column='RejectionReason', null=True)),
+                ('rejection_reason', models.SmallIntegerField(blank=True, db_column='RejectionReason', null=True)),
                 ('validity_from', core.fields.DateTimeField(db_column='ValidityFrom')),
                 ('validity_to', core.fields.DateTimeField(blank=True, db_column='ValidityTo', null=True)),
                 ('audit_user_id', models.IntegerField(db_column='AuditUserID')),

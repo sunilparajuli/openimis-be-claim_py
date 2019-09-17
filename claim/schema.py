@@ -91,16 +91,6 @@ class ClaimGQLType(DjangoObjectType):
         return queryset
 
 
-class ClaimDiagnosisCodeGQLType(DjangoObjectType):
-    """
-    This element should be replaced with a DiagnosisGQLType from the Medical module
-    """
-
-    class Meta:
-        model = ClaimDiagnosisCode
-        exclude_fields = ('row_id',)
-
-
 class FeedbackGQLType(DjangoObjectType):
     class Meta:
         model = Feedback
