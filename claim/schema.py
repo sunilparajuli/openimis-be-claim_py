@@ -7,6 +7,8 @@ from core.schema import TinyInt, SmallInt, OpenIMISMutation
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from graphene import InputObjectType
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
@@ -325,22 +327,73 @@ class UpdateClaimMutation(OpenIMISMutation):
         user = info.context.user
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
-            raise ValidationError(
-                "User needs to be authenticated for this operation")
+            raise ValidationError("User needs to be authenticated for this operation")
         # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
         # data['audit_user_id'] = user.id
         data['audit_user_id'] = -1
         update_or_create_claim(data)
 
 
-def set_claim_submitted(claim):
-    claim.status = 4
-    # TODO investigate proper use of audit_user_id
-    claim.audit_user_id_submit = -1
-    from datetime import datetime
-    claim.submit_stamp = datetime.now()
-    claim.category = get_claim_category(claim)
-    claim.save()
+def set_claim_submitted(claim, errors):
+    # we went over the maximum for a category, all items and services in the claim are rejected
+    over_category_errors = [x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
+    if len(over_category_errors) > 0:
+        claim.items.update(status=ClaimItem.STATUS_REJECTED, qty_approved=0,
+                           rejection_reason=over_category_errors[0].code)
+        claim.services.update(status=ClaimService.STATUS_REJECTED, qty_approved=0,
+                              rejection_reason=over_category_errors[0].code)
+    else:
+        claim.items.exclude(rejection_reason=0)\
+            .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
+        claim.services.exclude(rejection_reason=0)\
+            .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
+
+    rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
+        .filter(validity_to__isnull=True).count()
+    rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
+        .filter(validity_to__isnull=True).count()
+    rtn_items_rejected = claim.items.filter(status=ClaimItem.STATUS_REJECTED)\
+        .filter(validity_to__isnull=True).count()
+    rtn_services_rejected = claim.services.filter(status=ClaimService.STATUS_REJECTED)\
+        .filter(validity_to__isnull=True).count()
+
+    if rtn_items_passed > 0 and rtn_services_rejected > 0:  # update claim passed
+        if rtn_items_rejected > 0 or rtn_services_rejected > 0:
+            # Update claim approved value
+            app_item_value = claim.items\
+                .filter(validity_to__isnull=True)\
+                .filter(status=ClaimItem.STATUS_PASSED)\
+                .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
+                .aggregate(Sum("value"))
+            app_service_value = claim.services\
+                .filter(validity_to__isnull=True)\
+                .filter(status=ClaimService.STATUS_PASSED)\
+                .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
+                .aggregate(Sum("value"))
+            claim.status = Claim.STATUS_CHECKED
+            claim.approved = app_item_value if app_item_value else 0 + app_service_value if app_service_value else 0
+            # TODO set the right audit user id
+            claim.audit_user_id = -1
+            from datetime import datetime
+            claim.submit_stamp = datetime.now()
+            claim.category = get_claim_category(claim)
+            claim.save()
+        else:  # no rejections
+            claim.status = Claim.STATUS_CHECKED
+            # TODO set the right audit user id
+            claim.audit_user_id_submit = -1
+            from datetime import datetime
+            claim.submit_stamp = datetime.now()
+            claim.category = get_claim_category(claim)
+            claim.save()
+    else:  # no item nor service passed, rejecting
+        claim.status = Claim.STATUS_REJECTED
+        # TODO set the right audit user id
+        claim.audit_user_id_submit = -1
+        from datetime import datetime
+        claim.submit_stamp = datetime.now()
+        claim.category = get_claim_category(claim)
+        claim.save()
 
 
 class SubmitClaimsMutation(OpenIMISMutation):
@@ -355,16 +408,20 @@ class SubmitClaimsMutation(OpenIMISMutation):
     def async_mutate(cls, root, info, **data):
         results = {}
         for claim_id in data["ids"]:
-            claim = Claim.objects.filter(pk=claim_id).first()
+            claim = Claim.objects\
+                .filter(pk=claim_id)\
+                .prefetch_related("items")\
+                .prefetch_related("services")\
+                .first()
             if claim is None:
                 results[claim_id] = {"error": f"id {claim_id} does not exist"}
                 continue
-            result_code, result_details = validate_claim(claim)
-            if result_code:
+            errors = validate_claim(claim)
+            if len(errors) > 0:
                 results[claim_id] = {
-                    "error": result_details, "error_code": result_code}
+                    "error": errors[0].message, "error_code": errors[0].code}
             else:
-                set_claim_submitted(claim)
+                set_claim_submitted(claim, errors)
                 results[claim_id] = {"success": True}
 
         # For now, the response should only contain errors, not successful updates
@@ -377,7 +434,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
 
 def set_claims_status(ids, field, status):
     affected_rows = Claim.objects.filter(id__in=ids).update(**{field: status})
-    if (affected_rows != len(ids)):
+    if affected_rows != len(ids):
         errors = ['Claims in error:']
         errors.extend(map(
             lambda c: c.code,

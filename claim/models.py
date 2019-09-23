@@ -178,6 +178,17 @@ class Claim(models.Model):
         managed = False
         db_table = 'tblClaim'
 
+    STATUS_REJECTED = 1
+    STATUS_ENTERED = 2
+    STATUS_CHECKED = 4
+    STATUS_PROCESSED = 8
+    STATUS_VALUATED = 16
+
+    def reject(self, rejection_code):
+        updated_items = self.items.filter(validity_to__isnull=True).update(rejection_reason=rejection_code)
+        updated_services = self.services.filter(validity_to__isnull=True).update(rejection_reason=rejection_code)
+        return updated_items + updated_services
+
 
 class ClaimItem(models.Model):
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
@@ -239,6 +250,9 @@ class ClaimItem(models.Model):
         managed = False
         db_table = 'tblClaimItems'
 
+    STATUS_PASSED = 1
+    STATUS_REJECTED = 2
+
 
 class ClaimService(models.Model):
     id = models.AutoField(db_column='ClaimServiceID', primary_key=True)
@@ -298,6 +312,9 @@ class ClaimService(models.Model):
     class Meta:
         managed = False
         db_table = 'tblClaimServices'
+
+    STATUS_PASSED = 1
+    STATUS_REJECTED = 2
 
 
 class ClaimOfficer(models.Model):
