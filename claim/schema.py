@@ -3,7 +3,7 @@ import json
 import graphene
 from claim.validations import validate_claim, get_claim_category
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q
-from core.schema import TinyInt, SmallInt, OpenIMISMutation
+from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
@@ -120,7 +120,7 @@ class ClaimServiceGQLType(DjangoObjectType):
 
 
 class Query(graphene.ObjectType):
-    claims = DjangoFilterConnectionField(ClaimGQLType)
+    claims = OrderedDjangoFilterConnectionField(ClaimGQLType, orderBy=graphene.List(of_type=graphene.String))
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
     claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
 
