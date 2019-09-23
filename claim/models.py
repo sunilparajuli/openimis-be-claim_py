@@ -48,13 +48,13 @@ class Feedback(models.Model):
         db_column='ClaimID', blank=True, null=True, related_name="+")
     legacy_id = models.IntegerField(
         db_column='LegacyID', blank=True, null=True)
-    care_rendered = models.BooleanField(
+    care_rendered = models.NullBooleanField(
         db_column='CareRendered', blank=True, null=True)
-    payment_asked = models.BooleanField(
+    payment_asked = models.NullBooleanField(
         db_column='PaymentAsked', blank=True, null=True)
-    drug_prescribed = models.BooleanField(
+    drug_prescribed = models.NullBooleanField(
         db_column='DrugPrescribed', blank=True, null=True)
-    drug_received = models.BooleanField(
+    drug_received = models.NullBooleanField(
         db_column='DrugReceived', blank=True, null=True)
     asessment = models.SmallIntegerField(
         db_column='Asessment', blank=True, null=True)
