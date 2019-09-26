@@ -126,7 +126,8 @@ class ClaimServiceGQLType(DjangoObjectType):
 
 
 class Query(graphene.ObjectType):
-    claims = OrderedDjangoFilterConnectionField(ClaimGQLType, orderBy=graphene.List(of_type=graphene.String))
+    claims = OrderedDjangoFilterConnectionField(
+        ClaimGQLType, orderBy=graphene.List(of_type=graphene.String))
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
     claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
 
@@ -263,6 +264,7 @@ def update_or_create_claim(data):
     except Exception as exc:
         raise
     claimed = 0
+    prev_items = [s.id for s in claim.items.all()]
     for item in items:
         claimed += item.qty_provided * item.price_asked
         item_id = item.pop('id') if 'id' in item else None
@@ -270,6 +272,7 @@ def update_or_create_claim(data):
         # item['audit_user_id'] = user.id
         item['audit_user_id'] = -1
         if (item_id):
+            prev_items.remove(item_id)
             claim.items.filter(id=item_id).update(**item)
         else:
             from datetime import date
@@ -277,7 +280,10 @@ def update_or_create_claim(data):
             # TODO: investigate 'availability' is mandatory, but not in UI > always true?
             item['availability'] = True
             ClaimItem.objects.create(claim=claim, **item)
+    if prev_items:
+        claim.items.filter(id__in=prev_items).delete()
 
+    prev_services = [s.id for s in claim.services.all()]
     for service in services:
         claimed += service.qty_provided * service.price_asked
         service_id = service.pop('id') if 'id' in service else None
@@ -285,11 +291,14 @@ def update_or_create_claim(data):
         # service['audit_user_id'] = user.id
         service['audit_user_id'] = -1
         if (service_id):
+            prev_services.remove(service_id)
             claim.services.filter(id=service_id).update(**service)
         else:
             from datetime import date
             service['validity_from'] = date.today()
             ClaimService.objects.create(claim=claim, **service)
+    if prev_services:
+        claim.services.filter(id__in=prev_services).delete()
 
     claim.claimed = claimed
     claim.save()
@@ -333,7 +342,8 @@ class UpdateClaimMutation(OpenIMISMutation):
         user = info.context.user
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
-            raise ValidationError("User needs to be authenticated for this operation")
+            raise ValidationError(
+                "User needs to be authenticated for this operation")
         # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
         # data['audit_user_id'] = user.id
         data['audit_user_id'] = -1
@@ -572,7 +582,8 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
 def set_claim_submitted(claim, errors):
     # we went over the maximum for a category, all items and services in the claim are rejected
-    over_category_errors = [x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
+    over_category_errors = [
+        x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
     if len(over_category_errors) > 0:
         claim.items.update(status=ClaimItem.STATUS_REJECTED, qty_approved=0,
                            rejection_reason=over_category_errors[0].code)
@@ -607,7 +618,8 @@ def set_claim_submitted(claim, errors):
                 .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
                 .aggregate(Sum("value"))
             claim.status = Claim.STATUS_CHECKED
-            claim.approved = app_item_value if app_item_value else 0 + app_service_value if app_service_value else 0
+            claim.approved = app_item_value if app_item_value else 0 + \
+                app_service_value if app_service_value else 0
             # TODO set the right audit user id
             claim.audit_user_id_submit = -1
             from datetime import datetime
