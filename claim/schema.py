@@ -91,10 +91,12 @@ class ClaimGQLType(DjangoObjectType):
         queryset = queryset.filter(*filter_validity())
         if settings.ROW_SECURITY & info.context.user.is_anonymous:
             return queryset.filter(id=-1)
-        dist = userDistricts(info.context.user._u)
-        return queryset.filter(
-            health_facility__location__id__in=[l.location.id for l in dist]
-        )
+        if settings.ROW_SECURITY:
+            dist = userDistricts(info.context.user._u)
+            return queryset.filter(
+                health_facility__location__id__in=[l.location.id for l in dist]
+            )
+        return queryset
 
 
 class FeedbackGQLType(DjangoObjectType):
