@@ -361,7 +361,7 @@ def set_claim_submitted(claim, errors):
     rtn_services_rejected = claim.services.filter(status=ClaimService.STATUS_REJECTED)\
         .filter(validity_to__isnull=True).count()
 
-    if rtn_items_passed > 0 and rtn_services_rejected > 0:  # update claim passed
+    if rtn_items_passed > 0 and rtn_services_passed > 0:  # update claim passed
         if rtn_items_rejected > 0 or rtn_services_rejected > 0:
             # Update claim approved value
             app_item_value = claim.items\
