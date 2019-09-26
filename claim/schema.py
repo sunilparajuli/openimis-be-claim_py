@@ -15,6 +15,7 @@ from graphene_django.filter import DjangoFilterConnectionField
 from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
+from location.schema import userDistricts
 
 from .models import Claim, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
 
@@ -90,7 +91,10 @@ class ClaimGQLType(DjangoObjectType):
         queryset = queryset.filter(*filter_validity())
         if settings.ROW_SECURITY & info.context.user.is_anonymous:
             return queryset.filter(id=-1)
-        return queryset
+        dist = userDistricts(info.context.user._u)
+        return queryset.filter(
+            health_facility__location__id__in=[l.location.id for l in dist]
+        )
 
 
 class FeedbackGQLType(DjangoObjectType):
