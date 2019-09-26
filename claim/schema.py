@@ -1,7 +1,7 @@
 import json
 
 import graphene
-from claim.validations import validate_claim, get_claim_category
+from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
 from django.conf import settings
@@ -340,68 +340,6 @@ class UpdateClaimMutation(OpenIMISMutation):
         update_or_create_claim(data)
 
 
-def set_claim_submitted(claim, errors):
-    # we went over the maximum for a category, all items and services in the claim are rejected
-    over_category_errors = [x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
-    if len(over_category_errors) > 0:
-        claim.items.update(status=ClaimItem.STATUS_REJECTED, qty_approved=0,
-                           rejection_reason=over_category_errors[0].code)
-        claim.services.update(status=ClaimService.STATUS_REJECTED, qty_approved=0,
-                              rejection_reason=over_category_errors[0].code)
-    else:
-        claim.items.exclude(rejection_reason=0)\
-            .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
-        claim.services.exclude(rejection_reason=0)\
-            .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
-
-    rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
-        .filter(validity_to__isnull=True).count()
-    rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
-        .filter(validity_to__isnull=True).count()
-    rtn_items_rejected = claim.items.filter(status=ClaimItem.STATUS_REJECTED)\
-        .filter(validity_to__isnull=True).count()
-    rtn_services_rejected = claim.services.filter(status=ClaimService.STATUS_REJECTED)\
-        .filter(validity_to__isnull=True).count()
-
-    if rtn_items_passed > 0 and rtn_services_passed > 0:  # update claim passed
-        if rtn_items_rejected > 0 or rtn_services_rejected > 0:
-            # Update claim approved value
-            app_item_value = claim.items\
-                .filter(validity_to__isnull=True)\
-                .filter(status=ClaimItem.STATUS_PASSED)\
-                .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
-                .aggregate(Sum("value"))
-            app_service_value = claim.services\
-                .filter(validity_to__isnull=True)\
-                .filter(status=ClaimService.STATUS_PASSED)\
-                .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
-                .aggregate(Sum("value"))
-            claim.status = Claim.STATUS_CHECKED
-            claim.approved = app_item_value if app_item_value else 0 + app_service_value if app_service_value else 0
-            # TODO set the right audit user id
-            claim.audit_user_id = -1
-            from datetime import datetime
-            claim.submit_stamp = datetime.now()
-            claim.category = get_claim_category(claim)
-            claim.save()
-        else:  # no rejections
-            claim.status = Claim.STATUS_CHECKED
-            # TODO set the right audit user id
-            claim.audit_user_id_submit = -1
-            from datetime import datetime
-            claim.submit_stamp = datetime.now()
-            claim.category = get_claim_category(claim)
-            claim.save()
-    else:  # no item nor service passed, rejecting
-        claim.status = Claim.STATUS_REJECTED
-        # TODO set the right audit user id
-        claim.audit_user_id_submit = -1
-        from datetime import datetime
-        claim.submit_stamp = datetime.now()
-        claim.category = get_claim_category(claim)
-        claim.save()
-
-
 class SubmitClaimsMutation(OpenIMISMutation):
     """
     Submit one or several claims.
@@ -604,8 +542,109 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        # TODO: validations, calculations,...
-        return set_claims_status(data['ids'], 'status', 8)
+        results = {}
+        for claim_id in data["ids"]:
+            claim = Claim.objects \
+                .filter(pk=claim_id) \
+                .prefetch_related("items") \
+                .prefetch_related("services") \
+                .first()
+            if claim is None:
+                results[claim_id] = {"error": f"id {claim_id} does not exist"}
+                continue
+            errors = validate_claim(claim)
+            if len(errors) == 0:
+                errors += validate_assign_prod_to_claimitems(claim)
+            if len(errors) > 0:
+                results[claim_id] = {
+                    "error": errors[0].message, "error_code": errors[0].code}
+            else:
+                set_claim_processed(claim, errors)
+                results[claim_id] = {"success": True}
+
+        # For now, the response should only contain errors, not successful updates
+        errors = {k: v for k, v in results.items() if "success" not in v}
+        if len(errors) > 0:
+            return json.dumps(errors)
+        else:
+            return None
+
+
+def set_claim_submitted(claim, errors):
+    # we went over the maximum for a category, all items and services in the claim are rejected
+    over_category_errors = [x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
+    if len(over_category_errors) > 0:
+        claim.items.update(status=ClaimItem.STATUS_REJECTED, qty_approved=0,
+                           rejection_reason=over_category_errors[0].code)
+        claim.services.update(status=ClaimService.STATUS_REJECTED, qty_approved=0,
+                              rejection_reason=over_category_errors[0].code)
+    else:
+        claim.items.exclude(rejection_reason=0)\
+            .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
+        claim.services.exclude(rejection_reason=0)\
+            .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
+
+    rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
+        .filter(validity_to__isnull=True).count()
+    rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
+        .filter(validity_to__isnull=True).count()
+    rtn_items_rejected = claim.items.filter(status=ClaimItem.STATUS_REJECTED)\
+        .filter(validity_to__isnull=True).count()
+    rtn_services_rejected = claim.services.filter(status=ClaimService.STATUS_REJECTED)\
+        .filter(validity_to__isnull=True).count()
+
+    if rtn_items_passed > 0 and rtn_services_passed > 0:  # update claim passed
+        if rtn_items_rejected > 0 or rtn_services_rejected > 0:
+            # Update claim approved value
+            app_item_value = claim.items\
+                .filter(validity_to__isnull=True)\
+                .filter(status=ClaimItem.STATUS_PASSED)\
+                .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
+                .aggregate(Sum("value"))
+            app_service_value = claim.services\
+                .filter(validity_to__isnull=True)\
+                .filter(status=ClaimService.STATUS_PASSED)\
+                .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
+                .aggregate(Sum("value"))
+            claim.status = Claim.STATUS_CHECKED
+            claim.approved = app_item_value if app_item_value else 0 + app_service_value if app_service_value else 0
+            # TODO set the right audit user id
+            claim.audit_user_id_submit = -1
+            from datetime import datetime
+            claim.submit_stamp = datetime.now()
+            claim.category = get_claim_category(claim)
+            claim.save()
+        else:  # no rejections
+            claim.status = Claim.STATUS_CHECKED
+            # TODO set the right audit user id
+            claim.audit_user_id_submit = -1
+            from datetime import datetime
+            claim.submit_stamp = datetime.now()
+            claim.category = get_claim_category(claim)
+            claim.save()
+    else:  # no item nor service passed, rejecting
+        claim.status = Claim.STATUS_REJECTED
+        # TODO set the right audit user id
+        claim.audit_user_id_submit = -1
+        from datetime import datetime
+        claim.submit_stamp = datetime.now()
+        claim.category = get_claim_category(claim)
+        claim.save()
+
+
+def set_claim_processed(claim, errors):
+    rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
+        .filter(validity_to__isnull=True).count()
+    rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
+        .filter(validity_to__isnull=True).count()
+
+    if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
+        claim.status = Claim.STATUS_PROCESSED
+        # # TODO set the right audit user id
+        claim.audit_user_id_process = -1
+        from datetime import datetime
+        claim.process_stamp = datetime.now()
+        claim.save()
 
 
 class Mutation(graphene.ObjectType):

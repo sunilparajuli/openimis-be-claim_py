@@ -1,7 +1,9 @@
-from django.db import connection
 import xml.etree.ElementTree as ET
-from django.core.exceptions import PermissionDenied
+
 import core
+from django.core.exceptions import PermissionDenied
+from django.db import connection
+
 
 @core.comparable
 class ClaimElementSubmit(object):
@@ -19,6 +21,7 @@ class ClaimElementSubmit(object):
         ET.SubElement(item, "%sQuantity" %
                       self.type).text = "%s" % self.quantity
 
+
 @core.comparable
 class ClaimItemSubmit(ClaimElementSubmit):
     def __init__(self, code, quantity, price=None):
@@ -27,6 +30,7 @@ class ClaimItemSubmit(ClaimElementSubmit):
                          price=price,
                          quantity=quantity)
 
+
 @core.comparable
 class ClaimServiceSubmit(ClaimElementSubmit):
     def __init__(self, code, quantity, price=None):
@@ -34,6 +38,8 @@ class ClaimServiceSubmit(ClaimElementSubmit):
                          code=code,
                          price=price,
                          quantity=quantity)
+
+
 @core.comparable
 class ClaimSubmit(object):
     def __init__(self, date, code, icd_code, total, start_date,
@@ -113,6 +119,7 @@ class ClaimSubmit(object):
         claim_xml = ET.Element('Claim')
         self.add_to_xmlelt(claim_xml)
         return ET.tostring(claim_xml, encoding='utf-8', method='xml').decode()
+
 
 @core.comparable
 class ClaimSubmitError(Exception):

@@ -5,7 +5,6 @@ from insuree import models as insuree_models
 from location import models as location_models
 from medical import models as medical_models
 from policy import models as policy_models
-from product import models as product_models
 
 
 class ClaimAdmin(models.Model):
@@ -198,7 +197,8 @@ class ClaimItem(models.Model):
                               db_column='ClaimID', related_name='items')
     item = models.ForeignKey(
         medical_models.Item, models.DO_NOTHING, db_column='ItemID')
-    # prodid = models.ForeignKey('Tblproduct', models.DO_NOTHING, db_column='ProdID', blank=True, null=True)
+    product = models.ForeignKey('product.Product', models.DO_NOTHING, db_column='ProdID', blank=True, null=True,
+                                related_name="claim_items")
     status = models.SmallIntegerField(db_column='ClaimItemStatus')
     availability = models.BooleanField(db_column='Availability')
     qty_provided = models.DecimalField(

@@ -6,12 +6,12 @@ from core import utils
 from core.datetimes.shared import datetimedelta
 from django.core.exceptions import ValidationError
 from django.db import connection
-from django.db.models import Sum, Q, Value
+from django.db.models import Sum, Q
 from django.db.models.functions import Coalesce
+from medical.models import Service
 from medical_pricelist.models import ItemPricelistDetail, ServicePricelistDetail
 from policy.models import Policy
 from product.models import Product, ProductItem, ProductService
-from medical.models import Item, Service
 
 REJECTION_REASON_INVALID_ITEM_OR_SERVICE = 1
 REJECTION_REASON_NOT_IN_PRICE_LIST = 2
@@ -530,3 +530,198 @@ def get_claim_category(claim):
         claim_category = Service.CATEGORY_VISIT  # One might expect "O" here but the legacy code uses "V"
 
     return claim_category
+
+
+def validate_assign_prod_to_claimitems(claim):
+    """
+    This method checks the limits for the family and the insuree, child or adult for their limits
+    between the copay percentage and fixed limit.
+    :return: List of ValidationError, only if no product could be found for now
+    """
+    visit_type_field = {
+        "O": ("LimitationType",  "LimitAdult",  "LimitChild"),
+        "E": ("LimitationTypeE", "LimitAdultE", "LimitChildE"),
+        "R": ("LimitationTypeR", "LimitAdultR", "LimitChildR"),
+    }
+    errors = []
+    target_date = claim.date_to if claim.date_to else claim.date_from
+    visit_type = claim.visit_type if claim.visit_type else "O"
+    adult = claim.insuree.is_adult(target_date)
+    (limitation_type_field, limit_adult, limit_child) = visit_type_field[visit_type]
+
+    for claimitem in claim.items.filter(validity_to__isnull=True).filter(rejection_reason=0):
+        if claimitem.price_asked \
+                and claimitem.price_approved \
+                and claimitem.price_asked > claimitem.price_approved:
+            claim_price = claimitem.price_asked
+        else:
+            claim_price = claimitem.price_approved
+
+        product_item_c = _query_product_item_service_limit(
+            target_date, claim.insuree.family_id, claimitem.item, None, limitation_type_field,
+            limit_adult if adult else limit_child, "C"
+        )
+        product_item_f = _query_product_item_service_limit(
+            target_date, claim.insuree.family_id, claimitem.item, None, limitation_type_field,
+            limit_adult if adult else limit_child, "F"
+        )
+
+        if not product_item_c and not product_item_f:
+            claimitem.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
+            errors.append(ValidationError("Claim item %s refers to an item %s that doesn't seem to have a valid "
+                                          "Policy->Product", params=[claimitem.id, claimitem.item_id],
+                                          code=REJECTION_REASON_NO_PRODUCT_FOUND))
+            continue
+
+        if product_item_f:
+            fixed_limit = getattr(product_item_f, limit_adult if adult else limit_child)
+        else:
+            fixed_limit = None
+        if product_item_c:
+            co_sharing_percent = getattr(product_item_c, limit_adult if adult else limit_child)
+        else:
+            co_sharing_percent = None
+
+        # if both products exist, find the best one to use
+        if product_item_c and product_item_f:
+            if fixed_limit == 0 or fixed_limit > claim_price:
+                product_item = product_item_f
+                product_item_c = None  # used in condition below
+            else:
+                if 100 - co_sharing_percent > 0:
+                    product_amount_own_f = claim_price - fixed_limit
+                    product_amount_own_c = (1 - co_sharing_percent/100) * claim_price
+                    if product_amount_own_c > product_amount_own_f:
+                        product_item = product_item_f
+                        product_item_c = None  # used in condition below
+                    else:
+                        product_item = product_item_c
+                else:
+                    product_item = product_item_c
+        else:
+            if product_item_c:
+                product_item = product_item_c
+            else:
+                product_item = product_item_f
+                product_item_c = None
+
+        claimitem.product_id = product_item.product_id
+        claimitem.policy_id = product_item\
+            .product\
+            .policies\
+            .filter(effective_date__lte=target_date)\
+            .filter(expiry_date__gte=target_date)\
+            .filter(validity_to__isnull=True)\
+            .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
+            .filter(family_id=claim.insuree.family_id)\
+            .first()\
+            .id
+        claimitem.price_origin = product_item.price_origin
+        # The original code also sets claimitem.price_adjusted but it also always NULL
+        if product_item_c:
+            claimitem.limitation = "C"
+            claimitem.limitation_value = co_sharing_percent
+        else:
+            claimitem.limitation = "F"
+            claimitem.limitation_value = fixed_limit
+        claimitem.save()
+
+    # TODO: this code is duplicated. They will be merged after the behaviour has been verified in isolation. Most
+    # of the code can be used indifferently with services rather than items.
+    for claimservice in claim.services.filter(validity_to__isnull=True).filter(rejection_reason=0):
+        if claimservice.price_asked \
+                and claimservice.price_approved \
+                and claimservice.price_asked > claimservice.price_approved:
+            claim_price = claimservice.price_asked
+        else:
+            claim_price = claimservice.price_approved
+
+        product_service_c = _query_product_item_service_limit(
+            target_date, claim.insuree.family_id, None, claimservice.service, limitation_type_field,
+            limit_adult if adult else limit_child, "C"
+        )
+        product_service_f = _query_product_item_service_limit(
+            target_date, claim.insuree.family_id, None, claimservice.service, limitation_type_field,
+            limit_adult if adult else limit_child, "F"
+        )
+
+        if not product_service_c and not product_service_f:
+            claimservice.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
+            errors.append(ValidationError("Claim service %s refers to a service %s that doesn't seem to have a valid "
+                                          "Policy->Product", params=[claimservice.id, claimservice.service_id],
+                                          code=REJECTION_REASON_NO_PRODUCT_FOUND))
+            continue
+
+        if product_service_f:
+            fixed_limit = getattr(product_service_f, limit_adult if adult else limit_child)
+        else:
+            fixed_limit = None
+        if product_service_c:
+            co_sharing_percent = getattr(product_service_c, limit_adult if adult else limit_child)
+        else:
+            co_sharing_percent = None
+
+        # if both products exist, find the best one to use
+        if product_service_c and product_service_f:
+            if fixed_limit == 0 or fixed_limit > claim_price:
+                product_service = product_service_f
+                product_service_c = None  # used in condition below
+            else:
+                if 100 - co_sharing_percent > 0:
+                    product_amount_own_f = claim_price - fixed_limit
+                    product_amount_own_c = (1 - co_sharing_percent/100) * claim_price
+                    if product_amount_own_c > product_amount_own_f:
+                        product_service = product_service_f
+                        product_service_c = None  # used in condition below
+                    else:
+                        product_service = product_service_c
+                else:
+                    product_service = product_service_c
+        else:
+            if product_service_c:
+                product_service = product_service_c
+            else:
+                product_service = product_service_f
+                product_service_c = None
+
+        claimservice.product_id = product_service.product_id
+        claimservice.policy_id = product_service\
+            .product\
+            .policies\
+            .filter(effective_date__lte=target_date)\
+            .filter(expiry_date__gte=target_date)\
+            .filter(validity_to__isnull=True)\
+            .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
+            .filter(family_id=claim.insuree.family_id)\
+            .first()\
+            .id
+        claimservice.price_origin = product_service.price_origin
+        # The original code also sets claimservice.price_adjusted but it also always NULL
+        if product_service_c:
+            claimservice.limitation = "C"
+            claimservice.limitation_value = co_sharing_percent
+        else:
+            claimservice.limitation = "F"
+            claimservice.limitation_value = fixed_limit
+        claimservice.save()
+
+    return errors
+
+
+def _query_product_item_service_limit(target_date, family_id, item_id, service_id, limitation_field,
+                                      limit_ordering, limitation_type):
+    if item_id:
+        qs = ProductItem.objects.filter(item_id=item_id)
+    else:
+        qs = ProductService.objects.filter(service_id=service_id)
+    return qs \
+        .filter(product__policies__family_id=family_id) \
+        .filter(product__policies__effective_date__lte=target_date) \
+        .filter(product__policies__expiry_date__gte=target_date) \
+        .filter(product__policies__validity_to__isnull=True) \
+        .filter(validity_to__isnull=True) \
+        .filter(product__policies__status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED]) \
+        .filter(product__validity_to__isnull=True) \
+        .filter(**{limitation_field: limitation_type})\
+        .order_by("-" + limit_ordering)\
+        .first()
