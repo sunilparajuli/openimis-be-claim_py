@@ -297,7 +297,7 @@ def validate_item_product_family(claimitem, target_date, item_id, family_id, ins
                     .filter(item_id=item_id)\
                     .annotate(target_date=Coalesce("claim__date_to", "claim__date_from"))\
                     .filter(target_date__gt=insuree_policy_effective_date).filter(target_date__lte=expiry_date)\
-                    .filter(claim__status__gt=Policy.POLICY_STATUS_ACTIVE)\
+                    .filter(claim__status__gt=Policy.STATUS_ACTIVE)\
                     .filter(claim__validity_to__isnull=True)\
                     .filter(validity_to__isnull=True)\
                     .filter(rejection_reason=0)\
@@ -353,7 +353,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
                     .filter(service_id=service_id)\
                     .annotate(target_date=Coalesce("claim__date_to", "claim__date_from"))\
                     .filter(target_date__gt=insuree_policy_effective_date).filter(target_date__lte=expiry_date)\
-                    .filter(claim__status__gt=Policy.POLICY_STATUS_ACTIVE)\
+                    .filter(claim__status__gt=Policy.STATUS_ACTIVE)\
                     .filter(claim__validity_to__isnull=True)\
                     .filter(validity_to__isnull=True)\
                     .filter(rejection_reason=0)\
