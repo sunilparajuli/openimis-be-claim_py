@@ -225,6 +225,7 @@ class FeedbackInputType(InputObjectType):
 
 class ClaimInputType(OpenIMISMutation.Input):
     id = graphene.Int(required=False, read_only=True)
+    uuid = graphene.String(required=False)
     code = graphene.String(max_length=8, required=True)
     insuree_id = graphene.Int(required=True)
     date_from = graphene.Date(required=True)
@@ -257,13 +258,14 @@ def update_or_create_claim(data):
     services = data.pop('services') if 'services' in data else []
     data.pop('client_mutation_id')
     data.pop('client_mutation_label')
-    claim_id = data.pop('id') if 'id' in data else None
-    try:
-        claim, created = Claim.objects.update_or_create(
-            id=claim_id,
-            defaults=data)
-    except Exception as exc:
-        raise
+    claim_uuid = data.pop('uuid') if 'uuid' in data else None
+    # update_or_create(uuid=claim_uuid, ...)
+    # doesn't work because of explicite attempt to set null to uuid!
+    if claim_uuid:
+        claim = Claim.objects.get(uuid=claim_uuid)
+        [setattr(claim, key, data[key]) for key in data]
+    else:
+        claim = Claim.objects.create(**data)
     claimed = 0
     prev_items = [s.id for s in claim.items.all()]
     for item in items:
@@ -357,27 +359,27 @@ class SubmitClaimsMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        ids = graphene.List(graphene.Int)
+        uuids = graphene.List(graphene.String)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
         results = {}
-        for claim_id in data["ids"]:
+        for claim_uuid in data["uuids"]:
             claim = Claim.objects\
-                .filter(pk=claim_id)\
+                .filter(uuid=claim_uuid)\
                 .prefetch_related("items")\
                 .prefetch_related("services")\
                 .first()
             if claim is None:
-                results[claim_id] = {"error": f"id {claim_id} does not exist"}
+                results[claim_uuid] = {"error": f"id {claim_uuid} does not exist"}
                 continue
             errors = validate_claim(claim)
             if len(errors) > 0:
-                results[claim_id] = {
+                results[claim_uuid] = {
                     "error": errors[0].message, "error_code": errors[0].code}
             else:
-                set_claim_submitted(claim, errors)
-                results[claim_id] = {"success": True}
+                set_claim_submitted(claim, errors)     
+            results[claim_uuid] = {"success": True}
 
         # For now, the response should only contain errors, not successful updates
         errors = {k: v for k, v in results.items() if "success" not in v}
@@ -387,13 +389,13 @@ class SubmitClaimsMutation(OpenIMISMutation):
             return None
 
 
-def set_claims_status(ids, field, status):
-    affected_rows = Claim.objects.filter(id__in=ids).update(**{field: status})
-    if affected_rows != len(ids):
+def set_claims_status(uuids, field, status):
+    affected_rows = Claim.objects.filter(uuid__in=uuids).update(**{field: status})
+    if affected_rows != len(uuids):
         errors = ['Claims in error:']
         errors.extend(map(
             lambda c: c.code,
-            Claim.objects.filter(Q(id__in=ids), ~Q(**{field: 4}))
+            Claim.objects.filter(Q(uuid__in=uuids), ~Q(**{field: 4}))
         ))
         return json.dump(errors)
     return None
@@ -405,11 +407,11 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        ids = graphene.List(graphene.Int)
+        uuids = graphene.List(graphene.String)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        return set_claims_status(data['ids'], 'feedback_status', 4)
+        return set_claims_status(data['uuids'], 'feedback_status', 4)
 
 
 class BypassClaimsFeedbackMutation(OpenIMISMutation):
@@ -418,11 +420,11 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        ids = graphene.List(graphene.Int)
+        uuids = graphene.List(graphene.String)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        return set_claims_status(data['ids'], 'feedback_status', 16)
+        return set_claims_status(data['uuids'], 'feedback_status', 16)
 
 
 class SkipClaimsFeedbackMutation(OpenIMISMutation):
@@ -432,11 +434,11 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        ids = graphene.List(graphene.Int)
+        uuids = graphene.List(graphene.String)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        return set_claims_status(data['ids'], 'feedback_status', 2)
+        return set_claims_status(data['uuids'], 'feedback_status', 2)
 
 
 class DeliverClaimFeedbackMutation(OpenIMISMutation):
@@ -445,12 +447,12 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        claim_id = graphene.Int(required=False, read_only=True)
+        claim_uuid = graphene.String(required=False, read_only=True)
         feedback = graphene.Field(FeedbackInputType, required=True)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        claim = Claim.objects.get(id=data['claim_id'])
+        claim = Claim.objects.get(uuid=data['claim_uuid'])
         feedback = data['feedback']
         from datetime import date
         feedback['validity_from'] = date.today()
@@ -475,11 +477,11 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        ids = graphene.List(graphene.Int)
+        uuids = graphene.List(graphene.String)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        return set_claims_status(data['ids'], 'review_status', 4)
+        return set_claims_status(data['uuids'], 'review_status', 4)
 
 
 class BypassClaimsReviewMutation(OpenIMISMutation):
@@ -489,11 +491,11 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        ids = graphene.List(graphene.Int)
+        uuids = graphene.List(graphene.String)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        return set_claims_status(data['ids'], 'review_status', 16)
+        return set_claims_status(data['uuids'], 'review_status', 16)
 
 
 class SkipClaimsReviewMutation(OpenIMISMutation):
@@ -503,11 +505,11 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        ids = graphene.List(graphene.Int)
+        uuids = graphene.List(graphene.String)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        return set_claims_status(data['ids'], 'review_status', 2)
+        return set_claims_status(data['uuids'], 'review_status', 2)
 
 
 class DeliverClaimReviewMutation(OpenIMISMutation):
@@ -516,13 +518,13 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        claim_id = graphene.Int(required=False, read_only=True)
+        claim_uuid = graphene.String(required=False, read_only=True)
         items = graphene.List(ClaimItemInputType, required=False)
         services = graphene.List(ClaimServiceInputType, required=False)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        claim = Claim.objects.get(id=data['claim_id'])
+        claim = Claim.objects.get(uuid=data['claim_uuid'])
         items = data.pop('items') if 'items' in data else []
         all_rejected = True
         for item in items:
@@ -549,29 +551,29 @@ class ProcessClaimsMutation(OpenIMISMutation):
     """
 
     class Input(OpenIMISMutation.Input):
-        ids = graphene.List(graphene.Int)
+        uuids = graphene.List(graphene.String)
 
     @classmethod
     def async_mutate(cls, root, info, **data):
         results = {}
-        for claim_id in data["ids"]:
+        for claim_uuid in data["uuids"]:
             claim = Claim.objects \
-                .filter(pk=claim_id) \
+                .filter(uuid=claim_uuid) \
                 .prefetch_related("items") \
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                results[claim_id] = {"error": f"id {claim_id} does not exist"}
+                results[claim_uuid] = {"error": f"id {claim_uuid} does not exist"}
                 continue
             errors = validate_claim(claim)
             if len(errors) == 0:
                 errors += validate_assign_prod_to_claimitems(claim)
             if len(errors) > 0:
-                results[claim_id] = {
+                results[claim_uuid] = {
                     "error": errors[0].message, "error_code": errors[0].code}
             else:
                 set_claim_processed(claim, errors)
-                results[claim_id] = {"success": True}
+                results[claim_uuid] = {"success": True}
 
         # For now, the response should only contain errors, not successful updates
         errors = {k: v for k, v in results.items() if "success" not in v}
