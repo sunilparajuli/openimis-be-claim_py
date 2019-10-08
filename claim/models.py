@@ -1,14 +1,17 @@
 from core import fields
+import uuid
 from core import models as core_models
 from django.db import models
 from insuree import models as insuree_models
 from location import models as location_models
 from medical import models as medical_models
 from policy import models as policy_models
+from claim_batch import models as claim_batch_models
 
 
 class ClaimAdmin(models.Model):
     id = models.AutoField(db_column='ClaimAdminId', primary_key=True)
+    uuid = models.UUIDField(db_column='ClaimAdminUUID', default=uuid.uuid4, unique=True)
     legacy_id = models.IntegerField(
         db_column='LegacyId', blank=True, null=True)
     code = models.CharField(db_column='ClaimAdminCode',
@@ -42,6 +45,7 @@ class ClaimAdmin(models.Model):
 
 class Feedback(models.Model):
     id = models.AutoField(db_column='FeedbackID', primary_key=True)
+    uuid = models.UUIDField(db_column='FeedbackUUID', default=uuid.uuid4, unique=True)
     claim = models.OneToOneField(
         "Claim", models.DO_NOTHING,
         db_column='ClaimID', blank=True, null=True, related_name="+")
@@ -73,6 +77,7 @@ class Feedback(models.Model):
 
 class Claim(models.Model):
     id = models.AutoField(db_column='ClaimID', primary_key=True)
+    uuid = models.UUIDField(db_column='ClaimUUID', default=uuid.uuid4, unique = True)
     legacy_id = models.IntegerField(
         db_column='LegacyID', blank=True, null=True)
     category = models.CharField(
@@ -123,6 +128,8 @@ class Claim(models.Model):
     validity_to = fields.DateTimeField(
         db_column='ValidityTo', blank=True, null=True)
 
+    batch_run = models.ForeignKey(claim_batch_models.BatchRun,
+                                  models.DO_NOTHING, db_column='RunID', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
     validity_from_review = fields.DateTimeField(
         db_column='ValidityFromReview', blank=True, null=True)
@@ -184,8 +191,10 @@ class Claim(models.Model):
     STATUS_VALUATED = 16
 
     def reject(self, rejection_code):
-        updated_items = self.items.filter(validity_to__isnull=True).update(rejection_reason=rejection_code)
-        updated_services = self.services.filter(validity_to__isnull=True).update(rejection_reason=rejection_code)
+        updated_items = self.items.filter(validity_to__isnull=True).update(
+            rejection_reason=rejection_code)
+        updated_services = self.services.filter(
+            validity_to__isnull=True).update(rejection_reason=rejection_code)
         return updated_items + updated_services
 
 
@@ -319,6 +328,7 @@ class ClaimService(models.Model):
 
 class ClaimOfficer(models.Model):
     id = models.AutoField(db_column='OfficerID', primary_key=True)
+    uuid = models.UUIDField(db_column='OfficerUUID', default=uuid.uuid4, unique = True)
     code = models.CharField(db_column='Code', max_length=8)
     last_name = models.CharField(db_column='LastName', max_length=100)
     other_names = models.CharField(db_column='OtherNames', max_length=100)

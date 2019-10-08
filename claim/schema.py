@@ -16,7 +16,7 @@ from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from location.schema import userDistricts
-
+from claim_batch.schema import BatchRunGQLType
 from .models import Claim, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
 
 
@@ -30,7 +30,7 @@ class ClaimAdminGQLType(DjangoObjectType):
         exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
-            "id": ["exact"],
+            "uuid": ["exact"],
             "code": ["exact", "icontains"],
             "last_name": ["exact", "icontains"],
             "other_names": ["exact", "icontains"],
@@ -48,7 +48,7 @@ class ClaimOfficerGQLType(DjangoObjectType):
         exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
-            "id": ["exact"],
+            "uuid": ["exact"],
             "code": ["exact", "icontains"],
             "last_name": ["exact", "icontains"],
             "other_names": ["exact", "icontains"],
@@ -68,7 +68,7 @@ class ClaimGQLType(DjangoObjectType):
         exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
-            "id": ["exact"],
+            "uuid": ["exact"],
             "code": ["exact", "istartswith", "icontains", "iexact"],
             "status": ["exact"],
             "date_claimed": ["exact", "lt", "lte", "gt", "gte"],
@@ -83,6 +83,7 @@ class ClaimGQLType(DjangoObjectType):
             **prefix_filterset("admin__", ClaimAdminGQLType._meta.filter_fields),
             **prefix_filterset("health_facility__", HealthFacilityGQLType._meta.filter_fields),
             **prefix_filterset("insuree__", InsureeGQLType._meta.filter_fields),
+            **prefix_filterset("batch_run__", BatchRunGQLType._meta.filter_fields)
         }
         connection_class = ExtendedConnection
 
