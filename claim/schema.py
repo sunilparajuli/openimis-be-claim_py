@@ -371,14 +371,15 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services")\
                 .first()
             if claim is None:
-                results[claim_uuid] = {"error": f"id {claim_uuid} does not exist"}
+                results[claim_uuid] = {
+                    "error": f"id {claim_uuid} does not exist"}
                 continue
             errors = validate_claim(claim)
             if len(errors) > 0:
                 results[claim_uuid] = {
                     "error": errors[0].message, "error_code": errors[0].code}
             else:
-                set_claim_submitted(claim, errors)     
+                set_claim_submitted(claim, errors)
             results[claim_uuid] = {"success": True}
 
         # For now, the response should only contain errors, not successful updates
@@ -390,7 +391,8 @@ class SubmitClaimsMutation(OpenIMISMutation):
 
 
 def set_claims_status(uuids, field, status):
-    affected_rows = Claim.objects.filter(uuid__in=uuids).update(**{field: status})
+    affected_rows = Claim.objects.filter(
+        uuid__in=uuids).update(**{field: status})
     if affected_rows != len(uuids):
         errors = ['Claims in error:']
         errors.extend(map(
@@ -563,7 +565,8 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                results[claim_uuid] = {"error": f"id {claim_uuid} does not exist"}
+                results[claim_uuid] = {
+                    "error": f"id {claim_uuid} does not exist"}
                 continue
             errors = validate_claim(claim)
             if len(errors) == 0:
@@ -574,6 +577,39 @@ class ProcessClaimsMutation(OpenIMISMutation):
             else:
                 set_claim_processed(claim, errors)
                 results[claim_uuid] = {"success": True}
+
+        # For now, the response should only contain errors, not successful updates
+        errors = {k: v for k, v in results.items() if "success" not in v}
+        if len(errors) > 0:
+            return json.dumps(errors)
+        else:
+            return None
+
+
+class DeleteClaimsMutation(OpenIMISMutation):
+    """
+    Mark one or several claims as Deleted (validity_to)
+    """
+
+    class Input(OpenIMISMutation.Input):
+        uuids = graphene.List(graphene.String)
+
+    @classmethod
+    def async_mutate(cls, root, info, **data):
+        results = {}
+        errors = []
+        for claim_uuid in data["uuids"]:
+            claim = Claim.objects \
+                .filter(uuid=claim_uuid) \
+                .prefetch_related("items") \
+                .prefetch_related("services") \
+                .first()
+            if claim is None:
+                results[claim_uuid] = {
+                    "error": f"id {claim_uuid} does not exist"}
+                continue
+            set_claim_deleted(claim, errors)
+            results[claim_uuid] = {"success": True}
 
         # For now, the response should only contain errors, not successful updates
         errors = {k: v for k, v in results.items() if "success" not in v}
@@ -647,6 +683,16 @@ def set_claim_submitted(claim, errors):
         claim.save()
 
 
+def set_claim_deleted(claim, errors):
+    try:
+        from datetime import datetime
+        claim.validity_to = datetime.now()
+        claim.save()
+    except Exception as e:
+        errors[claim.uuid] = {
+            "error": f"Failed to change status of claim {claim_uuid}"}
+
+
 def set_claim_processed(claim, errors):
     rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
         .filter(validity_to__isnull=True).count()
@@ -675,3 +721,4 @@ class Mutation(graphene.ObjectType):
     bypass_claims_review = BypassClaimsReviewMutation.Field()
     skip_claims_review = SkipClaimsReviewMutation.Field()
     process_claims = ProcessClaimsMutation.Field()
+    delete_claims = DeleteClaimsMutation.Field()

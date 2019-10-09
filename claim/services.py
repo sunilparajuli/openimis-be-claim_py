@@ -167,3 +167,11 @@ class ClaimSubmitService(object):
                 return
             res = cur.fetchone()[0]  # FETCH 'SELECT @ret' returned value
             raise ClaimSubmitError(res)
+
+
+class ReportClaimsService(object):
+    def __init__(self, user):
+        self.user = user
+
+    def fetch(self, prms):
+        return prms
