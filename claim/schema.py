@@ -390,7 +390,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 results[claim_uuid] = {
                     "error": f"id {claim_uuid} does not exist"}
                 continue
-            errors = []  # validate_claim(claim)
+            errors = validate_claim(claim)
             if len(errors) > 0:
                 results[claim_uuid] = {
                     "error": errors[0].message, "error_code": errors[0].code}
