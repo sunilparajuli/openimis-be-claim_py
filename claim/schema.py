@@ -244,6 +244,9 @@ class ClaimInputType(OpenIMISMutation.Input):
     category = graphene.String(max_length=1, required=False)
     visit_type = graphene.String(max_length=1, required=False)
     admin_id = graphene.Int(required=False)
+    guarantee_id = graphene.String(max_length=30, required=False)
+    explanation = graphene.String(required=False)
+    adjustment = graphene.String(required=False)
 
     feedback_available = graphene.Boolean(default=False)
     feedback_status = TinyInt(required=False)
@@ -251,6 +254,17 @@ class ClaimInputType(OpenIMISMutation.Input):
 
     items = graphene.List(ClaimItemInputType, required=False)
     services = graphene.List(ClaimServiceInputType, required=False)
+
+
+def reset_claim_before_update(claim):
+    claim.date_to = None
+    claim.icd_1 = None
+    claim.icd_2 = None
+    claim.icd_3 = None
+    claim.icd_4 = None
+    claim.guarantee_id = None
+    claim.explanation = None
+    claim.adjustment = None
 
 
 def update_or_create_claim(data):
@@ -263,6 +277,8 @@ def update_or_create_claim(data):
     # doesn't work because of explicite attempt to set null to uuid!
     if claim_uuid:
         claim = Claim.objects.get(uuid=claim_uuid)
+        # reset the non required fields (each update is 'complete', necessary to be able to set 'null')
+        reset_claim_before_update(claim)
         [setattr(claim, key, data[key]) for key in data]
     else:
         claim = Claim.objects.create(**data)
@@ -374,13 +390,13 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 results[claim_uuid] = {
                     "error": f"id {claim_uuid} does not exist"}
                 continue
-            errors = validate_claim(claim)
+            errors = []  # validate_claim(claim)
             if len(errors) > 0:
                 results[claim_uuid] = {
                     "error": errors[0].message, "error_code": errors[0].code}
             else:
                 set_claim_submitted(claim, errors)
-            results[claim_uuid] = {"success": True}
+                results[claim_uuid] = {"success": True}
 
         # For now, the response should only contain errors, not successful updates
         errors = {k: v for k, v in results.items() if "success" not in v}
@@ -596,23 +612,19 @@ class DeleteClaimsMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, root, info, **data):
-        results = {}
-        errors = []
+        errors = {}
         for claim_uuid in data["uuids"]:
+            errors = []
             claim = Claim.objects \
                 .filter(uuid=claim_uuid) \
                 .prefetch_related("items") \
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                results[claim_uuid] = {
+                errors[claim_uuid] = {
                     "error": f"id {claim_uuid} does not exist"}
                 continue
             set_claim_deleted(claim, errors)
-            results[claim_uuid] = {"success": True}
-
-        # For now, the response should only contain errors, not successful updates
-        errors = {k: v for k, v in results.items() if "success" not in v}
         if len(errors) > 0:
             return json.dumps(errors)
         else:

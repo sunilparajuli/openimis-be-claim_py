@@ -11,7 +11,8 @@ from claim_batch import models as claim_batch_models
 
 class ClaimAdmin(models.Model):
     id = models.AutoField(db_column='ClaimAdminId', primary_key=True)
-    uuid = models.CharField(db_column='ClaimAdminUUID', max_length=36, default=uuid.uuid4, unique=True)
+    uuid = models.CharField(db_column='ClaimAdminUUID',
+                            max_length=36, default=uuid.uuid4, unique=True)
     legacy_id = models.IntegerField(
         db_column='LegacyId', blank=True, null=True)
     code = models.CharField(db_column='ClaimAdminCode',
@@ -38,6 +39,9 @@ class ClaimAdmin(models.Model):
         db_column='AuditUserId', blank=True, null=True)
     # row_id = models.BinaryField(db_column='RowId', blank=True, null=True)
 
+    def __str__(self):
+        return self.code + " " + self.last_name + " " + self.other_names
+
     class Meta:
         managed = False
         db_table = 'tblClaimAdmin'
@@ -45,7 +49,8 @@ class ClaimAdmin(models.Model):
 
 class Feedback(models.Model):
     id = models.AutoField(db_column='FeedbackID', primary_key=True)
-    uuid = models.CharField(db_column='FeedbackUUID', max_length=36, default=uuid.uuid4, unique=True)
+    uuid = models.CharField(db_column='FeedbackUUID',
+                            max_length=36, default=uuid.uuid4, unique=True)
     claim = models.OneToOneField(
         "Claim", models.DO_NOTHING,
         db_column='ClaimID', blank=True, null=True, related_name="+")
@@ -77,7 +82,8 @@ class Feedback(models.Model):
 
 class Claim(models.Model):
     id = models.AutoField(db_column='ClaimID', primary_key=True)
-    uuid = models.CharField(db_column='ClaimUUID', max_length=36, default=uuid.uuid4, unique = True)
+    uuid = models.CharField(db_column='ClaimUUID',
+                            max_length=36, default=uuid.uuid4, unique=True)
     legacy_id = models.IntegerField(
         db_column='LegacyID', blank=True, null=True)
     category = models.CharField(
@@ -328,7 +334,8 @@ class ClaimService(models.Model):
 
 class ClaimOfficer(models.Model):
     id = models.AutoField(db_column='OfficerID', primary_key=True)
-    uuid = models.CharField(db_column='OfficerUUID', max_length=36, default=uuid.uuid4, unique = True)
+    uuid = models.CharField(db_column='OfficerUUID',
+                            max_length=36, default=uuid.uuid4, unique=True)
     code = models.CharField(db_column='Code', max_length=8)
     last_name = models.CharField(db_column='LastName', max_length=100)
     other_names = models.CharField(db_column='OtherNames', max_length=100)

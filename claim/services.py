@@ -169,9 +169,50 @@ class ClaimSubmitService(object):
             raise ClaimSubmitError(res)
 
 
-class ReportClaimsService(object):
+def formatClaimService(s):
+    return {
+        "service": str(s.service),
+        "quantity": s.qty_provided,
+        "price": s.price_asked,
+        "explanation": s.explanation
+    }
+
+
+def formatClaimItem(i):
+    return {
+        "item": str(i.item),
+        "quantity": i.qty_provided,
+        "price": i.price_asked,
+        "explanation": i.explanation
+    }
+
+
+class ClaimsReportService(object):
     def __init__(self, user):
         self.user = user
 
-    def fetch(self, prms):
-        return prms
+    def fetch(self, uuid):
+        from .models import Claim
+        claim = Claim.objects \
+            .select_related('health_facility') \
+            .select_related('insuree') \
+            .get(uuid=uuid)
+        return {
+            "code": claim.code,
+            "visitDateFrom": claim.date_from.isoformat() if claim.date_from else None,
+            "visitDateTo":  claim.date_to.isoformat() if claim.date_to else None,
+            "claimDate": claim.date_claimed.isoformat() if claim.date_claimed else None,
+            "healthFacility": str(claim.health_facility),
+            "insuree": str(claim.insuree),
+            "claimAdmin": str(claim.admin) if claim.admin else None,
+            "icd": str(claim.icd),
+            "icd1": str(claim.icd1) if claim.icd_1 else None,
+            "icd2": str(claim.icd1) if claim.icd_2 else None,
+            "icd3": str(claim.icd1) if claim.icd_3 else None,
+            "icd4": str(claim.icd1) if claim.icd_4 else None,
+            "guarantee": claim.guarantee_id,
+            "visitType": claim.visit_type,
+            "claimed": claim.claimed,
+            "services": [formatClaimService(s) for s in claim.services.all()],
+            "items": [formatClaimItem(i) for i in claim.items.all()],
+        }
