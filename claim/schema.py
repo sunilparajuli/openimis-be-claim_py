@@ -352,6 +352,8 @@ class UpdateClaimMutation(OpenIMISMutation):
     """
     Update a claim. The claim items and services can all be updated with this call
     """
+    _mutation_module = "claim"
+    _mutation_class = "UpdateClaimMutation"
 
     class Input(ClaimInputType):
         pass
@@ -373,6 +375,8 @@ class SubmitClaimsMutation(OpenIMISMutation):
     """
     Submit one or several claims.
     """
+    _mutation_module = "claim"
+    _mutation_class = "SubmitClaimsMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
@@ -423,6 +427,8 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
     """
     Select one or several claims for feedback.
     """
+    _mutation_module = "claim"
+    _mutation_class = "SelectClaimsForFeedbackMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
@@ -436,6 +442,8 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
     """
     Bypass feedback for one or several claims
     """
+    _mutation_module = "claim"
+    _mutation_class = "BypassClaimsFeedbackMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
@@ -450,6 +458,8 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
     Skip feedback for one or several claims
     Skip indicates that the claim is not selected for feedback
     """
+    _mutation_module = "claim"
+    _mutation_class = "SkipClaimsFeedbackMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
@@ -463,6 +473,8 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
     """
     Deliver feedback of a claim
     """
+    _mutation_module = "claim"
+    _mutation_class = "DeliverClaimFeedbackMutation"
 
     class Input(OpenIMISMutation.Input):
         claim_uuid = graphene.String(required=False, read_only=True)
@@ -493,6 +505,8 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
     """
     Select one or several claims for review.
     """
+    _mutation_module = "claim"
+    _mutation_class = "SelectClaimsForReviewMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
@@ -507,6 +521,8 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
     Bypass review for one or several claims
     Bypass indicates that review of a previously selected claim won't be delivered
     """
+    _mutation_module = "claim"
+    _mutation_class = "BypassClaimsReviewMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
@@ -521,6 +537,8 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
     Skip review for one or several claims
     Skip indicates that the claim is not selected for review
     """
+    _mutation_module = "claim"
+    _mutation_class = "SkipClaimsReviewMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
@@ -534,6 +552,8 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
     """
     Deliver review of a claim (items and services)
     """
+    _mutation_module = "claim"
+    _mutation_class = "DeliverClaimReviewMutation"
 
     class Input(OpenIMISMutation.Input):
         claim_uuid = graphene.String(required=False, read_only=True)
@@ -567,6 +587,8 @@ class ProcessClaimsMutation(OpenIMISMutation):
     """
     Process one or several claims.
     """
+    _mutation_module = "claim"
+    _mutation_class = "ProcessClaimsMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
