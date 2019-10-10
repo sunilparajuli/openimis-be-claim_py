@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import connection
 from django.db.models import Sum, Q
 from django.db.models.functions import Coalesce
+from django.utils.translation import gettext as _
 from medical.models import Service
 from medical_pricelist.models import ItemPricelistDetail, ServicePricelistDetail
 from policy.models import Policy
@@ -85,7 +86,7 @@ def validate_claimitem_in_price_list(claim, claimitem):
     else:
         claimitem.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
         claimitem.save()
-        return [ValidationError("Couldn't find a valid item pricelist item for %s in location %s",
+        return [ValidationError(_("claim.validation.pricelist.item"),
                                 params=(claimitem.item_id, claim.health_facility_id),
                                 code=REJECTION_REASON_NOT_IN_PRICE_LIST)]
 
@@ -102,7 +103,7 @@ def validate_claimservice_in_price_list(claim, claimservice):
     else:
         claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
         claimservice.save()
-        return [ValidationError("Couldn't find a valid service pricelist item for %s in location %s",
+        return [ValidationError(_("claim.validation.pricelist.service"),
                                 params=(claimservice.service_id, claim.health_facility_id),
                                 code=REJECTION_REASON_NOT_IN_PRICE_LIST)]
 
@@ -140,7 +141,7 @@ def validate_claimitem_validity(claimitem):
     if claimitem.validity_to is None and claimitem.item.validity_to is not None:
         claimitem.rejection_reason = REJECTION_REASON_INVALID_ITEM_OR_SERVICE
         claimitem.save()
-        return [ValidationError("Claim Item %s is referencing item %s that is invalid",
+        return [ValidationError(_("claim.validation.validity.item"),
                                 params=(claimitem.id, claimitem.item_id),
                                 code=REJECTION_REASON_INVALID_ITEM_OR_SERVICE)]
     return []
@@ -151,7 +152,7 @@ def validate_claimservice_validity(claimservice):
     if claimservice.validity_to is None and claimservice.service.validity_to is not None:
         claimservice.rejection_reason = REJECTION_REASON_INVALID_ITEM_OR_SERVICE
         claimservice.save()
-        return [ValidationError("Claim Service %s is referencing service %s that is invalid",
+        return [ValidationError(_("claim.validation.validity.service"),
                                 params=(claimservice.id, claimservice.service_id),
                                 code=REJECTION_REASON_INVALID_ITEM_OR_SERVICE)]
     return []
@@ -173,7 +174,7 @@ def validate_claimservice_care_type(claim, claimservice):
     ):
         claimservice.rejection_reason = REJECTION_REASON_ITEM_CARE_TYPE
         claimservice.save()
-        return [ValidationError("Care type %s and health facility care type %s with date %s vs %s",
+        return [ValidationError(_("claim.validation.care_type.service"),
                                 params=[care_type, hf_care_type, target_date, claim.date_from],
                                 code=REJECTION_REASON_ITEM_CARE_TYPE)]
     else:
@@ -183,7 +184,8 @@ def validate_claimservice_care_type(claim, claimservice):
 def validate_target_date(claim):
     if claim.date_from is None and claim.date_to is None:
         claim.reject(REJECTION_REASON_TARGET_DATE)
-        return ValidationError("Claim %s: neither date_from nor date_to is specified", params=claim.id,
+        return ValidationError(_("claim.validation.target_date"),
+                               params=claim.id,
                                code=REJECTION_REASON_TARGET_DATE)
     else:
         return []
@@ -205,7 +207,7 @@ def validate_claimitem_care_type(claim, claimitem):
     ):
         claimitem.rejection_reason = REJECTION_REASON_ITEM_CARE_TYPE
         claimitem.save()
-        return [ValidationError("Care type %s and health facility care type %s with date %s vs %s",
+        return [ValidationError(_("claim.validation.care_type.item"),
                                 params=[care_type, hf_care_type, target_date, claim.date_from],
                                 code=REJECTION_REASON_ITEM_CARE_TYPE)]
     else:
@@ -219,8 +221,7 @@ def validate_claimitem_limitation_fail(claim, claimitem):
     if claimitem.item.patient_category & patient_category_mask != patient_category_mask:
         claimitem.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
         claimitem.save()
-        return [ValidationError("ClaimItem %s referencing item %s has a patient category mask of %s but insuree has "
-                                "a mask of %s",
+        return [ValidationError(_("claim.validation.limitation.item"),
                                 params=(claimitem.id, claimitem.item_id, claimitem.item.patient_category,
                                         patient_category_mask),
                                 code=REJECTION_REASON_CATEGORY_LIMITATION)]
@@ -235,8 +236,7 @@ def validate_claimservice_limitation_fail(claim, claimservice):
     if claimservice.service.patient_category & patient_category_mask != patient_category_mask:
         claimservice.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
         claimservice.save()
-        return [ValidationError("ClaimService %s referencing service %s has a patient category mask of %s but insuree "
-                                "has a mask of %s",
+        return [ValidationError(_("claim.validation.limitation.service"),
                                 params=(claimservice.id, claimservice.service_id, claimservice.service.patient_category,
                                         patient_category_mask),
                                 code=REJECTION_REASON_CATEGORY_LIMITATION)]
@@ -247,14 +247,15 @@ def validate_claimservice_limitation_fail(claim, claimservice):
 def validate_family(claim, insuree) -> List[ValidationError]:
     errors = []
     if insuree.validity_to is not None:
-        errors += [ValidationError("Insuree %s validity expired", params=insuree.id, code=REJECTION_REASON_FAMILY)]
+        errors += [ValidationError(_("claim.validation.family.insuree_validity"),
+                                   params=insuree.id, code=REJECTION_REASON_FAMILY)]
     if insuree.family is None:
-        errors += [ValidationError("Insuree %s should have a family, even if only one member", params=insuree.id,
-                                   code=REJECTION_REASON_FAMILY)]
+        errors += [ValidationError(_("claim.validation.family.no_family"),
+                                   params=insuree.id, code=REJECTION_REASON_FAMILY)]
     else:
         if insuree.family.validity_to is not None:
-            errors += [ValidationError("Insuree %s family validity expired", params=insuree.id,
-                                       code=REJECTION_REASON_FAMILY)]
+            errors += [ValidationError(_("claim.validation.family.family_validity"),
+                                       params=insuree.id, code=REJECTION_REASON_FAMILY)]
 
     if len(errors) > 0:
         claim.reject(REJECTION_REASON_FAMILY)
@@ -282,8 +283,8 @@ def validate_item_product_family(claimitem, target_date, item_id, family_id, ins
             if waiting_period and target_date < (insuree_policy_effective_date + datetimedelta(months=waiting_period)):
                 claimitem.rejection_reason = REJECTION_REASON_WAITING_PERIOD_FAIL
                 claimitem.save()
-                errors += [ValidationError("Item/service %s waiting period violation", params=item_id,
-                                           code=REJECTION_REASON_WAITING_PERIOD_FAIL)]
+                errors += [ValidationError(_("claim.validation.product_family.waiting_period"),
+                                           params=item_id, code=REJECTION_REASON_WAITING_PERIOD_FAIL)]
 
             # **** START CHECK 16 --> Item/Service Maximum provision (16)*****
             if adult:
@@ -305,14 +306,14 @@ def validate_item_product_family(claimitem, target_date, item_id, family_id, ins
                 if total_qty_provided is None or total_qty_provided >= limit_no:
                     claimitem.rejection_reason = REJECTION_REASON_QTY_OVER_LIMIT
                     claimitem.save()
-                    errors += [ValidationError("Item %s, provided %s over maximum number allowed %s",
+                    errors += [ValidationError(_("claim.validation.product_family.max_nb_allowed"),
                                                params=(item_id, total_qty_provided, limit_no),
                                                code=REJECTION_REASON_QTY_OVER_LIMIT)]
         if not found:
             claimitem.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
             claimitem.save()
-            errors += [ValidationError("Not product item found for %s", params=item_id,
-                                       code=REJECTION_REASON_NO_PRODUCT_FOUND)]
+            errors += [ValidationError(_("claim.validation.product_family.no_product_found"),
+                                       params=item_id, code=REJECTION_REASON_NO_PRODUCT_FOUND)]
 
     return errors
 
@@ -338,8 +339,8 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
             if waiting_period and target_date < (insuree_policy_effective_date + datetimedelta(months=waiting_period)):
                 claimservice.rejection_reason = REJECTION_REASON_WAITING_PERIOD_FAIL
                 claimservice.save()
-                errors += [ValidationError("Item/service %s waiting period violation", params=service_id,
-                                           code=REJECTION_REASON_WAITING_PERIOD_FAIL)]
+                errors += [ValidationError(_("claim.validation.product_family.waiting_period"),
+                                           params=service_id, code=REJECTION_REASON_WAITING_PERIOD_FAIL)]
 
             # **** START CHECK 16 --> Item/Service Maximum provision (16)*****
             if adult:
@@ -361,7 +362,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
                 if total_qty_provided is None or total_qty_provided >= limit_no:
                     claimservice.rejection_reason = REJECTION_REASON_QTY_OVER_LIMIT
                     claimservice.save()
-                    errors += [ValidationError("Service %s, provided %s over maximum number allowed %s",
+                    errors += [ValidationError(_("claim.validation.product_family.max_nb_allowed"),
                                                params=(service_id, total_qty_provided, limit_no),
                                                code=REJECTION_REASON_QTY_OVER_LIMIT)]
 
@@ -374,7 +375,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'C')\
                         .count()
                     if count and count >= product.max_no_consultations:
-                        errors += [ValidationError("%s is over maximum consultations %s",
+                        errors += [ValidationError(_("claim.validation.product_family.max_nb_consultations"),
                                                    params=(count, product.max_no_consultations),
                                                    code=REJECTION_REASON_MAX_CONSULTATIONS)]
                         break
@@ -385,7 +386,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'S')\
                         .count()
                     if count and count >= product.max_no_surgery:
-                        errors += [ValidationError("%s is over maximum surgery %s",
+                        errors += [ValidationError(_("claim.validation.product_family.max_nb_surgeries"),
                                                    params=(count, product.max_no_surgery),
                                                    code=REJECTION_REASON_MAX_SURGERIES)]
                         break
@@ -396,7 +397,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'D')\
                         .count()
                     if count and count >= product.max_no_delivery:
-                        errors += [ValidationError("%s is over maximum deliveries %s",
+                        errors += [ValidationError(_("claim.validation.product_family.max_nb_deliveries"),
                                                    params=(count, product.max_no_delivery),
                                                    code=REJECTION_REASON_MAX_DELIVERIES)]
                         break
@@ -407,7 +408,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'A')\
                         .count()
                     if count and count >= product.max_no_antenatal:
-                        errors += [ValidationError("%s is over maximum antenatal %s",
+                        errors += [ValidationError(_("claim.validation.product_family.max_nb_antenatal"),
                                                    params=(count, product.max_no_antenatal),
                                                    code=REJECTION_REASON_MAX_ANTENATAL)]
                         break
@@ -418,7 +419,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'H')\
                         .count()
                     if count and count >= product.max_no_hospitalization:
-                        errors += [ValidationError("%s is over maximum hospitalizations %s",
+                        errors += [ValidationError(_("claim.validation.product_family.max_nb_hospitalizations"),
                                                    params=(count, product.max_no_hospitalization),
                                                    code=REJECTION_REASON_MAX_HOSPITAL_ADMISSIONS)]
                         break
@@ -429,7 +430,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'V')\
                         .count()
                     if count and count >= product.max_no_visits:
-                        errors += [ValidationError("%s is over maximum visits %s",
+                        errors += [ValidationError(_("claim.validation.product_family.max_nb_visits"),
                                                    params=(count, product.max_no_visits),
                                                    code=REJECTION_REASON_MAX_VISITS)]
                         break
@@ -437,7 +438,7 @@ def validate_service_product_family(claimservice, target_date, service_id, famil
         if not found:
             claimservice.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
             claimservice.save()
-            errors += [ValidationError("No product service found for %s", params=service_id,
+            errors += [ValidationError(_("claim.validation.product_family.no_product_found"), params=service_id,
                                        code=REJECTION_REASON_NO_PRODUCT_FOUND)]
 
     return errors
@@ -568,8 +569,8 @@ def validate_assign_prod_to_claimitems(claim):
 
         if not product_item_c and not product_item_f:
             claimitem.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
-            errors.append(ValidationError("Claim item %s refers to an item %s that doesn't seem to have a valid "
-                                          "Policy->Product", params=[claimitem.id, claimitem.item_id],
+            errors.append(ValidationError(_("claim.validation.assign_prod.item.no_product_code"),
+                                          params=[claimitem.id, claimitem.item_id],
                                           code=REJECTION_REASON_NO_PRODUCT_FOUND))
             continue
 
@@ -647,8 +648,8 @@ def validate_assign_prod_to_claimitems(claim):
 
         if not product_service_c and not product_service_f:
             claimservice.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
-            errors.append(ValidationError("Claim service %s refers to a service %s that doesn't seem to have a valid "
-                                          "Policy->Product", params=[claimservice.id, claimservice.service_id],
+            errors.append(ValidationError(_("claim.validation.assign_prod.service.no_product_code"),
+                                          params=[claimservice.id, claimservice.service_id],
                                           code=REJECTION_REASON_NO_PRODUCT_FOUND))
             continue
 

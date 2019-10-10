@@ -9,6 +9,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
+from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
@@ -338,8 +339,7 @@ class CreateClaimMutation(OpenIMISMutation):
         user = info.context.user
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
-            raise ValidationError(
-                "User needs to be authenticated for this operation")
+            raise ValidationError(_("claim.mutation.authentication_required"))
         # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
         # data['audit_user_id'] = user.id
         data['audit_user_id'] = -1
@@ -363,8 +363,7 @@ class UpdateClaimMutation(OpenIMISMutation):
         user = info.context.user
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
-            raise ValidationError(
-                "User needs to be authenticated for this operation")
+            raise ValidationError(_("claim.mutation.authentication_required"))
         # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
         # data['audit_user_id'] = user.id
         data['audit_user_id'] = -1
@@ -391,8 +390,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services")\
                 .first()
             if claim is None:
-                results[claim_uuid] = {
-                    "error": f"id {claim_uuid} does not exist"}
+                results[claim_uuid] = {"error": _("claim.validation.id_does_not_exist") % claim_uuid}
                 continue
             errors = validate_claim(claim)
             if len(errors) > 0:
@@ -603,8 +601,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                results[claim_uuid] = {
-                    "error": f"id {claim_uuid} does not exist"}
+                results[claim_uuid] = {"error": _("claim.validation.id_does_not_exist") % claim_uuid}
                 continue
             errors = validate_claim(claim)
             if len(errors) == 0:
@@ -643,8 +640,7 @@ class DeleteClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                errors[claim_uuid] = {
-                    "error": f"id {claim_uuid} does not exist"}
+                results[claim_uuid] = {"error": _("claim.validation.id_does_not_exist") % claim_uuid}
                 continue
             set_claim_deleted(claim, errors)
         if len(errors) > 0:
@@ -724,7 +720,7 @@ def set_claim_deleted(claim, errors):
         claim.save()
     except Exception as e:
         errors[claim.uuid] = {
-            "error": f"Failed to change status of claim {claim_uuid}"}
+            "error": _("claim.mutation.failed_to_change_status_of_claim") % claim.uuid}
 
 
 def set_claim_processed(claim, errors):
