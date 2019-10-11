@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
+from django.utils import translation
 from graphene import InputObjectType
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
@@ -335,8 +336,7 @@ class CreateClaimMutation(OpenIMISMutation):
         pass
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
-        user = info.context.user
+    def async_mutate(cls, user, **data):
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
             raise ValidationError(_("claim.mutation.authentication_required"))
@@ -359,8 +359,7 @@ class UpdateClaimMutation(OpenIMISMutation):
         pass
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
-        user = info.context.user
+    def async_mutate(cls, user, **data):
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
             raise ValidationError(_("claim.mutation.authentication_required"))
@@ -381,7 +380,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         results = {}
         for claim_uuid in data["uuids"]:
             claim = Claim.objects\
@@ -432,7 +431,7 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         return set_claims_status(data['uuids'], 'feedback_status', 4)
 
 
@@ -447,7 +446,7 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         return set_claims_status(data['uuids'], 'feedback_status', 16)
 
 
@@ -463,7 +462,7 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         return set_claims_status(data['uuids'], 'feedback_status', 2)
 
 
@@ -479,7 +478,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
         feedback = graphene.Field(FeedbackInputType, required=True)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         claim = Claim.objects.get(uuid=data['claim_uuid'])
         feedback = data['feedback']
         from datetime import date
@@ -510,7 +509,7 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         return set_claims_status(data['uuids'], 'review_status', 4)
 
 
@@ -526,7 +525,7 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         return set_claims_status(data['uuids'], 'review_status', 16)
 
 
@@ -542,7 +541,7 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         return set_claims_status(data['uuids'], 'review_status', 2)
 
 
@@ -559,7 +558,7 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
         services = graphene.List(ClaimServiceInputType, required=False)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         claim = Claim.objects.get(uuid=data['claim_uuid'])
         items = data.pop('items') if 'items' in data else []
         all_rejected = True
@@ -592,7 +591,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         results = {}
         for claim_uuid in data["uuids"]:
             claim = Claim.objects \
@@ -630,8 +629,9 @@ class DeleteClaimsMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
-    def async_mutate(cls, root, info, **data):
+    def async_mutate(cls, user, **data):
         errors = {}
+        results = []
         for claim_uuid in data["uuids"]:
             errors = []
             claim = Claim.objects \
