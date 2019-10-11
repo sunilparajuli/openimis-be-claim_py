@@ -255,7 +255,6 @@ class ClaimInputType(OpenIMISMutation.Input):
     icd_3_id = graphene.Int(required=False)
     icd_4_id = graphene.Int(required=False)
     review_status = TinyInt(required=False)
-    status = TinyInt(required=True)
     date_claimed = graphene.Date(required=True)
     date_processed = graphene.Date(required=False)
     health_facility_id = graphene.Int(required=True)
@@ -286,11 +285,13 @@ def reset_claim_before_update(claim):
     claim.adjustment = None
 
 
-def update_or_create_claim(data):
+def update_or_create_claim(data, user):
     items = data.pop('items') if 'items' in data else []
     services = data.pop('services') if 'services' in data else []
-    data.pop('client_mutation_id')
-    data.pop('client_mutation_label')
+    if "client_mutation_id" in data:
+        data.pop('client_mutation_id')
+    if "client_mutation_label" in data:
+        data.pop('client_mutation_label')
     claim_uuid = data.pop('uuid') if 'uuid' in data else None
     # update_or_create(uuid=claim_uuid, ...)
     # doesn't work because of explicite attempt to set null to uuid!
@@ -306,10 +307,8 @@ def update_or_create_claim(data):
     for item in items:
         claimed += item.qty_provided * item.price_asked
         item_id = item.pop('id') if 'id' in item else None
-        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
-        # item['audit_user_id'] = user.id
-        item['audit_user_id'] = -1
-        if (item_id):
+        item['audit_user_id'] = user.id_for_audit
+        if item_id:
             prev_items.remove(item_id)
             claim.items.filter(id=item_id).update(**item)
         else:
@@ -325,10 +324,8 @@ def update_or_create_claim(data):
     for service in services:
         claimed += service.qty_provided * service.price_asked
         service_id = service.pop('id') if 'id' in service else None
-        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
-        # service['audit_user_id'] = user.id
-        service['audit_user_id'] = -1
-        if (service_id):
+        service['audit_user_id'] = user.id_for_audit
+        if service_id:
             prev_services.remove(service_id)
             claim.services.filter(id=service_id).update(**service)
         else:
@@ -359,12 +356,14 @@ class CreateClaimMutation(OpenIMISMutation):
             raise ValidationError(_("claim.mutation.authentication_required"))
         if not user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
-        # data['audit_user_id'] = user.id
-        data['audit_user_id'] = -1
+        data['audit_user_id'] = user.id_for_audit
+        data['status'] = Claim.STATUS_ENTERED
         from core import datetime
         data['validity_from'] = datetime.date.today()
-        update_or_create_claim(data)
+        try:
+            update_or_create_claim(data, user)
+        except Exception as exc:
+            return str(exc)
 
 
 class UpdateClaimMutation(OpenIMISMutation):
@@ -384,10 +383,8 @@ class UpdateClaimMutation(OpenIMISMutation):
             raise ValidationError(_("claim.mutation.authentication_required"))
         if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
-        # data['audit_user_id'] = user.id
-        data['audit_user_id'] = -1
-        update_or_create_claim(data)
+        data['audit_user_id'] = user.id_for_audit
+        update_or_create_claim(data, user)
 
 
 class SubmitClaimsMutation(OpenIMISMutation):
@@ -420,7 +417,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 results[claim_uuid] = {
                     "error": errors[0].message, "error_code": errors[0].code}
             else:
-                set_claim_submitted(claim, errors)
+                set_claim_submitted(claim, errors, user)
                 results[claim_uuid] = {"success": True}
 
         # For now, the response should only contain errors, not successful updates
@@ -515,9 +512,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
         feedback = data['feedback']
         from datetime import date
         feedback['validity_from'] = date.today()
-        # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
-        # service['audit_user_id'] = user.id
-        feedback['audit_user_id'] = -1
+        feedback['audit_user_id'] = user.id_for_audit
         # The legacy model has a Foreign key on both sides of this one-to-one relationship
         f, created = Feedback.objects.update_or_create(
             claim=claim,
@@ -671,11 +666,14 @@ class DeleteClaimsMutation(OpenIMISMutation):
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
 
+    _mutation_module = "claim"
+    _mutation_class = "DeleteClaimsMutation"
+
     @classmethod
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_delete_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        results = []
+        results = {}
         for claim_uuid in data["uuids"]:
             errors = []
             claim = Claim.objects \
@@ -687,14 +685,17 @@ class DeleteClaimsMutation(OpenIMISMutation):
                 results[claim_uuid] = {"error": _(
                     "claim.validation.id_does_not_exist") % claim_uuid}
                 continue
-            set_claim_deleted(claim, errors)
+            set_claim_deleted(claim, errors, user)
+            results[claim_uuid] = {"success": True}
+
+        errors = {k: v for k, v in results.items() if "success" not in v}
         if len(errors) > 0:
             return json.dumps(errors)
         else:
             return None
 
 
-def set_claim_submitted(claim, errors):
+def set_claim_submitted(claim, errors, user):
     # we went over the maximum for a category, all items and services in the claim are rejected
     over_category_errors = [
         x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
@@ -734,24 +735,21 @@ def set_claim_submitted(claim, errors):
             claim.status = Claim.STATUS_CHECKED
             claim.approved = app_item_value if app_item_value else 0 + \
                 app_service_value if app_service_value else 0
-            # TODO set the right audit user id
-            claim.audit_user_id_submit = -1
+            claim.audit_user_id_submit = user.id_for_audit
             from datetime import datetime
             claim.submit_stamp = datetime.now()
             claim.category = get_claim_category(claim)
             claim.save()
         else:  # no rejections
             claim.status = Claim.STATUS_CHECKED
-            # TODO set the right audit user id
-            claim.audit_user_id_submit = -1
+            claim.audit_user_id_submit = user.id_for_audit
             from datetime import datetime
             claim.submit_stamp = datetime.now()
             claim.category = get_claim_category(claim)
             claim.save()
     else:  # no item nor service passed, rejecting
         claim.status = Claim.STATUS_REJECTED
-        # TODO set the right audit user id
-        claim.audit_user_id_submit = -1
+        claim.audit_user_id_submit = user.id_for_audit
         from datetime import datetime
         claim.submit_stamp = datetime.now()
         claim.category = get_claim_category(claim)
@@ -768,7 +766,7 @@ def set_claim_deleted(claim, errors):
             "error": _("claim.mutation.failed_to_change_status_of_claim") % claim.uuid}
 
 
-def set_claim_processed(claim, errors):
+def set_claim_processed(claim, errors, user):
     rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
         .filter(validity_to__isnull=True).count()
     rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
@@ -776,7 +774,6 @@ def set_claim_processed(claim, errors):
 
     if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
         claim.status = Claim.STATUS_PROCESSED
-        # # TODO set the right audit user id
         claim.audit_user_id_process = -1
         from datetime import datetime
         claim.process_stamp = datetime.now()
