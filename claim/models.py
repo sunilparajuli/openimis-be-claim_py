@@ -1,3 +1,5 @@
+from copy import copy
+
 from core import fields
 import uuid
 from core import models as core_models
@@ -202,6 +204,24 @@ class Claim(models.Model):
         updated_services = self.services.filter(
             validity_to__isnull=True).update(rejection_reason=rejection_code)
         return updated_items + updated_services
+
+    def save_history(self, **kwargs):
+        if self.id:  # only copy if the data is being updated
+            histo = copy(self)
+            histo.id = None
+            if hasattr(histo, "uuid"):
+                setattr(histo, "uuid", uuid.uuid4())
+            from datetime import date
+            histo.validity_to = date.today()
+            histo.legacy_id = self.id
+            histo.save()
+
+    def delete_history(self, **kwargs):
+        self.save_history()
+        from datetime import date
+        self.validity_from = date.today()
+        self.validity_to = date.today()
+        self.save()
 
 
 class ClaimItem(models.Model):

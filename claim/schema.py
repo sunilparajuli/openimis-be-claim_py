@@ -294,9 +294,10 @@ def update_or_create_claim(data, user):
         data.pop('client_mutation_label')
     claim_uuid = data.pop('uuid') if 'uuid' in data else None
     # update_or_create(uuid=claim_uuid, ...)
-    # doesn't work because of explicite attempt to set null to uuid!
+    # doesn't work because of explicit attempt to set null to uuid!
     if claim_uuid:
         claim = Claim.objects.get(uuid=claim_uuid)
+        claim.save_history()
         # reset the non required fields (each update is 'complete', necessary to be able to set 'null')
         reset_claim_before_update(claim)
         [setattr(claim, key, data[key]) for key in data]
@@ -509,6 +510,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
         if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
         claim = Claim.objects.get(uuid=data['claim_uuid'])
+        claim.save_history()
         feedback = data['feedback']
         from datetime import date
         feedback['validity_from'] = date.today()
@@ -595,6 +597,7 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
         if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
         claim = Claim.objects.get(uuid=data['claim_uuid'])
+        claim.save_history()
         items = data.pop('items') if 'items' in data else []
         all_rejected = True
         for item in items:
@@ -606,11 +609,11 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
         for service in services:
             service_id = service.pop('id')
             claim.services.filter(id=service_id).update(**service)
-            if service.status == 1:
+            if service.status == ClaimService.STATUS_PASSED:
                 all_rejected = False
         claim.review_status = 8
         if all_rejected:
-            claim.status = 1
+            claim.status = Claim.STATUS_REJECTED
         claim.save()
         return None
 
@@ -685,7 +688,7 @@ class DeleteClaimsMutation(OpenIMISMutation):
                 results[claim_uuid] = {"error": _(
                     "claim.validation.id_does_not_exist") % claim_uuid}
                 continue
-            set_claim_deleted(claim, errors, user)
+            set_claim_deleted(claim, errors)
             results[claim_uuid] = {"success": True}
 
         errors = {k: v for k, v in results.items() if "success" not in v}
@@ -696,6 +699,7 @@ class DeleteClaimsMutation(OpenIMISMutation):
 
 
 def set_claim_submitted(claim, errors, user):
+    claim.save_history()
     # we went over the maximum for a category, all items and services in the claim are rejected
     over_category_errors = [
         x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
@@ -758,10 +762,8 @@ def set_claim_submitted(claim, errors, user):
 
 def set_claim_deleted(claim, errors):
     try:
-        from datetime import datetime
-        claim.validity_to = datetime.now()
-        claim.save()
-    except Exception as e:
+        claim.delete_history()
+    except Exception as exc:
         errors[claim.uuid] = {
             "error": _("claim.mutation.failed_to_change_status_of_claim") % claim.uuid}
 
@@ -773,6 +775,7 @@ def set_claim_processed(claim, errors, user):
         .filter(validity_to__isnull=True).count()
 
     if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
+        claim.save_history()
         claim.status = Claim.STATUS_PROCESSED
         claim.audit_user_id_process = user.id_for_audit
         from datetime import datetime
