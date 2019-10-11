@@ -647,7 +647,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 results[claim_uuid] = {
                     "error": errors[0].message, "error_code": errors[0].code}
             else:
-                set_claim_processed(claim, errors)
+                set_claim_processed(claim, errors, user)
                 results[claim_uuid] = {"success": True}
 
         # For now, the response should only contain errors, not successful updates
@@ -774,7 +774,7 @@ def set_claim_processed(claim, errors, user):
 
     if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
         claim.status = Claim.STATUS_PROCESSED
-        claim.audit_user_id_process = -1
+        claim.audit_user_id_process = user.id_for_audit
         from datetime import datetime
         claim.process_stamp = datetime.now()
         claim.save()

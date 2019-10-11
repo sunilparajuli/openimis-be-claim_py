@@ -543,9 +543,9 @@ def validate_assign_prod_to_claimitems(claim):
     :return: List of ValidationError, only if no product could be found for now
     """
     visit_type_field = {
-        "O": ("LimitationType",  "LimitAdult",  "LimitChild"),
-        "E": ("LimitationTypeE", "LimitAdultE", "LimitChildE"),
-        "R": ("LimitationTypeR", "LimitAdultR", "LimitChildR"),
+        "O": ("limitation_type",  "limit_adult",  "limit_child"),
+        "E": ("limitation_type_e", "limit_adult_e", "limit_child_e"),
+        "R": ("limitation_type_r", "limit_adult_r", "limit_child_r"),
     }
     errors = []
     target_date = claim.date_to if claim.date_to else claim.date_from
@@ -569,7 +569,6 @@ def validate_assign_prod_to_claimitems(claim):
             target_date, claim.insuree.family_id, claimitem.item, None, limitation_type_field,
             limit_adult if adult else limit_child, "F"
         )
-
         if not product_item_c and not product_item_f:
             claimitem.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
             errors.append(ValidationError(_("claim.validation.assign_prod.item.no_product_code"),
@@ -610,7 +609,7 @@ def validate_assign_prod_to_claimitems(claim):
                 product_item_c = None
 
         claimitem.product_id = product_item.product_id
-        claimitem.policy_id = product_item\
+        claimitem.policy = product_item\
             .product\
             .policies\
             .filter(effective_date__lte=target_date)\
@@ -618,8 +617,7 @@ def validate_assign_prod_to_claimitems(claim):
             .filter(validity_to__isnull=True)\
             .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
             .filter(family_id=claim.insuree.family_id)\
-            .first()\
-            .id
+            .first()
         claimitem.price_origin = product_item.price_origin
         # The original code also sets claimitem.price_adjusted but it also always NULL
         if product_item_c:
@@ -689,7 +687,7 @@ def validate_assign_prod_to_claimitems(claim):
                 product_service_c = None
 
         claimservice.product_id = product_service.product_id
-        claimservice.policy_id = product_service\
+        claimservice.policy = product_service\
             .product\
             .policies\
             .filter(effective_date__lte=target_date)\
@@ -697,8 +695,7 @@ def validate_assign_prod_to_claimitems(claim):
             .filter(validity_to__isnull=True)\
             .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
             .filter(family_id=claim.insuree.family_id)\
-            .first()\
-            .id
+            .first()
         claimservice.price_origin = product_service.price_origin
         # The original code also sets claimservice.price_adjusted but it also always NULL
         if product_service_c:
