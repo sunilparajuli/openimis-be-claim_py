@@ -1,8 +1,8 @@
 import xml.etree.ElementTree as ET
 
 import core
-from django.core.exceptions import PermissionDenied
 from django.db import connection
+from .apps import ClaimConfig
 
 
 @core.comparable
@@ -151,8 +151,6 @@ class ClaimSubmitService(object):
         self.user = user
 
     def submit(self, claim_submit):
-        if self.user.is_anonymous or not self.user.has_perm('claim.can_add'):
-            raise PermissionDenied
         with connection.cursor() as cur:
             sql = """\
                 DECLARE @ret int;

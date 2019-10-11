@@ -1,12 +1,13 @@
 import json
 
 import graphene
+from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
@@ -20,6 +21,7 @@ from medical.schema import DiagnosisGQLType
 from location.schema import userDistricts
 from claim_batch.schema import BatchRunGQLType
 from .models import Claim, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
+from django.utils.translation import gettext as _
 
 
 class ClaimAdminGQLType(DjangoObjectType):
@@ -133,6 +135,21 @@ class Query(graphene.ObjectType):
         ClaimGQLType, orderBy=graphene.List(of_type=graphene.String))
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
     claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
+
+    def resolve_claims(self, info, **kwargs):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
+            raise PermissionDenied(_("unauthorized"))
+        pass
+
+    def resolve_claim_admins(self, info, **kwargs):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
+            raise PermissionDenied(_("unauthorized"))
+        pass
+
+    def resolve_claim_officers(self, info, **kwargs):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
+            raise PermissionDenied(_("unauthorized"))
+        pass
 
 
 class ClaimItemInputType(InputObjectType):
@@ -340,6 +357,8 @@ class CreateClaimMutation(OpenIMISMutation):
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
             raise ValidationError(_("claim.mutation.authentication_required"))
+        if not user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
+            raise PermissionDenied(_("unauthorized"))
         # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
         # data['audit_user_id'] = user.id
         data['audit_user_id'] = -1
@@ -363,6 +382,8 @@ class UpdateClaimMutation(OpenIMISMutation):
         # TODO move this verification to OIMutation
         if type(user) is AnonymousUser or not user.id:
             raise ValidationError(_("claim.mutation.authentication_required"))
+        if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
+            raise PermissionDenied(_("unauthorized"))
         # TODO: investigate the audit_user_id. For now, it seems to be forced to -1 in most cases
         # data['audit_user_id'] = user.id
         data['audit_user_id'] = -1
@@ -381,6 +402,8 @@ class SubmitClaimsMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_submit_claims_perms):
+            raise PermissionDenied(_("unauthorized"))
         results = {}
         for claim_uuid in data["uuids"]:
             claim = Claim.objects\
@@ -389,7 +412,8 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services")\
                 .first()
             if claim is None:
-                results[claim_uuid] = {"error": _("claim.validation.id_does_not_exist") % claim_uuid}
+                results[claim_uuid] = {"error": _(
+                    "claim.validation.id_does_not_exist") % claim_uuid}
                 continue
             errors = validate_claim(claim)
             if len(errors) > 0:
@@ -432,6 +456,8 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_select_claim_feedback_perms):
+            raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'feedback_status', 4)
 
 
@@ -447,6 +473,8 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_feedback_perms):
+            raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'feedback_status', 16)
 
 
@@ -463,6 +491,8 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_skip_claim_feedback_perms):
+            raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'feedback_status', 2)
 
 
@@ -479,6 +509,8 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
+            raise PermissionDenied(_("unauthorized"))
         claim = Claim.objects.get(uuid=data['claim_uuid'])
         feedback = data['feedback']
         from datetime import date
@@ -510,6 +542,8 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_select_claim_review_perms):
+            raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', 4)
 
 
@@ -526,6 +560,8 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_review_perms):
+            raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', 16)
 
 
@@ -542,6 +578,8 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_skip_claim_review_perms):
+            raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', 2)
 
 
@@ -559,6 +597,8 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
+            raise PermissionDenied(_("unauthorized"))
         claim = Claim.objects.get(uuid=data['claim_uuid'])
         items = data.pop('items') if 'items' in data else []
         all_rejected = True
@@ -592,6 +632,8 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_process_claims_perms):
+            raise PermissionDenied(_("unauthorized"))
         results = {}
         for claim_uuid in data["uuids"]:
             claim = Claim.objects \
@@ -600,7 +642,8 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                results[claim_uuid] = {"error": _("claim.validation.id_does_not_exist") % claim_uuid}
+                results[claim_uuid] = {"error": _(
+                    "claim.validation.id_does_not_exist") % claim_uuid}
                 continue
             errors = validate_claim(claim)
             if len(errors) == 0:
@@ -630,7 +673,8 @@ class DeleteClaimsMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
-        errors = {}
+        if not user.has_perms(ClaimConfig.gql_mutation_delete_claims_perms):
+            raise PermissionDenied(_("unauthorized"))
         results = []
         for claim_uuid in data["uuids"]:
             errors = []
@@ -640,7 +684,8 @@ class DeleteClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                results[claim_uuid] = {"error": _("claim.validation.id_does_not_exist") % claim_uuid}
+                results[claim_uuid] = {"error": _(
+                    "claim.validation.id_does_not_exist") % claim_uuid}
                 continue
             set_claim_deleted(claim, errors)
         if len(errors) > 0:

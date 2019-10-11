@@ -13,6 +13,7 @@ from medical.models import Service
 from medical_pricelist.models import ItemPricelistDetail, ServicePricelistDetail
 from policy.models import Policy
 from product.models import Product, ProductItem, ProductService
+from .apps import ClaimConfig
 
 REJECTION_REASON_INVALID_ITEM_OR_SERVICE = 1
 REJECTION_REASON_NOT_IN_PRICE_LIST = 2
@@ -40,6 +41,8 @@ def validate_claim(claim) -> List[ValidationError]:
     :param claim: claim to be verified
     :return: (result_code, error_details)
     """
+    if ClaimConfig.default_validations_disabled:
+        return []
     errors = []
     errors += validate_family(claim, claim.insuree)
 
