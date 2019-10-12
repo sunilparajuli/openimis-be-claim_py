@@ -1,8 +1,7 @@
-from copy import copy
-
 from core import fields
 import uuid
 from core import models as core_models
+from core.models import VersionedModel
 from django.db import models
 from insuree import models as insuree_models
 from location import models as location_models
@@ -11,12 +10,10 @@ from policy import models as policy_models
 from claim_batch import models as claim_batch_models
 
 
-class ClaimAdmin(models.Model):
+class ClaimAdmin(VersionedModel):
     id = models.AutoField(db_column='ClaimAdminId', primary_key=True)
     uuid = models.CharField(db_column='ClaimAdminUUID',
                             max_length=36, default=uuid.uuid4, unique=True)
-    legacy_id = models.IntegerField(
-        db_column='LegacyId', blank=True, null=True)
     code = models.CharField(db_column='ClaimAdminCode',
                             max_length=8, blank=True, null=True)
     last_name = models.CharField(
@@ -30,10 +27,6 @@ class ClaimAdmin(models.Model):
         db_column='Phone', max_length=50, blank=True, null=True)
     health_facility = models.ForeignKey(
         location_models.HealthFacility, models.DO_NOTHING, db_column='HFId', blank=True, null=True)
-    validity_from = fields.DateTimeField(
-        db_column='ValidityFrom', blank=True, null=True)
-    validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)
     has_login = models.BooleanField(
         db_column='HasLogin', blank=True, null=True)
 
@@ -49,15 +42,13 @@ class ClaimAdmin(models.Model):
         db_table = 'tblClaimAdmin'
 
 
-class Feedback(models.Model):
+class Feedback(VersionedModel):
     id = models.AutoField(db_column='FeedbackID', primary_key=True)
     uuid = models.CharField(db_column='FeedbackUUID',
                             max_length=36, default=uuid.uuid4, unique=True)
     claim = models.OneToOneField(
         "Claim", models.DO_NOTHING,
         db_column='ClaimID', blank=True, null=True, related_name="+")
-    legacy_id = models.IntegerField(
-        db_column='LegacyID', blank=True, null=True)
     care_rendered = models.NullBooleanField(
         db_column='CareRendered', blank=True, null=True)
     payment_asked = models.NullBooleanField(
@@ -72,9 +63,6 @@ class Feedback(models.Model):
         db_column='CHFOfficerCode', blank=True, null=True)
     feedback_date = fields.DateTimeField(
         db_column='FeedbackDate', blank=True, null=True)
-    validity_from = fields.DateTimeField(db_column='ValidityFrom')
-    validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
 
     class Meta:
@@ -82,12 +70,10 @@ class Feedback(models.Model):
         db_table = 'tblFeedback'
 
 
-class Claim(models.Model):
+class Claim(VersionedModel):
     id = models.AutoField(db_column='ClaimID', primary_key=True)
     uuid = models.CharField(db_column='ClaimUUID',
                             max_length=36, default=uuid.uuid4, unique=True)
-    legacy_id = models.IntegerField(
-        db_column='LegacyID', blank=True, null=True)
     category = models.CharField(
         db_column='ClaimCategory', max_length=1, blank=True, null=True)
     insuree = models.ForeignKey(
@@ -131,10 +117,6 @@ class Claim(models.Model):
         db_column='ApprovalStatus', blank=True, null=True)
     rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
-
-    validity_from = fields.DateTimeField(db_column='ValidityFrom')
-    validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)
 
     batch_run = models.ForeignKey(claim_batch_models.BatchRun,
                                   models.DO_NOTHING, db_column='RunID', blank=True, null=True)
@@ -205,29 +187,9 @@ class Claim(models.Model):
             validity_to__isnull=True).update(rejection_reason=rejection_code)
         return updated_items + updated_services
 
-    def save_history(self, **kwargs):
-        if self.id:  # only copy if the data is being updated
-            histo = copy(self)
-            histo.id = None
-            if hasattr(histo, "uuid"):
-                setattr(histo, "uuid", uuid.uuid4())
-            from datetime import date
-            histo.validity_to = date.today()
-            histo.legacy_id = self.id
-            histo.save()
 
-    def delete_history(self, **kwargs):
-        self.save_history()
-        from datetime import date
-        self.validity_from = date.today()
-        self.validity_to = date.today()
-        self.save()
-
-
-class ClaimItem(models.Model):
+class ClaimItem(VersionedModel):
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
-    legacy_id = models.IntegerField(
-        db_column='LegacyID', blank=True, null=True)
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
                               db_column='ClaimID', related_name='items')
     item = models.ForeignKey(
@@ -254,9 +216,6 @@ class ClaimItem(models.Model):
         db_column='Justification', blank=True, null=True)
     rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
-    validity_from = fields.DateTimeField(db_column='ValidityFrom')
-    validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
     validity_from_review = fields.DateTimeField(
         db_column='ValidityFromReview', blank=True, null=True)
@@ -289,10 +248,8 @@ class ClaimItem(models.Model):
     STATUS_REJECTED = 2
 
 
-class ClaimService(models.Model):
+class ClaimService(VersionedModel):
     id = models.AutoField(db_column='ClaimServiceID', primary_key=True)
-    legacy_id = models.IntegerField(
-        db_column='LegacyID', blank=True, null=True)
     claim = models.ForeignKey(
         Claim, models.DO_NOTHING, db_column='ClaimID', related_name='services')
     service = models.ForeignKey(
@@ -317,9 +274,6 @@ class ClaimService(models.Model):
         db_column='Justification', blank=True, null=True)
     rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
-    validity_from = fields.DateTimeField(db_column='ValidityFrom')
-    validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
     validity_from_review = fields.DateTimeField(
         db_column='ValidityFromReview', blank=True, null=True)
@@ -352,7 +306,7 @@ class ClaimService(models.Model):
     STATUS_REJECTED = 2
 
 
-class ClaimOfficer(models.Model):
+class ClaimOfficer(VersionedModel):
     id = models.AutoField(db_column='OfficerID', primary_key=True)
     uuid = models.CharField(db_column='OfficerUUID',
                             max_length=36, default=uuid.uuid4, unique=True)
@@ -369,9 +323,6 @@ class ClaimOfficer(models.Model):
     # veoothernames = models.CharField(db_column='VEOOtherNames', max_length=100, blank=True, null=True)
     # veodob = models.DateField(db_column='VEODOB', blank=True, null=True)
     # veophone = models.CharField(db_column='VEOPhone', max_length=25, blank=True, null=True)
-    # validityfrom = models.DateTimeField(db_column='ValidityFrom')
-    # validityto = models.DateTimeField(db_column='ValidityTo', blank=True, null=True)
-    # legacyid = models.IntegerField(db_column='LegacyID', blank=True, null=True)
     # audituserid = models.IntegerField(db_column='AuditUserID')
     # rowid = models.TextField(db_column='RowID', blank=True, null=True)   This field type is a guess.
     # emailid = models.CharField(db_column='EmailId', max_length=200, blank=True, null=True)
