@@ -22,7 +22,6 @@ from medical.schema import DiagnosisGQLType
 from location.schema import userDistricts
 from claim_batch.schema import BatchRunGQLType
 from .models import Claim, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
-from django.utils.translation import gettext as _
 
 
 class ClaimAdminGQLType(DjangoObjectType):
