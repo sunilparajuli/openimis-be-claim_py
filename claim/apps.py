@@ -3,7 +3,7 @@ from django.apps import AppConfig
 MODULE_NAME = "claim"
 
 DEFAULT_CFG = {
-    "default_validations_disabled": False,
+    "default_validations_disabled": True,
     "gql_query_claims_perms": ["111001"],
     "gql_query_claim_admins_perms": [],
     "gql_query_claim_officers_perms": [],

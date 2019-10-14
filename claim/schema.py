@@ -1,6 +1,7 @@
 import json
 
 import graphene
+import graphene_django_optimizer as gql_optimizer
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q
@@ -139,7 +140,7 @@ class Query(graphene.ObjectType):
     def resolve_claims(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        pass
+        return gql_optimizer.query(Claim.objects.all(), info)
 
     def resolve_claim_admins(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
@@ -352,19 +353,23 @@ class CreateClaimMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
-        # TODO move this verification to OIMutation
-        if type(user) is AnonymousUser or not user.id:
-            raise ValidationError(_("claim.mutation.authentication_required"))
-        if not user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
-            raise PermissionDenied(_("unauthorized"))
-        data['audit_user_id'] = user.id_for_audit
-        data['status'] = Claim.STATUS_ENTERED
-        from core import datetime
-        data['validity_from'] = datetime.date.today()
         try:
+            # TODO move this verification to OIMutation
+            if type(user) is AnonymousUser or not user.id:
+                raise ValidationError(
+                    _("claim.mutation.authentication_required"))
+            if not user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
+                raise PermissionDenied(_("unauthorized"))
+            data['audit_user_id'] = user.id_for_audit
+            data['status'] = Claim.STATUS_ENTERED
+            from core import datetime
+            data['validity_from'] = datetime.date.today()
             update_or_create_claim(data, user)
+            return None
         except Exception as exc:
-            return str(exc)
+            return json.dumps([{
+                'message': _("claim.mutation.failed_to_create_claim") % {'code': data['code']},
+                'detail': str(exc)}])
 
 
 class UpdateClaimMutation(OpenIMISMutation):
@@ -379,13 +384,20 @@ class UpdateClaimMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
-        # TODO move this verification to OIMutation
-        if type(user) is AnonymousUser or not user.id:
-            raise ValidationError(_("claim.mutation.authentication_required"))
-        if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
-            raise PermissionDenied(_("unauthorized"))
-        data['audit_user_id'] = user.id_for_audit
-        update_or_create_claim(data, user)
+        try:
+            # TODO move this verification to OIMutation
+            if type(user) is AnonymousUser or not user.id:
+                raise ValidationError(
+                    _("claim.mutation.authentication_required"))
+            if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
+                raise PermissionDenied(_("unauthorized"))
+            data['audit_user_id'] = user.id_for_audit
+            update_or_create_claim(data, user)
+            return None
+        except Exception as exc:
+            return json.dumps([{
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
+                'detail': str(exc)}])
 
 
 class SubmitClaimsMutation(OpenIMISMutation):
@@ -402,7 +414,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_submit_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        results = {}
+        errors = []
         for claim_uuid in data["uuids"]:
             claim = Claim.objects\
                 .filter(uuid=claim_uuid)\
@@ -410,19 +422,13 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services")\
                 .first()
             if claim is None:
-                results[claim_uuid] = {"error": _(
-                    "claim.validation.id_does_not_exist") % claim_uuid}
+                errors += [{'message': _(
+                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
                 continue
-            errors = validate_claim(claim)
-            if len(errors) > 0:
-                results[claim_uuid] = {
-                    "error": errors[0].message, "error_code": errors[0].code}
-            else:
-                set_claim_submitted(claim, errors, user)
-                results[claim_uuid] = {"success": True}
+            errors += validate_claim(claim)
+            if len(errors) == 0:
+                errors += set_claim_submitted(claim, errors, user)
 
-        # For now, the response should only contain errors, not successful updates
-        errors = {k: v for k, v in results.items() if "success" not in v}
         if len(errors) > 0:
             return json.dumps(errors)
         else:
@@ -433,12 +439,11 @@ def set_claims_status(uuids, field, status):
     affected_rows = Claim.objects.filter(
         uuid__in=uuids).update(**{field: status})
     if affected_rows != len(uuids):
-        errors = ['Claims in error:']
-        errors.extend(map(
-            lambda c: c.code,
-            Claim.objects.filter(Q(uuid__in=uuids), ~Q(**{field: 4}))
-        ))
-        return json.dump(errors)
+        rows_in_error = Claim.objects.filter(
+            Q(uuid__in=uuids), ~Q(**{field: status}))
+        return json.dump(
+            [{'message': _("claim.mutation.failed_to_change_status_of_claim") %
+              {'code': c}} for c in rows_in_error])
     return None
 
 
@@ -507,24 +512,29 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
-        if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
-            raise PermissionDenied(_("unauthorized"))
-        claim = Claim.objects.get(uuid=data['claim_uuid'])
-        claim.save_history()
-        feedback = data['feedback']
-        from datetime import date
-        feedback['validity_from'] = date.today()
-        feedback['audit_user_id'] = user.id_for_audit
-        # The legacy model has a Foreign key on both sides of this one-to-one relationship
-        f, created = Feedback.objects.update_or_create(
-            claim=claim,
-            defaults=feedback
-        )
-        claim.feedback = f
-        claim.feedback_status = 8
-        claim.feedback_available = True
-        claim.save()
-        return None
+        try:
+            if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
+                raise PermissionDenied(_("unauthorized"))
+            claim = Claim.objects.get(uuid=data['claim_uuid'])
+            claim.save_history()
+            feedback = data['feedback']
+            from datetime import date
+            feedback['validity_from'] = date.today()
+            feedback['audit_user_id'] = user.id_for_audit
+            # The legacy model has a Foreign key on both sides of this one-to-one relationship
+            f, created = Feedback.objects.update_or_create(
+                claim=claim,
+                defaults=feedback
+            )
+            claim.feedback = f
+            claim.feedback_status = 8
+            claim.feedback_available = True
+            claim.save()
+            return None
+        except Exception as exc:
+            return json.dumps([{
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
+                'detail': str(exc)}])
 
 
 class SelectClaimsForReviewMutation(OpenIMISMutation):
@@ -594,28 +604,36 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
-        if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
-            raise PermissionDenied(_("unauthorized"))
-        claim = Claim.objects.get(uuid=data['claim_uuid'])
-        claim.save_history()
-        items = data.pop('items') if 'items' in data else []
-        all_rejected = True
-        for item in items:
-            item_id = item.pop('id')
-            claim.items.filter(id=item_id).update(**item)
-            if item.status == 1:
-                all_rejected = False
-        services = data.pop('services') if 'services' in data else []
-        for service in services:
-            service_id = service.pop('id')
-            claim.services.filter(id=service_id).update(**service)
-            if service.status == ClaimService.STATUS_PASSED:
-                all_rejected = False
-        claim.review_status = 8
-        if all_rejected:
-            claim.status = Claim.STATUS_REJECTED
-        claim.save()
-        return None
+        try:
+            if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
+                raise PermissionDenied(_("unauthorized"))
+            claim = Claim.objects.get(uuid=data['claim_uuid'])
+            if claim is None:
+                return json.dumps([{'message': _(
+                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}])
+            claim.save_history()
+            items = data.pop('items') if 'items' in data else []
+            all_rejected = True
+            for item in items:
+                item_id = item.pop('id')
+                claim.items.filter(id=item_id).update(**item)
+                if item.status == 1:
+                    all_rejected = False
+            services = data.pop('services') if 'services' in data else []
+            for service in services:
+                service_id = service.pop('id')
+                claim.services.filter(id=service_id).update(**service)
+                if service.status == ClaimService.STATUS_PASSED:
+                    all_rejected = False
+            claim.review_status = 8
+            if all_rejected:
+                claim.status = Claim.STATUS_REJECTED
+            claim.save()
+            return None
+        except Exception as exc:
+            return json.dumps([{
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
+                'detail': str(exc)}])
 
 
 class ProcessClaimsMutation(OpenIMISMutation):
@@ -632,7 +650,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_process_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        results = {}
+        errors = []
         for claim_uuid in data["uuids"]:
             claim = Claim.objects \
                 .filter(uuid=claim_uuid) \
@@ -640,21 +658,16 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                results[claim_uuid] = {"error": _(
-                    "claim.validation.id_does_not_exist") % claim_uuid}
+                errors += [{'message': _(
+                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
                 continue
+            claim.save_history()
             errors = validate_claim(claim)
             if len(errors) == 0:
                 errors += validate_assign_prod_to_claimitems(claim)
-            if len(errors) > 0:
-                results[claim_uuid] = {
-                    "error": errors[0].message, "error_code": errors[0].code}
-            else:
-                set_claim_processed(claim, errors, user)
-                results[claim_uuid] = {"success": True}
+            if len(errors) == 0:
+                errors += set_claim_processed(claim, user)
 
-        # For now, the response should only contain errors, not successful updates
-        errors = {k: v for k, v in results.items() if "success" not in v}
         if len(errors) > 0:
             return json.dumps(errors)
         else:
@@ -676,22 +689,18 @@ class DeleteClaimsMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_delete_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        results = {}
+        errors = []
         for claim_uuid in data["uuids"]:
-            errors = []
             claim = Claim.objects \
                 .filter(uuid=claim_uuid) \
                 .prefetch_related("items") \
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                results[claim_uuid] = {"error": _(
-                    "claim.validation.id_does_not_exist") % claim_uuid}
+                errors += [{'message': _(
+                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
                 continue
-            set_claim_deleted(claim, errors)
-            results[claim_uuid] = {"success": True}
-
-        errors = {k: v for k, v in results.items() if "success" not in v}
+            errors += set_claim_deleted(claim)
         if len(errors) > 0:
             return json.dumps(errors)
         else:
@@ -699,88 +708,100 @@ class DeleteClaimsMutation(OpenIMISMutation):
 
 
 def set_claim_submitted(claim, errors, user):
-    claim.save_history()
-    # we went over the maximum for a category, all items and services in the claim are rejected
-    over_category_errors = [
-        x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
-    if len(over_category_errors) > 0:
-        claim.items.update(status=ClaimItem.STATUS_REJECTED, qty_approved=0,
-                           rejection_reason=over_category_errors[0].code)
-        claim.services.update(status=ClaimService.STATUS_REJECTED, qty_approved=0,
-                              rejection_reason=over_category_errors[0].code)
-    else:
-        claim.items.exclude(rejection_reason=0)\
-            .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
-        claim.services.exclude(rejection_reason=0)\
-            .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
+    try:
+        claim.save_history()
+        # we went over the maximum for a category, all items and services in the claim are rejected
+        over_category_errors = [
+            x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
+        if len(over_category_errors) > 0:
+            claim.items.update(status=ClaimItem.STATUS_REJECTED, qty_approved=0,
+                               rejection_reason=over_category_errors[0].code)
+            claim.services.update(status=ClaimService.STATUS_REJECTED, qty_approved=0,
+                                  rejection_reason=over_category_errors[0].code)
+        else:
+            claim.items.exclude(rejection_reason=0)\
+                .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
+            claim.services.exclude(rejection_reason=0)\
+                .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
 
-    rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
-        .filter(validity_to__isnull=True).count()
-    rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
-        .filter(validity_to__isnull=True).count()
-    rtn_items_rejected = claim.items.filter(status=ClaimItem.STATUS_REJECTED)\
-        .filter(validity_to__isnull=True).count()
-    rtn_services_rejected = claim.services.filter(status=ClaimService.STATUS_REJECTED)\
-        .filter(validity_to__isnull=True).count()
+        rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
+            .filter(validity_to__isnull=True).count()
+        rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
+            .filter(validity_to__isnull=True).count()
+        rtn_items_rejected = claim.items.filter(status=ClaimItem.STATUS_REJECTED)\
+            .filter(validity_to__isnull=True).count()
+        rtn_services_rejected = claim.services.filter(status=ClaimService.STATUS_REJECTED)\
+            .filter(validity_to__isnull=True).count()
 
-    if rtn_items_passed > 0 and rtn_services_passed > 0:  # update claim passed
-        if rtn_items_rejected > 0 or rtn_services_rejected > 0:
-            # Update claim approved value
-            app_item_value = claim.items\
-                .filter(validity_to__isnull=True)\
-                .filter(status=ClaimItem.STATUS_PASSED)\
-                .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
-                .aggregate(Sum("value"))
-            app_service_value = claim.services\
-                .filter(validity_to__isnull=True)\
-                .filter(status=ClaimService.STATUS_PASSED)\
-                .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
-                .aggregate(Sum("value"))
-            claim.status = Claim.STATUS_CHECKED
-            claim.approved = app_item_value if app_item_value else 0 + \
-                app_service_value if app_service_value else 0
+        if rtn_items_passed > 0 and rtn_services_passed > 0:  # update claim passed
+            if rtn_items_rejected > 0 or rtn_services_rejected > 0:
+                # Update claim approved value
+                app_item_value = claim.items\
+                    .filter(validity_to__isnull=True)\
+                    .filter(status=ClaimItem.STATUS_PASSED)\
+                    .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
+                    .aggregate(Sum("value"))
+                app_service_value = claim.services\
+                    .filter(validity_to__isnull=True)\
+                    .filter(status=ClaimService.STATUS_PASSED)\
+                    .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
+                    .aggregate(Sum("value"))
+                claim.status = Claim.STATUS_CHECKED
+                claim.approved = app_item_value if app_item_value else 0 + \
+                    app_service_value if app_service_value else 0
+                claim.audit_user_id_submit = user.id_for_audit
+                from datetime import datetime
+                claim.submit_stamp = datetime.now()
+                claim.category = get_claim_category(claim)
+                claim.save()
+            else:  # no rejections
+                claim.status = Claim.STATUS_CHECKED
+                claim.audit_user_id_submit = user.id_for_audit
+                from datetime import datetime
+                claim.submit_stamp = datetime.now()
+                claim.category = get_claim_category(claim)
+                claim.save()
+        else:  # no item nor service passed, rejecting
+            claim.status = Claim.STATUS_REJECTED
             claim.audit_user_id_submit = user.id_for_audit
             from datetime import datetime
             claim.submit_stamp = datetime.now()
             claim.category = get_claim_category(claim)
             claim.save()
-        else:  # no rejections
-            claim.status = Claim.STATUS_CHECKED
-            claim.audit_user_id_submit = user.id_for_audit
-            from datetime import datetime
-            claim.submit_stamp = datetime.now()
-            claim.category = get_claim_category(claim)
-            claim.save()
-    else:  # no item nor service passed, rejecting
-        claim.status = Claim.STATUS_REJECTED
-        claim.audit_user_id_submit = user.id_for_audit
-        from datetime import datetime
-        claim.submit_stamp = datetime.now()
-        claim.category = get_claim_category(claim)
-        claim.save()
+        return []
+    except Exception as exc:
+        return [{
+            'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
+            'detail': claim.uuid}]
 
 
-def set_claim_deleted(claim, errors):
+def set_claim_deleted(claim):
     try:
         claim.delete_history()
+        return []
     except Exception as exc:
-        errors[claim.uuid] = {
-            "error": _("claim.mutation.failed_to_change_status_of_claim") % claim.uuid}
+        return [{
+            'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
+            'detail': claim.uuid}]
 
 
-def set_claim_processed(claim, errors, user):
-    rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
-        .filter(validity_to__isnull=True).count()
-    rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
-        .filter(validity_to__isnull=True).count()
+def set_claim_processed(claim, user):
+    try:
+        rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
+            .filter(validity_to__isnull=True).count()
+        rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
+            .filter(validity_to__isnull=True).count()
 
-    if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
-        claim.save_history()
-        claim.status = Claim.STATUS_PROCESSED
-        claim.audit_user_id_process = user.id_for_audit
-        from datetime import datetime
-        claim.process_stamp = datetime.now()
-        claim.save()
+        if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
+            claim.status = Claim.STATUS_PROCESSED
+            claim.audit_user_id_process = user.id_for_audit
+            from datetime import datetime
+            claim.process_stamp = datetime.now()
+            claim.save()
+        return []
+    except Exception as ex:
+        return [{'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
+                 'detail': claim.uuid}]
 
 
 class Mutation(graphene.ObjectType):
