@@ -185,7 +185,7 @@ def formatClaimItem(i):
     }
 
 
-class ClaimsReportService(object):
+class ClaimReportService(object):
     def __init__(self, user):
         self.user = user
 

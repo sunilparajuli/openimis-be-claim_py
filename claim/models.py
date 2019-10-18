@@ -1,8 +1,7 @@
 from core import fields
 import uuid
-from core import models as core_models
-from core.models import VersionedModel
 from django.db import models
+from core import models as core_models
 from insuree import models as insuree_models
 from location import models as location_models
 from medical import models as medical_models
@@ -10,7 +9,7 @@ from policy import models as policy_models
 from claim_batch import models as claim_batch_models
 
 
-class ClaimAdmin(VersionedModel):
+class ClaimAdmin(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimAdminId', primary_key=True)
     uuid = models.CharField(db_column='ClaimAdminUUID',
                             max_length=36, default=uuid.uuid4, unique=True)
@@ -42,7 +41,7 @@ class ClaimAdmin(VersionedModel):
         db_table = 'tblClaimAdmin'
 
 
-class Feedback(VersionedModel):
+class Feedback(core_models.VersionedModel):
     id = models.AutoField(db_column='FeedbackID', primary_key=True)
     uuid = models.CharField(db_column='FeedbackUUID',
                             max_length=36, default=uuid.uuid4, unique=True)
@@ -70,7 +69,7 @@ class Feedback(VersionedModel):
         db_table = 'tblFeedback'
 
 
-class Claim(VersionedModel):
+class Claim(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimID', primary_key=True)
     uuid = models.CharField(db_column='ClaimUUID',
                             max_length=36, default=uuid.uuid4, unique=True)
@@ -188,7 +187,7 @@ class Claim(VersionedModel):
         return updated_items + updated_services
 
 
-class ClaimItem(VersionedModel):
+class ClaimItem(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
                               db_column='ClaimID', related_name='items')
@@ -248,7 +247,7 @@ class ClaimItem(VersionedModel):
     STATUS_REJECTED = 2
 
 
-class ClaimService(VersionedModel):
+class ClaimService(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimServiceID', primary_key=True)
     claim = models.ForeignKey(
         Claim, models.DO_NOTHING, db_column='ClaimID', related_name='services')
@@ -306,7 +305,7 @@ class ClaimService(VersionedModel):
     STATUS_REJECTED = 2
 
 
-class ClaimOfficer(VersionedModel):
+class ClaimOfficer(core_models.VersionedModel):
     id = models.AutoField(db_column='OfficerID', primary_key=True)
     uuid = models.CharField(db_column='OfficerUUID',
                             max_length=36, default=uuid.uuid4, unique=True)

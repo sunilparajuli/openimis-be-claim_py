@@ -366,9 +366,9 @@ class CreateClaimMutation(OpenIMISMutation):
             update_or_create_claim(data, user)
             return None
         except Exception as exc:
-            return json.dumps([{
+            return [{
                 'message': _("claim.mutation.failed_to_create_claim") % {'code': data['code']},
-                'detail': str(exc)}])
+                'detail': str(exc)}]
 
 
 class UpdateClaimMutation(OpenIMISMutation):
@@ -394,9 +394,9 @@ class UpdateClaimMutation(OpenIMISMutation):
             update_or_create_claim(data, user)
             return None
         except Exception as exc:
-            return json.dumps([{
+            return [{
                 'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
-                'detail': str(exc)}])
+                'detail': str(exc)}]
 
 
 class SubmitClaimsMutation(OpenIMISMutation):
@@ -429,7 +429,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 errors += set_claim_submitted(claim, errors, user)
 
         if len(errors) > 0:
-            return json.dumps(errors)
+            return errors
         else:
             return None
 
@@ -531,9 +531,9 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
             claim.save()
             return None
         except Exception as exc:
-            return json.dumps([{
+            return [{
                 'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
-                'detail': str(exc)}])
+                'detail': str(exc)}]
 
 
 class SelectClaimsForReviewMutation(OpenIMISMutation):
@@ -608,8 +608,8 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             claim = Claim.objects.get(uuid=data['claim_uuid'])
             if claim is None:
-                return json.dumps([{'message': _(
-                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}])
+                return [{'message': _(
+                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
             claim.save_history()
             items = data.pop('items') if 'items' in data else []
             all_rejected = True
@@ -630,9 +630,9 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
             claim.save()
             return None
         except Exception as exc:
-            return json.dumps([{
+            return [{
                 'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
-                'detail': str(exc)}])
+                'detail': str(exc)}]
 
 
 class ProcessClaimsMutation(OpenIMISMutation):
@@ -666,11 +666,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 errors += validate_assign_prod_to_claimitems(claim)
             if len(errors) == 0:
                 errors += set_claim_processed(claim, user)
-
-        if len(errors) > 0:
-            return json.dumps(errors)
-        else:
-            return None
+        return errors
 
 
 class DeleteClaimsMutation(OpenIMISMutation):
@@ -700,10 +696,7 @@ class DeleteClaimsMutation(OpenIMISMutation):
                     "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
                 continue
             errors += set_claim_deleted(claim)
-        if len(errors) > 0:
-            return json.dumps(errors)
-        else:
-            return None
+        return errors
 
 
 def set_claim_submitted(claim, errors, user):
