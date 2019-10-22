@@ -1,5 +1,5 @@
 import json
-
+from copy import copy
 import graphene
 import graphene_django_optimizer as gql_optimizer
 from .apps import ClaimConfig
@@ -21,7 +21,8 @@ from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from location.schema import userDistricts
 from claim_batch.schema import BatchRunGQLType
-from .models import Claim, ClaimAdmin, ClaimOfficer, Feedback, ClaimItem, ClaimService
+from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService
+from core.models import Officer
 
 
 class ClaimAdminGQLType(DjangoObjectType):
@@ -41,6 +42,11 @@ class ClaimAdminGQLType(DjangoObjectType):
         }
         connection_class = ExtendedConnection
 
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        queryset = queryset.filter(*filter_validity())
+        return queryset
+
 
 class ClaimOfficerGQLType(DjangoObjectType):
     """
@@ -48,7 +54,7 @@ class ClaimOfficerGQLType(DjangoObjectType):
     """
 
     class Meta:
-        model = ClaimOfficer
+        model = Officer
         exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
@@ -219,8 +225,9 @@ class ClaimServiceInputType(InputObjectType):
     policy_id = graphene.Int(required=False)
     remunerated_amount = graphene.Decimal(
         max_digits=18, decimal_places=2, required=False)
-    deductable_amount = graphene.Decimal(max_digits=18, decimal_places=2, required=False,
-                                         description="deductable is spelled with a, not deductible")
+    deductable_amount = graphene.Decimal(
+        max_digits=18, decimal_places=2, required=False,
+        description="deductable is spelled with a, not deductible")
     exceed_ceiling_amount = graphene.Decimal(
         max_digits=18, decimal_places=2, required=False)
     price_origin = graphene.String(max_length=1, required=False)
@@ -235,8 +242,9 @@ class FeedbackInputType(InputObjectType):
     drug_prescribed = graphene.Boolean(required=False)
     drug_received = graphene.Boolean(required=False)
     asessment = SmallInt(
-        required=False, description="Be careful, this field name has a typo")
-    chf_officer_code = graphene.Int(required=False)
+        required=False,
+        description="Be careful, this field name has a typo")
+    officer_id = graphene.Int(required=False)
     feedback_date = graphene.DateTime(required=False)
     validity_from = graphene.DateTime(required=False)
     validity_to = graphene.DateTime(required=False)
@@ -285,6 +293,53 @@ def reset_claim_before_update(claim):
     claim.adjustment = None
 
 
+def process_child_relation(user, data_childeren, prev_claim_id,
+                           claim_id, childeren, create_hook):
+    claimed = 0
+    prev_elts = [s.id for s in childeren.all()]
+    from core.utils import TimeUtils
+    for elt in data_childeren:
+        claimed += elt.qty_provided * elt.price_asked
+        elt_id = elt.pop('id') if 'id' in elt else None
+        if elt_id:
+            prev_elts.remove(elt_id)
+            prev_elt = childeren.filter(id=elt_id, **elt)
+            if not prev_elt:
+                # item has been updated, let's bind the old value to prev_claim
+                prev_elt = childeren.get(id=elt_id)
+                prev_elt.claim_id = prev_claim_id
+                prev_elt.save()
+                # ... and update with the new values
+                new_elt = copy(prev_elt)
+                [setattr(new_elt, key, elt[key]) for key in elt]
+                new_elt.id = None
+                new_elt.validity_from = TimeUtils.now()
+                new_elt.audit_user_id = user.id_for_audit
+                new_elt.claim_id = claim_id
+                new_elt.save()
+        else:
+            elt['validity_from'] = TimeUtils.now()
+            elt['audit_user_id'] = user.id_for_audit
+            create_hook(claim_id, elt)
+
+    if prev_elts:
+        childeren.filter(id__in=prev_elts).update(
+            claim_id=prev_claim_id,
+            validity_to=TimeUtils.now())
+    return claimed
+
+
+def item_create_hook(claim_id, item):
+    # TODO: investigate 'availability' is mandatory,
+    # but not in UI > always true?
+    item['availability'] = True
+    ClaimItem.objects.create(claim_id=claim_id, **item)
+
+
+def service_create_hook(claim_id, service):
+    ClaimService.objects.create(claim_id=claim_id, **service)
+
+
 def update_or_create_claim(data, user):
     items = data.pop('items') if 'items' in data else []
     services = data.pop('services') if 'services' in data else []
@@ -295,47 +350,23 @@ def update_or_create_claim(data, user):
     claim_uuid = data.pop('uuid') if 'uuid' in data else None
     # update_or_create(uuid=claim_uuid, ...)
     # doesn't work because of explicit attempt to set null to uuid!
+    prev_claim_id = None
     if claim_uuid:
         claim = Claim.objects.get(uuid=claim_uuid)
-        claim.save_history()
-        # reset the non required fields (each update is 'complete', necessary to be able to set 'null')
+        prev_claim_id = claim.save_history()
+        # reset the non required fields
+        # (each update is 'complete', necessary to be able to set 'null')
         reset_claim_before_update(claim)
         [setattr(claim, key, data[key]) for key in data]
     else:
         claim = Claim.objects.create(**data)
     claimed = 0
-    prev_items = [s.id for s in claim.items.all()]
-    for item in items:
-        claimed += item.qty_provided * item.price_asked
-        item_id = item.pop('id') if 'id' in item else None
-        item['audit_user_id'] = user.id_for_audit
-        if item_id:
-            prev_items.remove(item_id)
-            claim.items.filter(id=item_id).update(**item)
-        else:
-            from datetime import date
-            item['validity_from'] = date.today()
-            # TODO: investigate 'availability' is mandatory, but not in UI > always true?
-            item['availability'] = True
-            ClaimItem.objects.create(claim=claim, **item)
-    if prev_items:
-        claim.items.filter(id__in=prev_items).delete()
-
-    prev_services = [s.id for s in claim.services.all()]
-    for service in services:
-        claimed += service.qty_provided * service.price_asked
-        service_id = service.pop('id') if 'id' in service else None
-        service['audit_user_id'] = user.id_for_audit
-        if service_id:
-            prev_services.remove(service_id)
-            claim.services.filter(id=service_id).update(**service)
-        else:
-            from datetime import date
-            service['validity_from'] = date.today()
-            ClaimService.objects.create(claim=claim, **service)
-    if prev_services:
-        claim.services.filter(id__in=prev_services).delete()
-
+    claimed += process_child_relation(user, items, prev_claim_id,
+                                      claim.id, claim.items,
+                                      item_create_hook)
+    claimed += process_child_relation(user, services, prev_claim_id,
+                                      claim.id, claim.services,
+                                      service_create_hook)
     claim.claimed = claimed
     claim.save()
 
@@ -361,8 +392,8 @@ class CreateClaimMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             data['audit_user_id'] = user.id_for_audit
             data['status'] = Claim.STATUS_ENTERED
-            from core import datetime
-            data['validity_from'] = datetime.date.today()
+            from core.utils import TimeUtils
+            data['validity_from'] = TimeUtils.now()
             update_or_create_claim(data, user)
             return None
         except Exception as exc:
@@ -416,34 +447,46 @@ class SubmitClaimsMutation(OpenIMISMutation):
         errors = []
         for claim_uuid in data["uuids"]:
             claim = Claim.objects\
-                .filter(uuid=claim_uuid)\
+                .filter(uuid=claim_uuid,
+                        validity_to__isnull=True)\
                 .prefetch_related("items")\
                 .prefetch_related("services")\
                 .first()
             if claim is None:
-                errors += [{'message': _(
-                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
+                errors += [
+                    {'message': _(
+                        "claim.validation.id_does_not_exist") % {'id': claim_uuid}}
+                ]
                 continue
             errors += validate_claim(claim)
             if len(errors) == 0:
+                claim.save_history()
                 errors += set_claim_submitted(claim, errors, user)
 
-        if len(errors) > 0:
-            return errors
-        else:
-            return None
+        return errors
 
 
 def set_claims_status(uuids, field, status):
-    affected_rows = Claim.objects.filter(
-        uuid__in=uuids).update(**{field: status})
-    if affected_rows != len(uuids):
-        rows_in_error = Claim.objects.filter(
-            Q(uuid__in=uuids), ~Q(**{field: status}))
-        return json.dump(
-            [{'message': _("claim.mutation.failed_to_change_status_of_claim") %
-              {'code': c}} for c in rows_in_error])
-    return None
+    errors = []
+    for claim_uuid in uuids:
+        claim = Claim.objects\
+            .filter(uuid=claim_uuid,
+                    validity_to__isnull=True)\
+            .first()
+        if claim is None:
+            errors += [{'message': _(
+                "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
+            continue
+        try:
+            claim.save_history()
+            setattr(claim, field, status)
+            claim.save()
+        except Exception as exc:
+            errors += [
+                {'message': _("claim.mutation.failed_to_change_status_of_claim") %
+                 {'code': claim.code}}]
+
+    return errors
 
 
 class SelectClaimsForFeedbackMutation(OpenIMISMutation):
@@ -514,11 +557,13 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
                 raise PermissionDenied(_("unauthorized"))
-            claim = Claim.objects.get(uuid=data['claim_uuid'])
+            claim = Claim.objects.get(
+                uuid=data['claim_uuid'],
+                validity_to__isnull=True)
             claim.save_history()
             feedback = data['feedback']
-            from datetime import date
-            feedback['validity_from'] = date.today()
+            from core.utils import TimeUtils
+            feedback['validity_from'] = TimeUtils.now()
             feedback['audit_user_id'] = user.id_for_audit
             # The legacy model has a Foreign key on both sides of this one-to-one relationship
             f, created = Feedback.objects.update_or_create(
@@ -606,7 +651,8 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
                 raise PermissionDenied(_("unauthorized"))
-            claim = Claim.objects.get(uuid=data['claim_uuid'])
+            claim = Claim.objects.get(uuid=data['claim_uuid'],
+                                      validity_to__isnull=True)
             if claim is None:
                 return [{'message': _(
                     "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
@@ -724,7 +770,7 @@ def set_claim_submitted(claim, errors, user):
             .filter(validity_to__isnull=True).count()
         rtn_services_rejected = claim.services.filter(status=ClaimService.STATUS_REJECTED)\
             .filter(validity_to__isnull=True).count()
-
+        from core.utils import TimeUtils
         if rtn_items_passed > 0 and rtn_services_passed > 0:  # update claim passed
             if rtn_items_rejected > 0 or rtn_services_rejected > 0:
                 # Update claim approved value
@@ -742,22 +788,19 @@ def set_claim_submitted(claim, errors, user):
                 claim.approved = app_item_value if app_item_value else 0 + \
                     app_service_value if app_service_value else 0
                 claim.audit_user_id_submit = user.id_for_audit
-                from datetime import datetime
-                claim.submit_stamp = datetime.now()
+                claim.submit_stamp = TimeUtils.now()
                 claim.category = get_claim_category(claim)
                 claim.save()
             else:  # no rejections
                 claim.status = Claim.STATUS_CHECKED
                 claim.audit_user_id_submit = user.id_for_audit
-                from datetime import datetime
-                claim.submit_stamp = datetime.now()
+                claim.submit_stamp = TimeUtils.now()
                 claim.category = get_claim_category(claim)
                 claim.save()
         else:  # no item nor service passed, rejecting
             claim.status = Claim.STATUS_REJECTED
             claim.audit_user_id_submit = user.id_for_audit
-            from datetime import datetime
-            claim.submit_stamp = datetime.now()
+            claim.submit_stamp = TimeUtils.now()
             claim.category = get_claim_category(claim)
             claim.save()
         return []
@@ -787,8 +830,8 @@ def set_claim_processed(claim, user):
         if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
             claim.status = Claim.STATUS_PROCESSED
             claim.audit_user_id_process = user.id_for_audit
-            from datetime import datetime
-            claim.process_stamp = datetime.now()
+            from core.utils import TimeUtils
+            claim.process_stamp = TimeUtils.now()
             claim.save()
         return []
     except Exception as ex:

@@ -6,6 +6,7 @@ from insuree import models as insuree_models
 from location import models as location_models
 from medical import models as medical_models
 from policy import models as policy_models
+from product import models as product_models
 from claim_batch import models as claim_batch_models
 
 
@@ -58,7 +59,8 @@ class Feedback(core_models.VersionedModel):
         db_column='DrugReceived', blank=True, null=True)
     asessment = models.SmallIntegerField(
         db_column='Asessment', blank=True, null=True)
-    chf_officer_code = models.IntegerField(
+    # No FK in database (so value may not be an existing officer.id !)
+    officer_id = models.IntegerField(
         db_column='CHFOfficerCode', blank=True, null=True)
     feedback_date = fields.DateTimeField(
         db_column='FeedbackDate', blank=True, null=True)
@@ -193,7 +195,9 @@ class ClaimItem(core_models.VersionedModel):
                               db_column='ClaimID', related_name='items')
     item = models.ForeignKey(
         medical_models.Item, models.DO_NOTHING, db_column='ItemID')
-    product = models.ForeignKey('product.Product', models.DO_NOTHING, db_column='ProdID', blank=True, null=True,
+    product = models.ForeignKey(product_models.Product,
+                                models.DO_NOTHING, db_column='ProdID',
+                                blank=True, null=True,
                                 related_name="claim_items")
     status = models.SmallIntegerField(db_column='ClaimItemStatus')
     availability = models.BooleanField(db_column='Availability')
@@ -216,6 +220,9 @@ class ClaimItem(core_models.VersionedModel):
     rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
+    validity_from = fields.DateTimeField(db_column='ValidityFrom')
+    validity_to = fields.DateTimeField(
+        db_column='ValidityTo', blank=True, null=True)
     validity_from_review = fields.DateTimeField(
         db_column='ValidityFromReview', blank=True, null=True)
     validity_to_review = fields.DateTimeField(
@@ -253,7 +260,10 @@ class ClaimService(core_models.VersionedModel):
         Claim, models.DO_NOTHING, db_column='ClaimID', related_name='services')
     service = models.ForeignKey(
         medical_models.Service, models.DO_NOTHING, db_column='ServiceID')
-    # prod = models.ForeignKey('Tblproduct', models.DO_NOTHING, db_column='ProdID', blank=True, null=True)
+    product = models.ForeignKey(product_models.Product,
+                                models.DO_NOTHING, db_column='ProdID',
+                                blank=True, null=True,
+                                related_name="claim_services")
     status = models.SmallIntegerField(db_column='ClaimServiceStatus')
     qty_provided = models.DecimalField(
         db_column='QtyProvided', max_digits=18, decimal_places=2)
@@ -274,6 +284,9 @@ class ClaimService(core_models.VersionedModel):
     rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
+    validity_from = fields.DateTimeField(db_column='ValidityFrom')
+    validity_to = fields.DateTimeField(
+        db_column='ValidityTo', blank=True, null=True)
     validity_from_review = fields.DateTimeField(
         db_column='ValidityFromReview', blank=True, null=True)
     validity_to_review = fields.DateTimeField(
@@ -303,32 +316,3 @@ class ClaimService(core_models.VersionedModel):
 
     STATUS_PASSED = 1
     STATUS_REJECTED = 2
-
-
-class ClaimOfficer(core_models.VersionedModel):
-    id = models.AutoField(db_column='OfficerID', primary_key=True)
-    uuid = models.CharField(db_column='OfficerUUID',
-                            max_length=36, default=uuid.uuid4, unique=True)
-    code = models.CharField(db_column='Code', max_length=8)
-    last_name = models.CharField(db_column='LastName', max_length=100)
-    other_names = models.CharField(db_column='OtherNames', max_length=100)
-    # dob = models.DateField(db_column='DOB', blank=True, null=True)
-    # phone = models.CharField(db_column='Phone', max_length=50, blank=True, null=True)
-    # location = models.ForeignKey(Tbllocations, models.DO_NOTHING, db_column='LocationId', blank=True, null=True)
-    # officeridsubst = models.ForeignKey('self', models.DO_NOTHING, db_column='OfficerIDSubst', blank=True, null=True)
-    # worksto = models.DateTimeField(db_column='WorksTo', blank=True, null=True)
-    # veocode = models.CharField(db_column='VEOCode', max_length=8, blank=True, null=True)
-    # veolastname = models.CharField(db_column='VEOLastName', max_length=100, blank=True, null=True)
-    # veoothernames = models.CharField(db_column='VEOOtherNames', max_length=100, blank=True, null=True)
-    # veodob = models.DateField(db_column='VEODOB', blank=True, null=True)
-    # veophone = models.CharField(db_column='VEOPhone', max_length=25, blank=True, null=True)
-    # audituserid = models.IntegerField(db_column='AuditUserID')
-    # rowid = models.TextField(db_column='RowID', blank=True, null=True)   This field type is a guess.
-    # emailid = models.CharField(db_column='EmailId', max_length=200, blank=True, null=True)
-    # phonecommunication = models.BooleanField(db_column='PhoneCommunication', blank=True, null=True)
-    # permanentaddress = models.CharField(max_length=100, blank=True, null=True)
-    # haslogin = models.BooleanField(db_column='HasLogin', blank=True, null=True)
-
-    class Meta:
-        managed = False
-        db_table = 'tblOfficer'

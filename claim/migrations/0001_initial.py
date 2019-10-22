@@ -175,7 +175,7 @@ class Migration(migrations.Migration):
                 ('drug_prescribed', models.BooleanField(blank=True, db_column='DrugPrescribed', null=True)),
                 ('drug_received', models.BooleanField(blank=True, db_column='DrugReceived', null=True)),
                 ('asessment', models.SmallIntegerField(blank=True, db_column='Asessment', null=True)),
-                ('chf_officer_code', models.IntegerField(blank=True, db_column='CHFOfficerCode', null=True)),
+                ('officer_id', models.IntegerField(blank=True, db_column='CHFOfficerCode', null=True)),
                 ('feedback_date', core.fields.DateTimeField(blank=True, db_column='FeedbackDate', null=True)),
                 ('validity_from', core.fields.DateTimeField(db_column='ValidityFrom')),
                 ('validity_to', core.fields.DateTimeField(blank=True, db_column='ValidityTo', null=True)),

@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='ClaimOfficer',
+            name='Officer',
             fields=[
                 ('id', models.AutoField(db_column='OfficerID', primary_key=True, serialize=False)),
                 ('code', models.CharField(db_column='Code', max_length=8)),

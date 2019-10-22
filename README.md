@@ -15,7 +15,6 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * tblClaim  > Claim
 * tblClaimItems > ClaimItem
 * tblClaimServices > ClaimService
-* tblOfficer > ClaimOfficer (partially mapped)
 
 ## Listened Django Signals
 None
@@ -49,31 +48,33 @@ None
 
 ## Configuration options (can be changed via core.ModuleConfiguration)
 * default_validations_disabled: bypass (defaul) claim validations in Submit and Process mutations (default: False)
-* gql_query_claims_perms: required rights to use claims GraphQL Query (default: ["111001"])
-* gql_query_claim_admins_perms: required rights to use claim_admins GraphQL Query (default: [])
-* gql_query_claim_officers_perms: required rights to use claim_officers GraphQL Query (default: [])
-* gql_mutation_create_claims_perms: required rights to use create_claim GraphQL Mutation (default: ["111002"])
-* gql_mutation_update_claims_perms: required rights to use update_claim GraphQL Mutation (default: ["111010"])
-* gql_mutation_submit_claims_perms: required rights to use submit_claim GraphQL Mutation (default: ["111007"])
-* gql_mutation_select_claim_feedback_perms: required rights to use select_claim_feedback GraphQL Mutation (default: ["111010"])
-* gql_mutation_bypass_claim_feedback_perms: required rights to use bypass_claim_feedback GraphQL Mutation (default: ["111010"])
-* gql_mutation_skip_claim_feedback_perms: required rights to use skip_claim_feedback GraphQL Mutation (default: ["111010"])
-* gql_mutation_deliver_claim_feedback_perms: required rights to use deliver_claim_feedback GraphQL Mutation (default: ["111009"])
-* gql_mutation_select_claim_review_perms: required rights to use select_claim_review GraphQL Mutation (default: ["111010"])
-* gql_mutation_bypass_claim_review_perms: required rights to use bypass_claim_review GraphQL Mutation (default: ["111010"])
-* gql_mutation_skip_claim_review_perms: required rights to use skip_claim_review GraphQL Mutation (default: ["111010"])
-* gql_mutation_deliver_claim_review_perms: required rights to use deliver_claim_review GraphQL Mutation (default: ["111010"])
-* gql_mutation_process_claims_perms: required rights to use process_claims GraphQL Mutation (default: ["111011"])
-* gql_mutation_delete_claims_perms: required rights to use delete_claims GraphQL Mutation (default: ["111004"])
+* gql_query_claims_perms: required rights to call claims GraphQL Query (default: ["111001"])
+* gql_query_claim_admins_perms: required rights to call claim_admins GraphQL Query (default: [])
+* gql_query_claim_officers_perms: required rights to call claim_officers GraphQL Query (default: [])
+* gql_mutation_create_claims_perms: required rights to call create_claim GraphQL Mutation (default: ["111002"])
+* gql_mutation_update_claims_perms: required rights to call update_claim GraphQL Mutation (default: ["111010"])
+* gql_mutation_submit_claims_perms: required rights to call submit_claim GraphQL Mutation (default: ["111007"])
+* gql_mutation_select_claim_feedback_perms: required rights to call select_claim_feedback GraphQL Mutation (default: ["111010"])
+* gql_mutation_bypass_claim_feedback_perms: required rights to call bypass_claim_feedback GraphQL Mutation (default: ["111010"])
+* gql_mutation_skip_claim_feedback_perms: required rights to call skip_claim_feedback GraphQL Mutation (default: ["111010"])
+* gql_mutation_deliver_claim_feedback_perms: required rights to call deliver_claim_feedback GraphQL Mutation (default: ["111009"])
+* gql_mutation_select_claim_review_perms: required rights to call select_claim_review GraphQL Mutation (default: ["111010"])
+* gql_mutation_bypass_claim_review_perms: required rights to call bypass_claim_review GraphQL Mutation (default: ["111010"])
+* gql_mutation_skip_claim_review_perms: required rights to call skip_claim_review GraphQL Mutation (default: ["111010"])
+* gql_mutation_deliver_claim_review_perms: required rights to call deliver_claim_review GraphQL Mutation (default: ["111010"])
+* gql_mutation_process_claims_perms: required rights to call process_claims GraphQL Mutation (default: ["111011"])
+* gql_mutation_delete_claims_perms: required rights to call delete_claims GraphQL Mutation (default: ["111004"])
 * claim_print_perms: required rights to call print endpoint (default: ["111006"])
 
 ## openIMIS Modules Dependencies
 * core.models.VersionedModel
 * core.models.InteractiveUser
+* claim_batch.models.BatchRun
 * insuree.models.Insuree
 * location.models.HealthFacility
 * medical.models.Diagnosis
 * medical.models.Item
 * medical.models.Service
 * policy.models.Policy
+* product.models.Product
 * report.services.ReportService
