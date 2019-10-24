@@ -4,7 +4,7 @@ import graphene
 import graphene_django_optimizer as gql_optimizer
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems
-from core import prefix_filterset, ExtendedConnection, filter_validity, Q
+from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
@@ -256,10 +256,43 @@ class FeedbackInputType(InputObjectType):
     validity_to = graphene.DateTime(required=False)
 
 
+class ClaimCodeInputType(graphene.String):
+
+    @staticmethod
+    def coerce_string(value):
+        assert_string_length(res, 8)
+        return res
+
+    serialize = coerce_string
+    parse_value = coerce_string
+
+    @staticmethod
+    def parse_literal(ast):
+        result = graphene.String.parse_literal(ast)
+        assert_string_length(result, 8)
+        return result
+
+
+class ClaimGuaranteeIdInputType(graphene.String):
+
+    @staticmethod
+    def coerce_string(value):
+        assert_string_length(res, 50)
+        return res
+
+    serialize = coerce_string
+    parse_value = coerce_string
+
+    @staticmethod
+    def parse_literal(ast):
+        result = graphene.String.parse_literal(ast)
+        assert_string_length(result, 50)
+        return result
+
 class ClaimInputType(OpenIMISMutation.Input):
     id = graphene.Int(required=False, read_only=True)
     uuid = graphene.String(required=False)
-    code = graphene.String(max_length=8, required=True)
+    code = ClaimCodeInputType(required=True)
     insuree_id = graphene.Int(required=True)
     date_from = graphene.Date(required=True)
     date_to = graphene.Date(required=False)
@@ -276,7 +309,7 @@ class ClaimInputType(OpenIMISMutation.Input):
     category = graphene.String(max_length=1, required=False)
     visit_type = graphene.String(max_length=1, required=False)
     admin_id = graphene.Int(required=False)
-    guarantee_id = graphene.String(max_length=30, required=False)
+    guarantee_id = ClaimGuaranteeIdInputType(required=False)
     explanation = graphene.String(required=False)
     adjustment = graphene.String(required=False)
 
