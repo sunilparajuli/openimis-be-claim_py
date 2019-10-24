@@ -138,14 +138,20 @@ class ClaimServiceGQLType(DjangoObjectType):
 
 class Query(graphene.ObjectType):
     claims = OrderedDjangoFilterConnectionField(
-        ClaimGQLType, orderBy=graphene.List(of_type=graphene.String))
+        ClaimGQLType,
+        codeIsNot=graphene.String(),
+        orderBy=graphene.List(of_type=graphene.String))
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
     claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
 
     def resolve_claims(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        return gql_optimizer.query(Claim.objects.all(), info)
+        query = Claim.objects
+        code_is_not = kwargs.get('codeIsNot', None)
+        if code_is_not:
+            query = query.exclude(code=code_is_not)
+        return gql_optimizer.query(query.all(), info)
 
     def resolve_claim_admins(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
@@ -459,9 +465,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 ]
                 continue
             errors += validate_claim(claim)
-            if len(errors) == 0:
-                claim.save_history()
-                errors += set_claim_submitted(claim, errors, user)
+            errors += set_claim_submitted(claim, errors, user)
 
         return errors
 
@@ -750,12 +754,12 @@ def set_claim_submitted(claim, errors, user):
         claim.save_history()
         # we went over the maximum for a category, all items and services in the claim are rejected
         over_category_errors = [
-            x for x in errors if x.code in [11, 12, 13, 14, 15, 19]]
+            x for x in errors if x['code'] in [11, 12, 13, 14, 15, 19]]
         if len(over_category_errors) > 0:
             claim.items.update(status=ClaimItem.STATUS_REJECTED, qty_approved=0,
-                               rejection_reason=over_category_errors[0].code)
+                               rejection_reason=over_category_errors[0]['code'])
             claim.services.update(status=ClaimService.STATUS_REJECTED, qty_approved=0,
-                                  rejection_reason=over_category_errors[0].code)
+                                  rejection_reason=over_category_errors[0]['code'])
         else:
             claim.items.exclude(rejection_reason=0)\
                 .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
