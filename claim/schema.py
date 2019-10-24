@@ -289,6 +289,7 @@ class ClaimGuaranteeIdInputType(graphene.String):
         assert_string_length(result, 50)
         return result
 
+
 class ClaimInputType(OpenIMISMutation.Input):
     id = graphene.Int(required=False, read_only=True)
     uuid = graphene.String(required=False)
@@ -497,6 +498,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                         "claim.validation.id_does_not_exist") % {'id': claim_uuid}}
                 ]
                 continue
+            claim.save_history()
             errors += validate_claim(claim)
             errors += set_claim_submitted(claim, errors, user)
 
@@ -671,6 +673,22 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
         return set_claims_status(data['uuids'], 'review_status', 2)
 
 
+def approved_amount(claim):
+    app_item_value = claim.items\
+        .filter(validity_to__isnull=True)\
+        .filter(status=ClaimItem.STATUS_PASSED)\
+        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked"))\
+        .aggregate(Sum("value"))
+    app_service_value = claim.services\
+        .filter(validity_to__isnull=True)\
+        .filter(status=ClaimService.STATUS_PASSED)\
+        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked"))\
+        .aggregate(Sum("value"))
+    return (app_item_value['value__sum'] if app_item_value['value__sum'] else 0) + \
+        (app_service_value['value__sum']
+            if app_service_value['value__sum'] else 0)
+
+
 class DeliverClaimReviewMutation(OpenIMISMutation):
     """
     Deliver review of a claim (items and services)
@@ -699,7 +717,7 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
             for item in items:
                 item_id = item.pop('id')
                 claim.items.filter(id=item_id).update(**item)
-                if item.status == 1:
+                if item.status == ClaimItem.STATUS_PASSED:
                     all_rejected = False
             services = data.pop('services') if 'services' in data else []
             for service in services:
@@ -707,6 +725,7 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
                 claim.services.filter(id=service_id).update(**service)
                 if service.status == ClaimService.STATUS_PASSED:
                     all_rejected = False
+            claim.approved = approved_amount(claim)
             claim.review_status = 8
             if all_rejected:
                 claim.status = Claim.STATUS_REJECTED
@@ -784,62 +803,43 @@ class DeleteClaimsMutation(OpenIMISMutation):
 
 def set_claim_submitted(claim, errors, user):
     try:
-        claim.save_history()
         # we went over the maximum for a category, all items and services in the claim are rejected
         over_category_errors = [
             x for x in errors if x['code'] in [11, 12, 13, 14, 15, 19]]
         if len(over_category_errors) > 0:
-            claim.items.update(status=ClaimItem.STATUS_REJECTED, qty_approved=0,
-                               rejection_reason=over_category_errors[0]['code'])
-            claim.services.update(status=ClaimService.STATUS_REJECTED, qty_approved=0,
-                                  rejection_reason=over_category_errors[0]['code'])
+            rtn_items_rejected = claim.items.filter(validity_to__isnull=True)\
+                .update(status=ClaimItem.STATUS_REJECTED,
+                        qty_approved=0,
+                        rejection_reason=over_category_errors[0]['code'])
+            rtn_services_rejected = claim.services.filter(validity_to__isnull=True)\
+                .update(status=ClaimService.STATUS_REJECTED,
+                        qty_approved=0,
+                        rejection_reason=over_category_errors[0]['code'])
         else:
-            claim.items.exclude(rejection_reason=0)\
+            rtn_items_rejected = claim.items.filter(validity_to__isnull=True)\
+                .exclude(rejection_reason=0).exclude(rejection_reason__isnull=True)\
                 .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
-            claim.services.exclude(rejection_reason=0)\
+            rtn_services_rejected = claim.services.filter(validity_to__isnull=True)\
+                .exclude(rejection_reason=0).exclude(rejection_reason__isnull=True)\
                 .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
 
-        rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
-            .filter(validity_to__isnull=True).count()
-        rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
-            .filter(validity_to__isnull=True).count()
-        rtn_items_rejected = claim.items.filter(status=ClaimItem.STATUS_REJECTED)\
-            .filter(validity_to__isnull=True).count()
-        rtn_services_rejected = claim.services.filter(status=ClaimService.STATUS_REJECTED)\
-            .filter(validity_to__isnull=True).count()
-        from core.utils import TimeUtils
-        if rtn_items_passed > 0 and rtn_services_passed > 0:  # update claim passed
-            if rtn_items_rejected > 0 or rtn_services_rejected > 0:
-                # Update claim approved value
-                app_item_value = claim.items\
-                    .filter(validity_to__isnull=True)\
-                    .filter(status=ClaimItem.STATUS_PASSED)\
-                    .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
-                    .aggregate(Sum("value"))
-                app_service_value = claim.services\
-                    .filter(validity_to__isnull=True)\
-                    .filter(status=ClaimService.STATUS_PASSED)\
-                    .annotate(value=Coalesce("qty_provided", "qty_approved") * Coalesce("price_asked", "price_approved"))\
-                    .aggregate(Sum("value"))
-                claim.status = Claim.STATUS_CHECKED
-                claim.approved = app_item_value if app_item_value else 0 + \
-                    app_service_value if app_service_value else 0
-                claim.audit_user_id_submit = user.id_for_audit
-                claim.submit_stamp = TimeUtils.now()
-                claim.category = get_claim_category(claim)
-                claim.save()
-            else:  # no rejections
-                claim.status = Claim.STATUS_CHECKED
-                claim.audit_user_id_submit = user.id_for_audit
-                claim.submit_stamp = TimeUtils.now()
-                claim.category = get_claim_category(claim)
-                claim.save()
+        rtn_items_passed = claim.items.filter(validity_to__isnull=True)\
+            .exclude(status=ClaimItem.STATUS_REJECTED)\
+            .update(status=ClaimItem.STATUS_PASSED)
+        rtn_services_passed = claim.services.filter(validity_to__isnull=True)\
+            .exclude(status=ClaimService.STATUS_REJECTED)\
+            .update(status=ClaimService.STATUS_PASSED)
+
+        if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
+            claim.approved = approved_amount(claim)
+            claim.status = Claim.STATUS_CHECKED
         else:  # no item nor service passed, rejecting
             claim.status = Claim.STATUS_REJECTED
-            claim.audit_user_id_submit = user.id_for_audit
-            claim.submit_stamp = TimeUtils.now()
-            claim.category = get_claim_category(claim)
-            claim.save()
+        claim.audit_user_id_submit = user.id_for_audit
+        from core.utils import TimeUtils
+        claim.submit_stamp = TimeUtils.now()
+        claim.category = get_claim_category(claim)
+        claim.save()
         return []
     except Exception as exc:
         return [{
