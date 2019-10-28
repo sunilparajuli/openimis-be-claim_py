@@ -380,7 +380,7 @@ def process_child_relation(user, data_childeren, prev_claim_id,
     prev_elts = [s.id for s in childeren.all()]
     from core.utils import TimeUtils
     for elt in data_childeren:
-        claimed += elt.qty_provided * elt.price_asked
+        claimed += elt['qty_provided'] * elt['price_asked']
         elt_id = elt.pop('id') if 'id' in elt else None
         if elt_id:
             prev_elts.remove(elt_id)
