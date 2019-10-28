@@ -1,4 +1,5 @@
 import json
+import base64
 from copy import copy
 import graphene
 import graphene_django_optimizer as gql_optimizer
@@ -21,7 +22,7 @@ from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from location.schema import userDistricts
 from claim_batch.schema import BatchRunGQLType
-from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService
+from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
 from core.models import Officer
 
 
@@ -72,6 +73,7 @@ class ClaimGQLType(DjangoObjectType):
     The filters are possible on BatchRun, Insuree, HealthFacility, Admin and ICD in addition to the Claim fields
     themselves.
     """
+    attachments_count = graphene.Int()
 
     class Meta:
         model = Claim
@@ -97,6 +99,9 @@ class ClaimGQLType(DjangoObjectType):
         }
         connection_class = ExtendedConnection
 
+    def resolve_attachments_count(self, info):
+        return self.attachments.filter(validity_to__isnull=True).count()
+
     @classmethod
     def get_queryset(cls, queryset, info):
         queryset = queryset.filter(*filter_validity())
@@ -107,6 +112,26 @@ class ClaimGQLType(DjangoObjectType):
             return queryset.filter(
                 health_facility__location__id__in=[l.location.id for l in dist]
             )
+        return queryset
+
+
+class ClaimAttachmentGQLType(DjangoObjectType):
+    doc = graphene.String()
+
+    class Meta:
+        model = ClaimAttachment
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "type": ["exact", "icontains"],
+            "title": ["exact", "icontains"],
+            **prefix_filterset("claim__", ClaimGQLType._meta.filter_fields),
+        }
+        connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        queryset = queryset.filter(*filter_validity())
         return queryset
 
 
@@ -141,6 +166,7 @@ class Query(graphene.ObjectType):
         ClaimGQLType,
         codeIsNot=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String))
+    claim_attachments = DjangoFilterConnectionField(ClaimAttachmentGQLType)
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
     claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
 
@@ -152,6 +178,11 @@ class Query(graphene.ObjectType):
         if code_is_not:
             query = query.exclude(code=code_is_not)
         return gql_optimizer.query(query.all(), info)
+
+    def resolve_claim_attachments(self, info, **kwargs):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
+            raise PermissionDenied(_("unauthorized"))
+        pass
 
     def resolve_claim_admins(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
@@ -322,6 +353,16 @@ class ClaimInputType(OpenIMISMutation.Input):
     services = graphene.List(ClaimServiceInputType, required=False)
 
 
+class ClaimAttachmentInputType(OpenIMISMutation.Input):
+    claim_uuid = graphene.String(required=True)
+    type = graphene.String(required=False)
+    title = graphene.String(required=False)
+    date = graphene.Date(required=False)
+    filename = graphene.String(required=False)
+    mime = graphene.String(required=False)
+    document = graphene.String(required=False)
+
+
 def reset_claim_before_update(claim):
     claim.date_to = None
     claim.icd_1 = None
@@ -467,6 +508,81 @@ class UpdateClaimMutation(OpenIMISMutation):
         except Exception as exc:
             return [{
                 'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
+                'detail': str(exc)}]
+
+
+class CreateClaimAttachmentMutation(OpenIMISMutation):
+    _mutation_module = "claim"
+    _mutation_class = "AddClaimAttachmentMutation"
+
+    class Input(ClaimAttachmentInputType):
+        pass
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        try:
+            if user.is_anonymous or not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
+                raise PermissionDenied(_("unauthorized"))
+            if "client_mutation_id" in data:
+                data.pop('client_mutation_id')
+            if "client_mutation_label" in data:
+                data.pop('client_mutation_label')
+            claim_uuid = data.pop("claim_uuid")
+            queryset = Claim.objects.filter(*filter_validity())
+            if settings.ROW_SECURITY:
+                dist = userDistricts(user._u)
+                queryset = queryset.filter(
+                    health_facility__location__id__in=[
+                        l.location.id for l in dist]
+                )
+            claim = queryset.filter(uuid=claim_uuid).first()
+            if not claim:
+                raise PermissionDenied(_("unauthorized"))
+            data["claim_id"] = claim.id
+            from core import datetime
+            data['validity_from'] = datetime.datetime.now()
+            ClaimAttachment.objects.create(**data)
+            return None
+        except Exception as exc:
+            return [{
+                'message': _("claim.mutation.failed_to_attach_document") % {'code': claim.code},
+                'detail': str(exc)}]
+
+
+class DeleteClaimAttachmentMutation(OpenIMISMutation):
+    _mutation_module = "claim"
+    _mutation_class = "DeleteClaimAttachmentMutation"
+
+    class Input(OpenIMISMutation.Input):
+        id = graphene.String()
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        try:
+            if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
+                raise PermissionDenied(_("unauthorized"))
+            queryset = ClaimAttachment.objects.filter(*filter_validity())
+            if settings.ROW_SECURITY:
+                from location.schema import userDistricts
+                dist = userDistricts(user)
+                queryset = queryset.select_related("claim")\
+                    .filter(
+                    claim__health_facility__location__id__in=[
+                        l.location.id for l in dist]
+                )
+            id = data['id']
+            attachment = queryset\
+                .filter(id=id)\
+                .first()
+            if not attachment:
+                raise PermissionDenied(_("unauthorized"))
+            from core import datetime
+            attachment.validity_to = datetime.datetime.now()
+            attachment.save()
+            return None
+        except Exception as exc:
+            return [{
+                'message': _("claim.mutation.failed_to_delete_claim_attachment") % {'filename': attachment.filename},
                 'detail': str(exc)}]
 
 
@@ -879,6 +995,8 @@ def set_claim_processed(claim, user):
 class Mutation(graphene.ObjectType):
     create_claim = CreateClaimMutation.Field()
     update_claim = UpdateClaimMutation.Field()
+    create_claim_attachment = CreateClaimAttachmentMutation.Field()
+    delete_claim_attachment = DeleteClaimAttachmentMutation.Field()
     submit_claims = SubmitClaimsMutation.Field()
     select_claims_for_feedback = SelectClaimsForFeedbackMutation.Field()
     deliver_claim_feedback = DeliverClaimFeedbackMutation.Field()

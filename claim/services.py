@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import core
 from django.db import connection
 from .apps import ClaimConfig
+from django.conf import settings
 
 
 @core.comparable
@@ -191,10 +192,20 @@ class ClaimReportService(object):
 
     def fetch(self, uuid):
         from .models import Claim
-        claim = Claim.objects \
+        queryset = Claim.objects.filter(*core.filter_validity())
+        if settings.ROW_SECURITY:
+            from location.schema import userDistricts
+            dist = userDistricts(self.user)
+            queryset = queryset.filter(
+                health_facility__location__id__in=[l.location.id for l in dist]
+            )
+        claim = queryset\
             .select_related('health_facility') \
             .select_related('insuree') \
-            .get(uuid=uuid)
+            .filter(uuid=uuid)\
+            .first()
+        if not claim:
+            raise PermissionDenied(_("unauthorized"))
         return {
             "code": claim.code,
             "visitDateFrom": claim.date_from.isoformat() if claim.date_from else None,

@@ -254,6 +254,22 @@ class ClaimItem(core_models.VersionedModel):
     STATUS_REJECTED = 2
 
 
+class ClaimAttachment(core_models.UUIDModel, core_models.VersionedModel):
+    claim = models.ForeignKey(
+        Claim, models.DO_NOTHING, related_name='attachments')
+    type = models.TextField(blank=True, null=True)
+    title = models.TextField(blank=True, null=True)
+    date = fields.DateField(blank=True, null=True)
+    filename = models.TextField(blank=True, null=True)
+    mime = models.TextField(blank=True, null=True)
+    # Support of BinaryField is database-related: prefer to stick to b64-encoded    
+    document = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = "claim_ClaimAttachment"
+
+
 class ClaimService(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimServiceID', primary_key=True)
     claim = models.ForeignKey(
