@@ -17,7 +17,7 @@ def print(request):
     report_service = ReportService(request.user)
     report_data_service = ClaimReportService(request.user)
     data = report_data_service.fetch(request.GET['uuid'])
-    return report_service.process('claim_claims', data, claim.template)
+    return report_service.process('claim_claim', data, claim.template)
 
 
 def attach(request):

@@ -46,6 +46,12 @@ None
 * process_claims
 * delete_claims
 
+## Additional Endpoints
+* print: generating Claim PDF
+
+## Reports
+* `claim_claim`: Claim summary
+
 ## Configuration options (can be changed via core.ModuleConfiguration)
 * default_validations_disabled: bypass (defaul) claim validations in Submit and Process mutations (default: False)
 * gql_query_claims_perms: required rights to call claims GraphQL Query (default: ["111001"])
