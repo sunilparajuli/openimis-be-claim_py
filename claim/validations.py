@@ -287,20 +287,18 @@ def validate_family(claim, insuree):
                         'code': claim.code,
                         'insuree': str(insuree)},
                     'detail': claim.uuid}]
-    if insuree.family is None:
+    elif insuree.family is None:
         errors += [{'code': REJECTION_REASON_FAMILY,
                     'message': _("claim.validation.family.no_family") % {
                         'code': claim.code,
                         'insuree': str(insuree)},
                     'detail': claim.uuid}]
-    else:
-        if insuree.family.validity_to is not None:
-            errors += [{'code': REJECTION_REASON_FAMILY,
-                        'message': _("claim.validation.family.family_validity") % {
-                            'code': claim.code,
-                            'insuree': str(insuree)},
-                        'detail': claim.uuid}]
-
+    elif insuree.family.validity_to is not None:
+        errors += [{'code': REJECTION_REASON_FAMILY,
+                    'message': _("claim.validation.family.family_validity") % {
+                        'code': claim.code,
+                        'insuree': str(insuree)},
+                    'detail': claim.uuid}]
     if len(errors) > 0:
         claim.reject(REJECTION_REASON_FAMILY)
     return errors
