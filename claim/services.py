@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-
+from django.core.exceptions import PermissionDenied
 import core
 from django.db import connection
 from .apps import ClaimConfig
@@ -195,7 +195,7 @@ class ClaimReportService(object):
         queryset = Claim.objects.filter(*core.filter_validity())
         if settings.ROW_SECURITY:
             from location.schema import userDistricts
-            dist = userDistricts(self.user)
+            dist = userDistricts(self.user._u)
             queryset = queryset.filter(
                 health_facility__location__id__in=[l.location.id for l in dist]
             )
