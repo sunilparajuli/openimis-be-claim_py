@@ -189,6 +189,17 @@ class Claim(core_models.VersionedModel):
         return updated_items + updated_services
 
 
+class ClaimMutation(core_models.UUIDModel):
+    claim = models.ForeignKey(Claim, models.DO_NOTHING,
+                              related_name='mutations')
+    mutation = models.ForeignKey(
+        core_models.MutationLog, models.DO_NOTHING, related_name='claims')
+
+    class Meta:
+        managed = True
+        db_table = "claim_ClaimMutation"
+
+
 class ClaimItem(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
@@ -262,7 +273,7 @@ class ClaimAttachment(core_models.UUIDModel, core_models.VersionedModel):
     date = fields.DateField(blank=True, null=True)
     filename = models.TextField(blank=True, null=True)
     mime = models.TextField(blank=True, null=True)
-    # Support of BinaryField is database-related: prefer to stick to b64-encoded    
+    # Support of BinaryField is database-related: prefer to stick to b64-encoded
     document = models.TextField(blank=True, null=True)
 
     class Meta:

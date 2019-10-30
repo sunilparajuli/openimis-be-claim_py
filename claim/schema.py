@@ -1,3 +1,4 @@
+from core.schema import signal_mutation_module
 import json
 import base64
 from copy import copy
@@ -22,7 +23,7 @@ from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from location.schema import userDistricts
 from claim_batch.schema import BatchRunGQLType
-from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
+from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment, ClaimMutation
 from core.models import Officer
 
 
@@ -74,6 +75,7 @@ class ClaimGQLType(DjangoObjectType):
     themselves.
     """
     attachments_count = graphene.Int()
+    client_mutation_id = graphene.String()
 
     class Meta:
         model = Claim
@@ -101,6 +103,11 @@ class ClaimGQLType(DjangoObjectType):
 
     def resolve_attachments_count(self, info):
         return self.attachments.filter(validity_to__isnull=True).count()
+
+    def resolve_client_mutation_id(self, info):
+        claim_mutation = self.mutations.select_related(
+            'mutation').filter(mutation__status=0).first()
+        return claim_mutation.mutation.client_mutation_id if claim_mutation else None
 
     @classmethod
     def get_queryset(cls, queryset, info):
@@ -833,13 +840,13 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
             for item in items:
                 item_id = item.pop('id')
                 claim.items.filter(id=item_id).update(**item)
-                if item.status == ClaimItem.STATUS_PASSED:
+                if item['status'] == ClaimItem.STATUS_PASSED:
                     all_rejected = False
             services = data.pop('services') if 'services' in data else []
             for service in services:
                 service_id = service.pop('id')
                 claim.services.filter(id=service_id).update(**service)
-                if service.status == ClaimService.STATUS_PASSED:
+                if service['status'] == ClaimService.STATUS_PASSED:
                     all_rejected = False
             claim.approved = approved_amount(claim)
             claim.review_status = 8
@@ -848,6 +855,7 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
             claim.save()
             return None
         except Exception as exc:
+            print("EXC %s" % str(exc))
             return [{
                 'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
                 'detail': str(exc)}]
@@ -1008,3 +1016,19 @@ class Mutation(graphene.ObjectType):
     skip_claims_review = SkipClaimsReviewMutation.Field()
     process_claims = ProcessClaimsMutation.Field()
     delete_claims = DeleteClaimsMutation.Field()
+
+
+def on_claim_mutation(sender, **kwargs):
+    uuids = kwargs['data'].get('uuids', [])
+    if not uuids:
+        uuid = kwargs['data'].get('claim_uuid', None)
+        uuids = [uuid] if uuid else []
+    impacted_claims = Claim.objects.filter(uuid__in=uuids).all()
+    for claim in impacted_claims:
+        ClaimMutation.objects.create(
+            claim=claim, mutation_id=kwargs['mutation_log_id'])
+    return []
+
+
+def bind_signals():
+    signal_mutation_module["claim"].connect(on_claim_mutation)
