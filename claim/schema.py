@@ -104,6 +104,12 @@ class ClaimGQLType(DjangoObjectType):
     def resolve_attachments_count(self, info):
         return self.attachments.filter(validity_to__isnull=True).count()
 
+    def resolve_items(self, info):
+        return self.items.filter(validity_to__isnull=True)
+
+    def resolve_servicesd(self, info):
+        return self.items.filter(validity_to__isnull=True)
+
     def resolve_client_mutation_id(self, info):
         claim_mutation = self.mutations.select_related(
             'mutation').filter(mutation__status=0).first()
@@ -719,10 +725,14 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
                 raise PermissionDenied(_("unauthorized"))
-            claim = Claim.objects.get(
+            claim = Claim.objects.select_related('feedback').get(
                 uuid=data['claim_uuid'],
                 validity_to__isnull=True)
-            claim.save_history()
+            prev_feedback = claim.feedback
+            prev_claim_id = claim.save_history()
+            if prev_feedback:
+                prev_feedback.claim_id = prev_claim_id
+                prev_feedback.save()
             feedback = data['feedback']
             from core.utils import TimeUtils
             feedback['validity_from'] = TimeUtils.now()
@@ -739,7 +749,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
             return None
         except Exception as exc:
             return [{
-                'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code},
                 'detail': str(exc)}]
 
 
@@ -857,7 +867,7 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
         except Exception as exc:
             print("EXC %s" % str(exc))
             return [{
-                'message': _("claim.mutation.failed_to_update_claim") % {'code': data['code']},
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code},
                 'detail': str(exc)}]
 
 
