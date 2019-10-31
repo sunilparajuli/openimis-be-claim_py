@@ -615,6 +615,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
             raise PermissionDenied(_("unauthorized"))
         errors = []
         for claim_uuid in data["uuids"]:
+            c_errors = []
             claim = Claim.objects\
                 .filter(uuid=claim_uuid,
                         validity_to__isnull=True)\
@@ -622,15 +623,25 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services")\
                 .first()
             if claim is None:
-                errors += [
-                    {'message': _(
-                        "claim.validation.id_does_not_exist") % {'id': claim_uuid}}
-                ]
+                errors += {
+                    'title': claim_uuid,
+                    'list': [
+                        {'message': _(
+                            "claim.validation.id_does_not_exist") % {'id': claim_uuid}}
+                    ]
+                }
                 continue
             claim.save_history()
-            errors += validate_claim(claim)
-            errors += set_claim_submitted(claim, errors, user)
-
+            c_errors += validate_claim(claim)
+            if len(c_errors) == 0:
+                c_errors += set_claim_submitted(claim, errors, user)
+            if (len(c_errors)):
+                errors.append({
+                    'title': claim.code,
+                    'list': c_errors
+                })
+        if len(errors) == 1:
+            errors = errors[0]['list']
         return errors
 
 
@@ -887,21 +898,33 @@ class ProcessClaimsMutation(OpenIMISMutation):
             raise PermissionDenied(_("unauthorized"))
         errors = []
         for claim_uuid in data["uuids"]:
+            c_errors = []
             claim = Claim.objects \
                 .filter(uuid=claim_uuid) \
                 .prefetch_related("items") \
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                errors += [{'message': _(
-                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
+                errors += {
+                    'title': claim_uuid,
+                    'list': [{'message': _(
+                        "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
+                }
                 continue
             claim.save_history()
-            errors = validate_claim(claim)
-            if len(errors) == 0:
-                errors += validate_assign_prod_to_claimitems(claim)
-            if len(errors) == 0:
-                errors += set_claim_processed(claim, user)
+            c_errors += validate_claim(claim)
+            if len(c_errors) == 0:
+                c_errors = validate_assign_prod_to_claimitems(claim)
+            if len(c_errors) == 0:
+                c_errors += set_claim_processed(claim, user)
+            if len(c_errors):
+                errors.append({
+                    'title': claim.code,
+                    'list': c_errors
+                })
+
+        if len(errors) == 1:
+            errors = errors[0]['list']
         return errors
 
 
@@ -928,10 +951,15 @@ class DeleteClaimsMutation(OpenIMISMutation):
                 .prefetch_related("services") \
                 .first()
             if claim is None:
-                errors += [{'message': _(
-                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
+                errors += {
+                    'title': claim_uuid,
+                    'list': [{'message': _(
+                        "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
+                }
                 continue
             errors += set_claim_deleted(claim)
+        if len(errors) == 1:
+            errors = errors[0]['list']
         return errors
 
 
@@ -976,9 +1004,12 @@ def set_claim_submitted(claim, errors, user):
         claim.save()
         return []
     except Exception as exc:
-        return [{
-            'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
-            'detail': claim.uuid}]
+        return {
+            'title': claim.code,
+            'list': [{
+                'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
+                'detail': claim.uuid}]
+        }
 
 
 def set_claim_deleted(claim):
@@ -986,9 +1017,12 @@ def set_claim_deleted(claim):
         claim.delete_history()
         return []
     except Exception as exc:
-        return [{
-            'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
-            'detail': claim.uuid}]
+        return {
+            'title': claim.code,
+            'list': [{
+                'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
+                'detail': claim.uuid}]
+        }
 
 
 def set_claim_processed(claim, user):
@@ -1006,8 +1040,11 @@ def set_claim_processed(claim, user):
             claim.save()
         return []
     except Exception as ex:
-        return [{'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
-                 'detail': claim.uuid}]
+        return {
+            'title': claim.code,
+            'list': [{'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
+                    'detail': claim.uuid}]
+        }
 
 
 class Mutation(graphene.ObjectType):
