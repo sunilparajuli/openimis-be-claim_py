@@ -60,7 +60,6 @@ def validate_claimitems(claim):
     target_date = claim.date_from if claim.date_from else claim.date_to
 
     for claimitem in claim.items.filter(validity_to__isnull=True):
-        claimitem.save_history()
         claimitem.rejection_reason = None
         errors += validate_claimitem_validity(claimitem)
         errors += validate_claimitem_in_price_list(claim, claimitem)
@@ -126,7 +125,7 @@ def validate_claimservices(claim):
     base_category = get_claim_category(claim)
 
     for claimservice in claim.services.all():
-        prev_rejection_reason = claimservice.rejection_reason
+        claimservice.rejection_reason = None
         errors += validate_claimservice_validity(claimservice)
         errors += validate_claimservice_in_price_list(claim, claimservice)
         errors += validate_claimservice_care_type(claim, claimservice)
@@ -140,12 +139,11 @@ def validate_claimservices(claim):
             adult=claim.insuree.is_adult(target_date),
             base_category=base_category,
         )
-        if claimservice.rejection_reason != prev_rejection_reason:
-            reason = claimservice.rejection_reason
-            claimservice.rejection_reason = prev_rejection_reason
-            claimservice.save_history()
-            claimservice.rejection_reason = reason
-            claimservice.save()
+        if claimservice.rejection_reason:
+            claimservice.status = ClaimItem.STATUS_REJECTED
+        else:
+            claimservice.status = ClaimItem.STATUS_PASSED
+        claimservice.save()
     return errors
 
 
@@ -265,7 +263,6 @@ def validate_claimservice_limitation_fail(claim, claimservice):
     target_date = claim.date_to if claim.date_to else claim.date_from
     patient_category_mask = utils.patient_category_mask(
         claim.insuree, target_date)
-
     if claimservice.service.patient_category & patient_category_mask != patient_category_mask:
         claimservice.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
         return [{'code': REJECTION_REASON_CATEGORY_LIMITATION,
@@ -627,7 +624,6 @@ def validate_assign_prod_to_claimitems(claim):
 
     for claimitem in claim.items.filter(validity_to__isnull=True) \
             .filter(rejection_reason=0).filter(rejection_reason__isnull=True):
-        claimitem.save_history()
         if claimitem.price_asked \
                 and claimitem.price_approved \
                 and claimitem.price_asked > claimitem.price_approved:
