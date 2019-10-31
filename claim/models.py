@@ -188,6 +188,21 @@ class Claim(core_models.VersionedModel):
             validity_to__isnull=True).update(rejection_reason=rejection_code)
         return updated_items + updated_services
 
+    def save_history(self, **kwargs):
+        prev_id = super(Claim, self).save_history()        
+        if prev_id:
+            prev_items = []
+            for item in self.items.all():
+                prev_items.append(item.save_history())
+            ClaimItem.objects.filter(
+                id__in=prev_items).update(claim_id=prev_id)
+            prev_services = []
+            for service in self.services.all():
+                prev_services.append(service.save_history())
+            ClaimService.objects.filter(
+                id__in=prev_services).update(claim_id=prev_id)
+        return prev_id
+
 
 class ClaimMutation(core_models.UUIDModel):
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
