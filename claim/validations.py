@@ -18,12 +18,12 @@ REJECTION_REASON_INVALID_ITEM_OR_SERVICE = 1
 REJECTION_REASON_NOT_IN_PRICE_LIST = 2
 REJECTION_REASON_NO_PRODUCT_FOUND = 3
 REJECTION_REASON_CATEGORY_LIMITATION = 4
-# REJECTION_REASON_FREQUENCY_FAILURE = 5
+REJECTION_REASON_FREQUENCY_FAILURE = 5
 # REJECTION_REASON_DUPLICATED = 6
 REJECTION_REASON_FAMILY = 7
 # REJECTION_REASON_ICD_NOT_IN_LIST = 8
 REJECTION_REASON_TARGET_DATE = 9
-REJECTION_REASON_ITEM_CARE_TYPE = 10
+REJECTION_REASON_CARE_TYPE = 10
 REJECTION_REASON_MAX_HOSPITAL_ADMISSIONS = 11
 REJECTION_REASON_MAX_VISITS = 12
 REJECTION_REASON_MAX_CONSULTATIONS = 13
@@ -34,7 +34,7 @@ REJECTION_REASON_WAITING_PERIOD_FAIL = 17
 REJECTION_REASON_MAX_ANTENATAL = 19
 
 
-def validate_claim(claim):
+def validate_claim(claim, check_max):
     """
     Based on the legacy validation, this method returns standard codes along with details
     :param claim: claim to be verified
@@ -43,108 +43,111 @@ def validate_claim(claim):
     if ClaimConfig.default_validations_disabled:
         return []
     errors = []
-    errors += validate_family(claim, claim.insuree)
-
+    errors += validate_target_date(claim)
     if len(errors) == 0:
-        errors += validate_target_date(claim)
-
+        errors += validate_family(claim, claim.insuree)
     if len(errors) == 0:
-        errors += validate_claimitems(claim)
-        errors += validate_claimservices(claim)
+        validate_claimitems(claim)
+        validate_claimservices(claim)
 
+    if check_max:
+        # we went over the maximum for a category, all items and services in the claim are rejected
+        over_category_errors = [
+            x for x in errors if x['code'] in [REJECTION_REASON_MAX_HOSPITAL_ADMISSIONS,
+                                               REJECTION_REASON_MAX_VISITS,
+                                               REJECTION_REASON_MAX_CONSULTATIONS,
+                                               REJECTION_REASON_MAX_SURGERIES,
+                                               REJECTION_REASON_MAX_DELIVERIES,
+                                               REJECTION_REASON_MAX_ANTENATAL]]
+        if len(over_category_errors) > 0:
+            rtn_items_rejected = claim.items.filter(validity_to__isnull=True)\
+                .update(status=ClaimItem.STATUS_REJECTED,
+                        qty_approved=0,
+                        rejection_reason=over_category_errors[0]['code'])
+            rtn_services_rejected = claim.services.filter(validity_to__isnull=True)\
+                .update(status=ClaimService.STATUS_REJECTED,
+                        qty_approved=0,
+                        rejection_reason=over_category_errors[0]['code'])
+        else:
+            rtn_items_rejected = claim.items.filter(validity_to__isnull=True)\
+                .exclude(rejection_reason=0).exclude(rejection_reason__isnull=True)\
+                .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
+            rtn_services_rejected = claim.services.filter(validity_to__isnull=True)\
+                .exclude(rejection_reason=0).exclude(rejection_reason__isnull=True)\
+                .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
+
+    rtn_items_passed = claim.items.filter(validity_to__isnull=True)\
+        .exclude(status=ClaimItem.STATUS_REJECTED)\
+        .update(status=ClaimItem.STATUS_PASSED)
+    rtn_services_passed = claim.services.filter(validity_to__isnull=True)\
+        .exclude(status=ClaimService.STATUS_REJECTED)\
+        .update(status=ClaimService.STATUS_PASSED)
+
+    if rtn_items_passed + rtn_services_passed == 0:
+        errors += [{'code': REJECTION_REASON_INVALID_ITEM_OR_SERVICE,
+                    'message': _("claim.validation.all_items_and_services_rejected") % {
+                        'code': claim.code},
+                    'detail': claim.uuid}]
     return errors
 
 
 def validate_claimitems(claim):
-    errors = []
     target_date = claim.date_from if claim.date_from else claim.date_to
-
     for claimitem in claim.items.filter(validity_to__isnull=True):
         claimitem.rejection_reason = None
-        errors += validate_claimitem_validity(claimitem)
-        errors += validate_claimitem_in_price_list(claim, claimitem)
-        errors += validate_claimitem_care_type(claim, claimitem)
-        errors += validate_claimitem_limitation_fail(claim, claimitem)
-        errors += validate_item_product_family(
-            claimitem=claimitem,
-            target_date=target_date,
-            item=claimitem.item,
-            family_id=claim.insuree.family_id,
-            insuree_id=claim.insuree_id,
-            adult=claim.insuree.is_adult(target_date)
-        )
+        validate_claimitem_validity(claimitem)
+        if not claimitem.rejection_reason:
+            validate_claimitem_in_price_list(claim, claimitem)
+        if not claimitem.rejection_reason:
+            validate_claimitem_care_type(claim, claimitem)
+        if not claimitem.rejection_reason:
+            validate_claimitem_limitation_fail(claim, claimitem)
+        if not claimitem.rejection_reason:
+            validate_claimitem_frequency(claim, claimitem)
+        if not claimitem.rejection_reason:
+            validate_item_product_family(
+                claimitem=claimitem,
+                target_date=target_date,
+                item=claimitem.item,
+                insuree_id=claim.insuree_id,
+                adult=claim.insuree.is_adult(target_date)
+            )
         if claimitem.rejection_reason:
             claimitem.status = ClaimItem.STATUS_REJECTED
         else:
             claimitem.status = ClaimItem.STATUS_PASSED
         claimitem.save()
-    return errors
-
-
-def validate_claimitem_in_price_list(claim, claimitem):
-    pricelist_detail = ItemPricelistDetail.objects\
-        .filter(item_pricelist=claim.health_facility.item_pricelist)\
-        .filter(item_id=claimitem.item_id)\
-        .filter(validity_to__isnull=True)\
-        .filter(item_pricelist__validity_to__isnull=True)\
-        .first()
-    if pricelist_detail:
-        return []
-    else:
-        claimitem.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
-        return [{'code': REJECTION_REASON_NOT_IN_PRICE_LIST,
-                 'message': _("claim.validation.pricelist.item") % {
-                     'code': claim.code,
-                     'claim_item': str(claimitem.item),
-                     'health_facility': str(claim.health_facility)},
-                 'detail': claim.uuid}]
-
-
-def validate_claimservice_in_price_list(claim, claimservice):
-    pricelist_detail = ServicePricelistDetail.objects\
-        .filter(service_pricelist=claim.health_facility.service_pricelist)\
-        .filter(service_id=claimservice.service_id)\
-        .filter(validity_to__isnull=True)\
-        .filter(service_pricelist__validity_to__isnull=True)\
-        .first()
-    if pricelist_detail:
-        return []
-    else:
-        claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
-        return [{'code': REJECTION_REASON_NOT_IN_PRICE_LIST,
-                 'message': _("claim.validation.pricelist.service") % {
-                     'code': claim.code,
-                     'claim_service': str(claimservice.service),
-                     'health_facility': str(claim.health_facility)},
-                 'detail': claim.uuid}]
 
 
 def validate_claimservices(claim):
-    errors = []
     target_date = claim.date_from if claim.date_from else claim.date_to
     base_category = get_claim_category(claim)
 
     for claimservice in claim.services.all():
         claimservice.rejection_reason = None
-        errors += validate_claimservice_validity(claimservice)
-        errors += validate_claimservice_in_price_list(claim, claimservice)
-        errors += validate_claimservice_care_type(claim, claimservice)
-        errors += validate_claimservice_limitation_fail(claim, claimservice)
-        errors += validate_service_product_family(
-            claimservice=claimservice,
-            target_date=target_date,
-            service=claimservice.service,
-            family_id=claim.insuree.family_id,
-            insuree_id=claim.insuree_id,
-            adult=claim.insuree.is_adult(target_date),
-            base_category=base_category,
-        )
+        validate_claimservice_validity(claimservice)
+        if not claimservice.rejection_reason:
+            validate_claimservice_in_price_list(claim, claimservice)
+        if not claimservice.rejection_reason:
+            validate_claimservice_care_type(claim, claimservice)
+        if not claimservice.rejection_reason:
+            validate_claimservice_frequency(claim, claimservice)
+        if not claimservice.rejection_reason:
+            validate_claimservice_limitation_fail(claim, claimservice)
+        if not claimservice.rejection_reason:
+            validate_service_product_family(
+                claimservice=claimservice,
+                target_date=target_date,
+                service=claimservice.service,
+                insuree_id=claim.insuree_id,
+                adult=claim.insuree.is_adult(target_date),
+                base_category=base_category,
+            )
         if claimservice.rejection_reason:
-            claimservice.status = ClaimItem.STATUS_REJECTED
+            claimservice.status = ClaimService.STATUS_REJECTED
         else:
-            claimservice.status = ClaimItem.STATUS_PASSED
+            claimservice.status = ClaimService.STATUS_PASSED
         claimservice.save()
-    return errors
 
 
 def validate_claimitem_validity(claimitem):
@@ -157,24 +160,34 @@ def validate_claimitem_validity(claimitem):
     # Here, claimitem.item.legacy_id is always None
     if claimitem.validity_to is None and claimitem.item.validity_to is not None:
         claimitem.rejection_reason = REJECTION_REASON_INVALID_ITEM_OR_SERVICE
-        return [{'code': REJECTION_REASON_INVALID_ITEM_OR_SERVICE,
-                 'message': _("claim.validation.validity.item") % {
-                     'code': claimitem.claim.code,
-                     'item': str(claimitem.item)},
-                 'detail': claimitem.claim.uuid}]
-    return []
 
 
 def validate_claimservice_validity(claimservice):
     # See note in validate_claimitem_validity
     if claimservice.validity_to is None and claimservice.service.validity_to is not None:
         claimservice.rejection_reason = REJECTION_REASON_INVALID_ITEM_OR_SERVICE
-        return [{'code': REJECTION_REASON_INVALID_ITEM_OR_SERVICE,
-                 'message': _("claim.validation.validity.service") % {
-                     'code': claimservice.claim.code,
-                     'service': str(claimservice.service)},
-                 'detail': claimservice.claim.uuid}]
-    return []
+
+
+def validate_claimitem_in_price_list(claim, claimitem):
+    pricelist_detail = ItemPricelistDetail.objects\
+        .filter(item_pricelist=claim.health_facility.item_pricelist)\
+        .filter(item_id=claimitem.item_id)\
+        .filter(validity_to__isnull=True)\
+        .filter(item_pricelist__validity_to__isnull=True)\
+        .first()
+    if not pricelist_detail:
+        claimitem.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
+
+
+def validate_claimservice_in_price_list(claim, claimservice):
+    pricelist_detail = ServicePricelistDetail.objects\
+        .filter(service_pricelist=claim.health_facility.service_pricelist)\
+        .filter(service_id=claimservice.service_id)\
+        .filter(validity_to__isnull=True)\
+        .filter(service_pricelist__validity_to__isnull=True)\
+        .first()
+    if not pricelist_detail:
+        claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
 
 
 def validate_claimservice_care_type(claim, claimservice):
@@ -191,27 +204,7 @@ def validate_claimservice_care_type(claim, claimservice):
             hf_care_type == 'I'
             or target_date != claim.date_from)
     ):
-        claimservice.rejection_reason = REJECTION_REASON_ITEM_CARE_TYPE
-        return [{'code': REJECTION_REASON_ITEM_CARE_TYPE,
-                 'message': _("claim.validation.care_type.service") % {
-                     'code': claim.code,
-                     'care_type': care_type,
-                     'hf_care_type': hf_care_type,
-                     'target_date': target_date,
-                     'claim_date_from': claim.date_from},
-                 'detail': claim.uuid}]
-    else:
-        return []
-
-
-def validate_target_date(claim):
-    if claim.date_from is None and claim.date_to is None:
-        claim.reject(REJECTION_REASON_TARGET_DATE)
-        return [{'code': REJECTION_REASON_TARGET_DATE,
-                 'message': _("claim.validation.target_date") % {
-                     'code': claim.code},
-                 'detail': claim.uuid}]
-    return []
+        claimservice.rejection_reason = REJECTION_REASON_CARE_TYPE
 
 
 def validate_claimitem_care_type(claim, claimitem):
@@ -228,17 +221,7 @@ def validate_claimitem_care_type(claim, claimitem):
             hf_care_type == 'I'
             or target_date != claim.date_from)
     ):
-        claimitem.rejection_reason = REJECTION_REASON_ITEM_CARE_TYPE
-        return [{'code': REJECTION_REASON_ITEM_CARE_TYPE,
-                 'message': _("claim.validation.care_type.item") % {
-                     'code': claim.code,
-                     'care_type': care_type,
-                     'hf_care_type': hf_care_type,
-                     'target_date': target_date,
-                     'claim_date_from': claim.date_from},
-                 'detail': claim.uuid}]
-    else:
-        return []
+        claimitem.rejection_reason = REJECTION_REASON_CARE_TYPE
 
 
 def validate_claimitem_limitation_fail(claim, claimitem):
@@ -248,15 +231,6 @@ def validate_claimitem_limitation_fail(claim, claimitem):
 
     if claimitem.item.patient_category & patient_category_mask != patient_category_mask:
         claimitem.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
-        return [{'code': REJECTION_REASON_CATEGORY_LIMITATION,
-                 'message': _("claim.validation.limitation.item") % {
-                     'code': claim.code,
-                     'item': str(claimitem.item),
-                     'patient_category': claimitem.item.patient_category,
-                     'patient_category_mask': patient_category_mask},
-                 'detail': claim.uuid}]
-    else:
-        return []
 
 
 def validate_claimservice_limitation_fail(claim, claimservice):
@@ -265,15 +239,43 @@ def validate_claimservice_limitation_fail(claim, claimservice):
         claim.insuree, target_date)
     if claimservice.service.patient_category & patient_category_mask != patient_category_mask:
         claimservice.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
-        return [{'code': REJECTION_REASON_CATEGORY_LIMITATION,
-                 'message': _("claim.validation.limitation.service") % {
-                     'code': claim.code,
-                     'service': str(claimservice.service),
-                     'patient_category': claimservice.service.patient_category,
-                     'patient_category_mask': patient_category_mask},
-                 'detail': claim.uuid}]
-    else:
-        return []
+
+
+def frequency_check(qs, claim, elt):
+    td = claim.date_from if not claim.date_to else claim.date_to
+    delta = datetimedelta(days=elt.frequency)
+    return qs.filter(claim__in=Claim.objects
+                     .filter(validity_to__isnull=True, status__gt=Claim.STATUS_ENTERED, insuree_id=claim.insuree_id)
+                     .annotate(target_date=Coalesce("date_to", "date_from"))
+                     .filter(target_date__gte=td - delta)
+                     .exclude(uuid=claim.uuid)
+                     .order_by('-date_from')
+                     ).exists()
+
+
+def validate_claimitem_frequency(claim, claimitem):
+    if claimitem.item.frequency and \
+            frequency_check(ClaimItem.objects.filter(item=claimitem.item), claim, claimitem.item):
+        claimitem.rejection_reason = REJECTION_REASON_FREQUENCY_FAILURE
+
+
+def validate_claimservice_frequency(claim, claimservice):
+    if claimservice.service.frequency and \
+            frequency_check(ClaimService.objects.filter(service=claimservice.service), claim, claimservice.service):
+        claimservice.rejection_reason = REJECTION_REASON_FREQUENCY_FAILURE
+
+
+def validate_target_date(claim):
+    errors = []
+    if (claim.date_from is None and claim.date_to is None) \
+            or claim.date_claimed < claim.date_from:
+        claim.reject(REJECTION_REASON_TARGET_DATE)
+        errors += [{'code': REJECTION_REASON_TARGET_DATE,
+                    'message': _("claim.validation.target_date") % {
+                        'code': claim.code
+                    },
+                    'detail': claim.uuid}]
+    return errors
 
 
 def validate_family(claim, insuree):
@@ -301,10 +303,10 @@ def validate_family(claim, insuree):
     return errors
 
 
-def validate_item_product_family(claimitem, target_date, item, family_id, insuree_id, adult):
+def validate_item_product_family(claimitem, target_date, item, insuree_id, adult):
     errors = []
     found = False
-    with get_products(target_date, item.id, family_id, insuree_id, adult, items=True) as cursor:
+    with get_products(target_date, item.id, insuree_id, adult, 'Item') as cursor:
         for (product_id, product_item_id, insuree_policy_effective_date, policy_effective_date, expiry_date,
              policy_stage) in cursor.fetchall():
             found = True
@@ -367,10 +369,10 @@ def validate_item_product_family(claimitem, target_date, item, family_id, insure
 
 
 # noinspection DuplicatedCode
-def validate_service_product_family(claimservice, target_date, service, family_id, insuree_id, adult, base_category):
+def validate_service_product_family(claimservice, target_date, service, insuree_id, adult, base_category):
     errors = []
     found = False
-    with get_products(target_date, service.id, family_id, insuree_id, adult, items=False) as cursor:
+    with get_products(target_date, service.id, insuree_id, adult, 'Service') as cursor:
         for (product_id, product_service_id, insuree_policy_effective_date, policy_effective_date, expiry_date,
              policy_stage) in cursor.fetchall():
             found = True
@@ -529,37 +531,40 @@ def get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effec
     return queryset
 
 
-def get_products(target_date, item_id, family_id, insuree_id, adult, items=True):
+def get_products(target_date, elt_id, insuree_id, adult, item_or_service):
     cursor = connection.cursor()
-    item_or_product = "Item" if items else "Service"
     waiting_period = "WaitingPeriodAdult" if adult else "WaitingPeriodChild"
-    cursor.execute(f"""
-                    SELECT  TblProduct.ProdID , tblProduct{item_or_product}s.Prod{item_or_product}ID ,
-                        tblInsureePolicy.EffectiveDate,
-                        tblPolicy.EffectiveDate, tblInsureePolicy.ExpiryDate, tblPolicy.PolicyStage
-                        FROM tblFamilies
-                         INNER JOIN tblPolicy ON tblFamilies.FamilyID = tblPolicy.FamilyID
-                         INNER JOIN tblProduct ON tblPolicy.ProdID = tblProduct.ProdID
-                         INNER JOIN tblProduct{item_or_product}s
-                            ON tblProduct.ProdID = tblProduct{item_or_product}s.ProdID
-                         INNER JOIN tblInsureePolicy ON tblPolicy.PolicyID = tblInsureePolicy.PolicyId
-                        WHERE (tblPolicy.EffectiveDate <= %s)
-                        AND (tblPolicy.ExpiryDate >= %s)
-                        AND (tblPolicy.ValidityTo IS NULL)
-                        AND (tblProduct{item_or_product}s.ValidityTo IS NULL)
-                        AND (tblPolicy.PolicyStatus = {Policy.STATUS_ACTIVE}
-                            OR tblPolicy.PolicyStatus = {Policy.STATUS_EXPIRED})
-                        AND (tblProduct{item_or_product}s.{item_or_product}ID = %s)
-                        AND (tblFamilies.FamilyID = %s)
-                        AND (tblProduct.ValidityTo IS NULL)
-                        AND (tblInsureePolicy.EffectiveDate <= %s)
-                        AND (tblInsureePolicy.ExpiryDate >= %s)
-                        AND (tblInsureePolicy.InsureeId = %s)
-                        AND (tblInsureePolicy.ValidityTo IS NULL)
-                        ORDER BY DATEADD(m,ISNULL(tblProduct{item_or_product}s.{waiting_period}, 0),
-                         tblInsureePolicy.EffectiveDate)
-                   """,
-                   [target_date, target_date, item_id, family_id, target_date, target_date, insuree_id])
+    # about deductions and ceilings...
+    # tblProduct.DedInsuree, tblProduct.DedOPInsuree, tblProduct.DedIPInsuree,
+    # tblProduct.MaxInsuree, tblProduct.MaxOPInsuree, tblProduct.MaxIPInsuree,
+    # tblProduct.DedTreatment, tblProduct.DedOPTreatment, tblProduct.DedIPTreatment,
+    # tblProduct.MaxTreatment, tblProduct.MaxOPTreatment, tblProduct.MaxIPTreatment,
+    # tblProduct.DedPolicy, tblProduct.DedOPPolicy, tblProduct.DedIPPolicy,
+    # tblProduct.MaxPolicy, tblProduct.MaxOPPolicy, tblProduct.MaxIPPolicy
+    sql = f"""
+        SELECT 
+            tblProduct.ProdID, tblProduct{item_or_service}s.Prod{item_or_service}ID,            
+            tblInsureePolicy.EffectiveDate,
+            tblPolicy.EffectiveDate,
+            tblInsureePolicy.ExpiryDate,
+            tblPolicy.PolicyStage
+        FROM tblInsuree 
+            INNER JOIN tblInsureePolicy ON tblInsureePolicy.InsureeID = tblInsuree.InsureeID
+            LEFT OUTER JOIN tblPolicy
+            LEFT OUTER JOIN  tblProduct ON tblPolicy.ProdID = tblProduct.ProdID
+            INNER JOIN tblProduct{item_or_service}s ON tblProduct.ProdID = tblProduct{item_or_service}s.ProdID            
+            RIGHT OUTER JOIN tblFamilies ON tblPolicy.FamilyID = tblFamilies.FamilyID
+            ON tblInsuree.FamilyID = tblFamilies.FamilyID
+        WHERE (tblInsuree.ValidityTo IS NULL) AND (tblInsuree.InsureeId = %s)
+            AND (tblInsureePolicy.PolicyId = tblPolicy.PolicyID)
+            AND (tblPolicy.ValidityTo IS NULL) AND (tblPolicy.EffectiveDate <= %s) AND (tblPolicy.ExpiryDate >= %s)
+            AND (tblPolicy.PolicyStatus in ({Policy.STATUS_ACTIVE}, {Policy.STATUS_EXPIRED}))
+            AND (tblProduct{item_or_service}s.ValidityTo IS NULL) AND (tblProduct{item_or_service}s.{item_or_service}ID = %s)
+        ORDER BY DATEADD(m,ISNULL(tblProduct{item_or_service}s.{waiting_period}, 0),
+            tblPolicy.EffectiveDate)            
+    """
+    cursor.execute(sql,
+                   [insuree_id, target_date, target_date, elt_id])
     return cursor
 
 
@@ -604,7 +609,7 @@ def get_claim_category(claim):
     return claim_category
 
 
-def validate_assign_prod_to_claimitems(claim):
+def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
     """
     This method checks the limits for the family and the insuree, child or adult for their limits
     between the copay percentage and fixed limit.
@@ -615,189 +620,114 @@ def validate_assign_prod_to_claimitems(claim):
         "E": ("limitation_type_e", "limit_adult_e", "limit_child_e"),
         "R": ("limitation_type_r", "limit_adult_r", "limit_child_r"),
     }
-    errors = []
     target_date = claim.date_to if claim.date_to else claim.date_from
     visit_type = claim.visit_type if claim.visit_type else "O"
     adult = claim.insuree.is_adult(target_date)
-    (limitation_type_field, limit_adult,
-     limit_child) = visit_type_field[visit_type]
+    (limitation_type_field, limit_adult, limit_child) = visit_type_field
+    if elt.price_asked \
+            and elt.price_approved \
+            and elt.price_asked > elt.price_approved:
+        claim_price = elt.price_asked
+    else:
+        claim_price = elt.price_approved
 
+    product_elt_c = _query_product_item_service_limit(
+        target_date, claim.insuree.family_id, elt_qs, limitation_type_field, "C",
+        limit_adult if adult else limit_child
+    )
+    product_elt_f = _query_product_item_service_limit(
+        target_date, claim.insuree.family_id, elt_qs, limitation_type_field, "F",
+        limit_adult if adult else limit_child
+    )
+    if not product_elt_c and not product_elt_f:
+        elt.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
+        elt.save()
+        return[{'code': REJECTION_REASON_NO_PRODUCT_FOUND,
+                'message': _("claim.validation.assign_prod.elt.no_product_code") % {
+                    'code': claim.code,
+                    'elt': str(elt_ref)},
+                'detail': claim.uuid}]
+
+    if product_elt_f:
+        fixed_limit = getattr(
+            product_elt_f, limit_adult if adult else limit_child)
+    else:
+        fixed_limit = None
+
+    if product_elt_c:
+        co_sharing_percent = getattr(
+            product_elt_c, limit_adult if adult else limit_child)
+    else:
+        co_sharing_percent = None
+
+    # if both products exist, find the best one to use
+    if product_elt_c and product_elt_f:
+        if fixed_limit == 0 or fixed_limit > claim_price:
+            product_elt = product_elt_f
+            product_elt_c = None  # used in condition below
+        else:
+            if 100 - co_sharing_percent > 0:
+                product_amount_own_f = claim_price - fixed_limit
+                product_amount_own_c = (
+                    1 - co_sharing_percent/100) * claim_price
+                if product_amount_own_c > product_amount_own_f:
+                    product_elt = product_elt_f
+                    product_elt_c = None  # used in condition below
+                else:
+                    product_elt = product_elt_c
+            else:
+                product_elt = product_elt_c
+    else:
+        if product_elt_c:
+            product_elt = product_elt_c
+        else:
+            product_elt = product_elt_f
+            product_elt_c = None
+
+    elt.product_id = product_elt.product_id
+    elt.policy = product_elt\
+        .product\
+        .policies\
+        .filter(effective_date__lte=target_date)\
+        .filter(expiry_date__gte=target_date)\
+        .filter(validity_to__isnull=True)\
+        .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
+        .filter(family_id=claim.insuree.family_id)\
+        .first()
+    elt.price_origin = product_elt.price_origin
+    # The original code also sets claimservice.price_adjusted but it also always NULL
+    if product_elt_c:
+        elt.limitation = "C"
+        elt.limitation_value = co_sharing_percent
+    else:
+        elt.limitation = "F"
+        elt.limitation_value = fixed_limit
+    elt.save()
+    return []
+
+
+def validate_assign_prod_to_claimitems_and_services(claim):
+    errors = []
     for claimitem in claim.items.filter(validity_to__isnull=True) \
             .filter(rejection_reason=0).filter(rejection_reason__isnull=True):
-        if claimitem.price_asked \
-                and claimitem.price_approved \
-                and claimitem.price_asked > claimitem.price_approved:
-            claim_price = claimitem.price_asked
-        else:
-            claim_price = claimitem.price_approved
+        errors += validate_assign_prod_elt(
+            claim, claimitem, claimitem.item,
+            ProductItem.objects.filter(item_id=claimitem.item_id))
 
-        product_item_c = _query_product_item_service_limit(
-            target_date, claim.insuree.family_id, claimitem.item, None, limitation_type_field,
-            limit_adult if adult else limit_child, "C"
-        )
-        product_item_f = _query_product_item_service_limit(
-            target_date, claim.insuree.family_id, claimitem.item, None, limitation_type_field,
-            limit_adult if adult else limit_child, "F"
-        )
-        if not product_item_c and not product_item_f:
-            claimitem.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
-            errors.append({'code': REJECTION_REASON_NO_PRODUCT_FOUND,
-                           'message': _("claim.validation.assign_prod.item.no_product_code") % {
-                               'code': claim.code,
-                               'item': str(claimitem.item)},
-                           'detail': claim.uuid})
-            continue
-
-        if product_item_f:
-            fixed_limit = getattr(
-                product_item_f, limit_adult if adult else limit_child)
-        else:
-            fixed_limit = None
-        if product_item_c:
-            co_sharing_percent = getattr(
-                product_item_c, limit_adult if adult else limit_child)
-        else:
-            co_sharing_percent = None
-
-        # if both products exist, find the best one to use
-        if product_item_c and product_item_f:
-            if fixed_limit == 0 or fixed_limit > claim_price:
-                product_item = product_item_f
-                product_item_c = None  # used in condition below
-            else:
-                if 100 - co_sharing_percent > 0:
-                    product_amount_own_f = claim_price - fixed_limit
-                    product_amount_own_c = (
-                        1 - co_sharing_percent/100) * claim_price
-                    if product_amount_own_c > product_amount_own_f:
-                        product_item = product_item_f
-                        product_item_c = None  # used in condition below
-                    else:
-                        product_item = product_item_c
-                else:
-                    product_item = product_item_c
-        else:
-            if product_item_c:
-                product_item = product_item_c
-            else:
-                product_item = product_item_f
-                product_item_c = None
-
-        claimitem.product_id = product_item.product_id
-        claimitem.policy = product_item\
-            .product\
-            .policies\
-            .filter(effective_date__lte=target_date)\
-            .filter(expiry_date__gte=target_date)\
-            .filter(validity_to__isnull=True)\
-            .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
-            .filter(family_id=claim.insuree.family_id)\
-            .first()
-        claimitem.price_origin = product_item.price_origin
-        # The original code also sets claimitem.price_adjusted but it also always NULL
-        if product_item_c:
-            claimitem.limitation = "C"
-            claimitem.limitation_value = co_sharing_percent
-        else:
-            claimitem.limitation = "F"
-            claimitem.limitation_value = fixed_limit
-        claimitem.save()
-
-    # TODO: this code is duplicated. They will be merged after the behaviour has been verified in isolation. Most
-    # of the code can be used indifferently with services rather than items.
     for claimservice in claim.services.filter(validity_to__isnull=True) \
             .filter(rejection_reason=0).filter(rejection_reason__isnull=True):
-        claim_service.save_history()
-        if claimservice.price_asked \
-                and claimservice.price_approved \
-                and claimservice.price_asked > claimservice.price_approved:
-            claim_price = claimservice.price_asked
-        else:
-            claim_price = claimservice.price_approved
-
-        product_service_c = _query_product_item_service_limit(
-            target_date, claim.insuree.family_id, None, claimservice.service, limitation_type_field,
-            limit_adult if adult else limit_child, "C"
-        )
-        product_service_f = _query_product_item_service_limit(
-            target_date, claim.insuree.family_id, None, claimservice.service, limitation_type_field,
-            limit_adult if adult else limit_child, "F"
-        )
-
-        if not product_service_c and not product_service_f:
-            claimservice.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
-            errors.append({'code': REJECTION_REASON_NO_PRODUCT_FOUND,
-                           'message': _("claim.validation.assign_prod.service.no_product_code") % {
-                               'code': claim.code,
-                               'service': str(claimservice.service)},
-                           'detail': claim.uuid})
-            continue
-
-        if product_service_f:
-            fixed_limit = getattr(
-                product_service_f, limit_adult if adult else limit_child)
-        else:
-            fixed_limit = None
-        if product_service_c:
-            co_sharing_percent = getattr(
-                product_service_c, limit_adult if adult else limit_child)
-        else:
-            co_sharing_percent = None
-
-        # if both products exist, find the best one to use
-        if product_service_c and product_service_f:
-            if fixed_limit == 0 or fixed_limit > claim_price:
-                product_service = product_service_f
-                product_service_c = None  # used in condition below
-            else:
-                if 100 - co_sharing_percent > 0:
-                    product_amount_own_f = claim_price - fixed_limit
-                    product_amount_own_c = (
-                        1 - co_sharing_percent/100) * claim_price
-                    if product_amount_own_c > product_amount_own_f:
-                        product_service = product_service_f
-                        product_service_c = None  # used in condition below
-                    else:
-                        product_service = product_service_c
-                else:
-                    product_service = product_service_c
-        else:
-            if product_service_c:
-                product_service = product_service_c
-            else:
-                product_service = product_service_f
-                product_service_c = None
-
-        claimservice.product_id = product_service.product_id
-        claimservice.policy = product_service\
-            .product\
-            .policies\
-            .filter(effective_date__lte=target_date)\
-            .filter(expiry_date__gte=target_date)\
-            .filter(validity_to__isnull=True)\
-            .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
-            .filter(family_id=claim.insuree.family_id)\
-            .first()
-        claimservice.price_origin = product_service.price_origin
-        # The original code also sets claimservice.price_adjusted but it also always NULL
-        if product_service_c:
-            claimservice.limitation = "C"
-            claimservice.limitation_value = co_sharing_percent
-        else:
-            claimservice.limitation = "F"
-            claimservice.limitation_value = fixed_limit
-        claimservice.save()
+        errors += validate_assign_prod_elt(
+            claim,
+            claimservice, claimservice.service,
+            ProductService.objects.filter(service_id=claimservice_id))
 
     return errors
 
 
-def _query_product_item_service_limit(target_date, family_id, item_id, service_id, limitation_field,
-                                      limit_ordering, limitation_type):
-    if item_id:
-        qs = ProductItem.objects.filter(item_id=item_id)
-    else:
-        qs = ProductService.objects.filter(service_id=service_id)
-    return qs \
+def _query_product_item_service_limit(target_date, family_id, elt_qs,
+                                      limitation_field, limitation_type,
+                                      limit_ordering):
+    return elt_qs \
         .filter(product__policies__family_id=family_id) \
         .filter(product__policies__effective_date__lte=target_date) \
         .filter(product__policies__expiry_date__gte=target_date) \
