@@ -5,7 +5,7 @@ from copy import copy
 import graphene
 import graphene_django_optimizer as gql_optimizer
 from .apps import ClaimConfig
-from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems
+from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
 from django.conf import settings
@@ -484,6 +484,11 @@ class CreateClaimMutation(OpenIMISMutation):
                     _("claim.mutation.authentication_required"))
             if not user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
+            # Claim code unicity should be enforced at DB Scheme level...
+            if Claim.objects.filter(code=data['code']).exists():
+                return [{
+                    'message': _("claim.mutation.duplicated_claim_code") % {'code': data['code']},
+                }]
             data['audit_user_id'] = user.id_for_audit
             data['status'] = Claim.STATUS_ENTERED
             from core.utils import TimeUtils
@@ -632,10 +637,9 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 }
                 continue
             claim.save_history()
-            c_errors += validate_claim(claim)
-            if len(c_errors) == 0:
-                c_errors += set_claim_submitted(claim, errors, user)
-            if (len(c_errors)):
+            c_errors += validate_claim(claim, True)
+            c_errors += set_claim_submitted(claim, c_errors, user)
+            if c_errors:
                 errors.append({
                     'title': claim.code,
                     'list': c_errors
@@ -876,7 +880,6 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
             claim.save()
             return None
         except Exception as exc:
-            print("EXC %s" % str(exc))
             return [{
                 'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code},
                 'detail': str(exc)}]
@@ -912,12 +915,11 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 }
                 continue
             claim.save_history()
-            c_errors += validate_claim(claim)
+            c_errors += validate_claim(claim, False)
             if len(c_errors) == 0:
-                c_errors = validate_assign_prod_to_claimitems(claim)
-            if len(c_errors) == 0:
-                c_errors += set_claim_processed(claim, user)
-            if len(c_errors):
+                c_errors = validate_assign_prod_to_claimitems_and_services(claim)
+            c_errors += set_claim_processed(claim, c_errors, user)
+            if c_errors:
                 errors.append({
                     'title': claim.code,
                     'list': c_errors
@@ -965,42 +967,15 @@ class DeleteClaimsMutation(OpenIMISMutation):
 
 def set_claim_submitted(claim, errors, user):
     try:
-        # we went over the maximum for a category, all items and services in the claim are rejected
-        over_category_errors = [
-            x for x in errors if x['code'] in [11, 12, 13, 14, 15, 19]]
-        if len(over_category_errors) > 0:
-            rtn_items_rejected = claim.items.filter(validity_to__isnull=True)\
-                .update(status=ClaimItem.STATUS_REJECTED,
-                        qty_approved=0,
-                        rejection_reason=over_category_errors[0]['code'])
-            rtn_services_rejected = claim.services.filter(validity_to__isnull=True)\
-                .update(status=ClaimService.STATUS_REJECTED,
-                        qty_approved=0,
-                        rejection_reason=over_category_errors[0]['code'])
+        if errors:
+            claim.status = Claim.STATUS_REJECTED
         else:
-            rtn_items_rejected = claim.items.filter(validity_to__isnull=True)\
-                .exclude(rejection_reason=0).exclude(rejection_reason__isnull=True)\
-                .update(status=ClaimItem.STATUS_REJECTED, qty_approved=0)
-            rtn_services_rejected = claim.services.filter(validity_to__isnull=True)\
-                .exclude(rejection_reason=0).exclude(rejection_reason__isnull=True)\
-                .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
-
-        rtn_items_passed = claim.items.filter(validity_to__isnull=True)\
-            .exclude(status=ClaimItem.STATUS_REJECTED)\
-            .update(status=ClaimItem.STATUS_PASSED)
-        rtn_services_passed = claim.services.filter(validity_to__isnull=True)\
-            .exclude(status=ClaimService.STATUS_REJECTED)\
-            .update(status=ClaimService.STATUS_PASSED)
-
-        if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
             claim.approved = approved_amount(claim)
             claim.status = Claim.STATUS_CHECKED
-        else:  # no item nor service passed, rejecting
-            claim.status = Claim.STATUS_REJECTED
-        claim.audit_user_id_submit = user.id_for_audit
-        from core.utils import TimeUtils
-        claim.submit_stamp = TimeUtils.now()
-        claim.category = get_claim_category(claim)
+            claim.audit_user_id_submit = user.id_for_audit
+            from core.utils import TimeUtils
+            claim.submit_stamp = TimeUtils.now()
+            claim.category = get_claim_category(claim)
         claim.save()
         return []
     except Exception as exc:
@@ -1025,25 +1000,22 @@ def set_claim_deleted(claim):
         }
 
 
-def set_claim_processed(claim, user):
+def set_claim_processed(claim, errors, user):
     try:
-        rtn_items_passed = claim.items.filter(status=ClaimItem.STATUS_PASSED)\
-            .filter(validity_to__isnull=True).count()
-        rtn_services_passed = claim.services.filter(status=ClaimService.STATUS_PASSED)\
-            .filter(validity_to__isnull=True).count()
-
-        if rtn_items_passed > 0 or rtn_services_passed > 0:  # update claim passed
+        if errors:
+            claim.status = Claim.STATUS_REJECTED
+        else:
             claim.status = Claim.STATUS_PROCESSED
             claim.audit_user_id_process = user.id_for_audit
             from core.utils import TimeUtils
             claim.process_stamp = TimeUtils.now()
-            claim.save()
+        claim.save()
         return []
     except Exception as ex:
         return {
             'title': claim.code,
             'list': [{'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
-                    'detail': claim.uuid}]
+                      'detail': claim.uuid}]
         }
 
 
