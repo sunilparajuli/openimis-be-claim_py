@@ -1,4 +1,4 @@
-from core.schema import signal_mutation_module
+from core.schema import signal_mutation_module_validate
 import json
 import base64
 from copy import copy
@@ -1050,4 +1050,4 @@ def on_claim_mutation(sender, **kwargs):
 
 
 def bind_signals():
-    signal_mutation_module["claim"].connect(on_claim_mutation)
+    signal_mutation_module_validate["claim"].connect(on_claim_mutation)

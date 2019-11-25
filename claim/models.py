@@ -1,5 +1,7 @@
 from core import fields
 import uuid
+
+from django import dispatch
 from django.db import models
 from core import models as core_models
 from insuree import models as insuree_models
@@ -69,6 +71,9 @@ class Feedback(core_models.VersionedModel):
     class Meta:
         managed = False
         db_table = 'tblFeedback'
+
+
+signal_claim_rejection = dispatch.Signal(providing_args=["claim"])
 
 
 class Claim(core_models.VersionedModel):
@@ -186,6 +191,7 @@ class Claim(core_models.VersionedModel):
             rejection_reason=rejection_code)
         updated_services = self.services.filter(
             validity_to__isnull=True).update(rejection_reason=rejection_code)
+        signal_claim_rejection.send(sender=self.__class__, claim=self)
         return updated_items + updated_services
 
     def save_history(self, **kwargs):
