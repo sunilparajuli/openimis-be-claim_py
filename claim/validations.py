@@ -9,7 +9,7 @@ from django.db.models import Sum, Q
 from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
 from medical.models import Service
-from medical_pricelist.models import ItemPricelistDetail, ServicePricelistDetail
+from medical_pricelist.models import ItemsPricelistDetail, ServicesPricelistDetail
 from policy.models import Policy
 from product.models import Product, ProductItem, ProductService
 from .apps import ClaimConfig
@@ -169,22 +169,22 @@ def validate_claimservice_validity(claimservice):
 
 
 def validate_claimitem_in_price_list(claim, claimitem):
-    pricelist_detail = ItemPricelistDetail.objects\
-        .filter(item_pricelist=claim.health_facility.item_pricelist)\
+    pricelist_detail = ItemsPricelistDetail.objects\
+        .filter(items_pricelist=claim.health_facility.items_pricelist)\
         .filter(item_id=claimitem.item_id)\
         .filter(validity_to__isnull=True)\
-        .filter(item_pricelist__validity_to__isnull=True)\
+        .filter(items_pricelist__validity_to__isnull=True)\
         .first()
     if not pricelist_detail:
         claimitem.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
 
 
 def validate_claimservice_in_price_list(claim, claimservice):
-    pricelist_detail = ServicePricelistDetail.objects\
-        .filter(service_pricelist=claim.health_facility.service_pricelist)\
+    pricelist_detail = ServicesPricelistDetail.objects\
+        .filter(services_pricelist=claim.health_facility.services_pricelist)\
         .filter(service_id=claimservice.service_id)\
         .filter(validity_to__isnull=True)\
-        .filter(service_pricelist__validity_to__isnull=True)\
+        .filter(services_pricelist__validity_to__isnull=True)\
         .first()
     if not pricelist_detail:
         claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
