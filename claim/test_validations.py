@@ -6,7 +6,7 @@ from location.models import HealthFacility
 from medical.models import Service, Item
 from product.models import Product, ProductService
 from policy.models import Policy
-from medical_pricelist.models import ServicePricelistDetail
+from medical_pricelist.models import ServicesPricelistDetail
 
 
 # default arguments should not pass a list or a dict because they're mutable but we don't risk mutating them here:
@@ -98,9 +98,9 @@ class ValidationTest(TestCase):
     @staticmethod
     def _add_service_to_hf_pricelist(service, hf_id=18, custom_props={}):
         hf = HealthFacility.objects.get(pk=hf_id)
-        return ServicePricelistDetail.objects.create(
+        return ServicesPricelistDetail.objects.create(
             **{
-                "service_pricelist": hf.service_pricelist,
+                "services_pricelist": hf.services_pricelist,
                 "service": service,
                 "validity_from": "2019-01-01",
                 "audit_user_id": -1,
@@ -372,7 +372,7 @@ class ValidationTest(TestCase):
 
     def test_validate_pricelist_hf1(self):
         # When the claimitem points to a pricelist that doesn't correspond to the claim HF
-        hf_without_pricelist = HealthFacility.objects.filter(item_pricelist__id__isnull=True).first()
+        hf_without_pricelist = HealthFacility.objects.filter(items_pricelist__id__isnull=True).first()
         self.assertIsNotNone(hf_without_pricelist, "This test requires a health facility without a price list item")
         # Given
         claim = self._create_test_claim({"health_facility_id": hf_without_pricelist.id})

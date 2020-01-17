@@ -1,61 +1,19 @@
-from core.schema import signal_mutation_module_validate
-<<<<<<< HEAD
-import json
-import base64
 from copy import copy
 import graphene
-import graphene_django_optimizer as gql_optimizer
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
-=======
-import graphene
-import graphene_django_optimizer as gql_optimizer
->>>>>>> feature/OMT-77
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
+from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
-from graphene_django.filter import DjangoFilterConnectionField
+from graphene import InputObjectType
+from location.schema import userDistricts
+from .models import Claim, Feedback, ClaimItem, ClaimService, ClaimAttachment
 
-from .gql_queries import *
-from .gql_mutations import *
-
-
-class Query(graphene.ObjectType):
-    claims = OrderedDjangoFilterConnectionField(
-        ClaimGQLType,
-        codeIsNot=graphene.String(),
-        orderBy=graphene.List(of_type=graphene.String))
-    claim_attachments = DjangoFilterConnectionField(ClaimAttachmentGQLType)
-    claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
-    claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
-
-    def resolve_claims(self, info, **kwargs):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
-            raise PermissionDenied(_("unauthorized"))
-        query = Claim.objects
-        code_is_not = kwargs.get('codeIsNot', None)
-        if code_is_not:
-            query = query.exclude(code=code_is_not)
-        return gql_optimizer.query(query.all(), info)
-
-    def resolve_claim_attachments(self, info, **kwargs):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
-            raise PermissionDenied(_("unauthorized"))
-        pass
-
-    def resolve_claim_admins(self, info, **kwargs):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
-            raise PermissionDenied(_("unauthorized"))
-        pass
-
-    def resolve_claim_officers(self, info, **kwargs):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
-            raise PermissionDenied(_("unauthorized"))
-        pass
-
-
-<<<<<<< HEAD
 class ClaimItemInputType(InputObjectType):
     id = graphene.Int(required=False)
     item_id = graphene.Int(required=True)
@@ -329,7 +287,7 @@ class CreateClaimMutation(OpenIMISMutation):
             # TODO move this verification to OIMutation
             if type(user) is AnonymousUser or not user.id:
                 raise ValidationError(
-                    _("claim.mutation.authentication_required"))
+                    _("mutation.authentication_required"))
             if not user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
             # Claim code unicity should be enforced at DB Scheme level...
@@ -365,7 +323,7 @@ class UpdateClaimMutation(OpenIMISMutation):
             # TODO move this verification to OIMutation
             if type(user) is AnonymousUser or not user.id:
                 raise ValidationError(
-                    _("claim.mutation.authentication_required"))
+                    _("mutation.authentication_required"))
             if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
             data['audit_user_id'] = user.id_for_audit
@@ -431,14 +389,14 @@ class DeleteClaimAttachmentMutation(OpenIMISMutation):
             if settings.ROW_SECURITY:
                 from location.schema import userDistricts
                 dist = userDistricts(user)
-                queryset = queryset.select_related("claim")\
+                queryset = queryset.select_related("claim") \
                     .filter(
                     claim__health_facility__location__id__in=[
                         l.location.id for l in dist]
                 )
             id = data['id']
-            attachment = queryset\
-                .filter(id=id)\
+            attachment = queryset \
+                .filter(id=id) \
                 .first()
             if not attachment:
                 raise PermissionDenied(_("unauthorized"))
@@ -469,11 +427,11 @@ class SubmitClaimsMutation(OpenIMISMutation):
         errors = []
         for claim_uuid in data["uuids"]:
             c_errors = []
-            claim = Claim.objects\
+            claim = Claim.objects \
                 .filter(uuid=claim_uuid,
-                        validity_to__isnull=True)\
-                .prefetch_related("items")\
-                .prefetch_related("services")\
+                        validity_to__isnull=True) \
+                .prefetch_related("items") \
+                .prefetch_related("services") \
                 .first()
             if claim is None:
                 errors += {
@@ -500,9 +458,9 @@ class SubmitClaimsMutation(OpenIMISMutation):
 def set_claims_status(uuids, field, status):
     errors = []
     for claim_uuid in uuids:
-        claim = Claim.objects\
+        claim = Claim.objects \
             .filter(uuid=claim_uuid,
-                    validity_to__isnull=True)\
+                    validity_to__isnull=True) \
             .first()
         if claim is None:
             errors += [{'message': _(
@@ -515,7 +473,7 @@ def set_claims_status(uuids, field, status):
         except Exception as exc:
             errors += [
                 {'message': _("claim.mutation.failed_to_change_status_of_claim") %
-                 {'code': claim.code}}]
+                            {'code': claim.code}}]
 
     return errors
 
@@ -670,18 +628,18 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
 
 
 def approved_amount(claim):
-    app_item_value = claim.items\
-        .filter(validity_to__isnull=True)\
-        .filter(status=ClaimItem.STATUS_PASSED)\
-        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked"))\
+    app_item_value = claim.items \
+        .filter(validity_to__isnull=True) \
+        .filter(status=ClaimItem.STATUS_PASSED) \
+        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
         .aggregate(Sum("value"))
-    app_service_value = claim.services\
-        .filter(validity_to__isnull=True)\
-        .filter(status=ClaimService.STATUS_PASSED)\
-        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked"))\
+    app_service_value = claim.services \
+        .filter(validity_to__isnull=True) \
+        .filter(status=ClaimService.STATUS_PASSED) \
+        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
         .aggregate(Sum("value"))
     return (app_item_value['value__sum'] if app_item_value['value__sum'] else 0) + \
-        (app_service_value['value__sum']
+           (app_service_value['value__sum']
             if app_service_value['value__sum'] else 0)
 
 
@@ -865,41 +823,3 @@ def set_claim_processed(claim, errors, user):
             'list': [{'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
                       'detail': claim.uuid}]
         }
-
-
-=======
->>>>>>> feature/OMT-77
-class Mutation(graphene.ObjectType):
-    create_claim = CreateClaimMutation.Field()
-    update_claim = UpdateClaimMutation.Field()
-    create_claim_attachment = CreateClaimAttachmentMutation.Field()
-    delete_claim_attachment = DeleteClaimAttachmentMutation.Field()
-    submit_claims = SubmitClaimsMutation.Field()
-    select_claims_for_feedback = SelectClaimsForFeedbackMutation.Field()
-    deliver_claim_feedback = DeliverClaimFeedbackMutation.Field()
-    bypass_claims_feedback = BypassClaimsFeedbackMutation.Field()
-    skip_claims_feedback = SkipClaimsFeedbackMutation.Field()
-    select_claims_for_review = SelectClaimsForReviewMutation.Field()
-    deliver_claim_review = DeliverClaimReviewMutation.Field()
-    bypass_claims_review = BypassClaimsReviewMutation.Field()
-    skip_claims_review = SkipClaimsReviewMutation.Field()
-    process_claims = ProcessClaimsMutation.Field()
-    delete_claims = DeleteClaimsMutation.Field()
-
-
-def on_claim_mutation(sender, **kwargs):
-    uuids = kwargs['data'].get('uuids', [])
-    if not uuids:
-        uuid = kwargs['data'].get('claim_uuid', None)
-        uuids = [uuid] if uuid else []
-    if not uuids:
-        return []
-    impacted_claims = Claim.objects.filter(uuid__in=uuids).all()
-    for claim in impacted_claims:
-        ClaimMutation.objects.create(
-            claim=claim, mutation_id=kwargs['mutation_log_id'])
-    return []
-
-
-def bind_signals():
-    signal_mutation_module_validate["claim"].connect(on_claim_mutation)
