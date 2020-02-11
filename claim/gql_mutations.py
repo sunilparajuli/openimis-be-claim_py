@@ -608,6 +608,21 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
             raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', 16)
 
+class DeliverClaimsReviewMutation(OpenIMISMutation):
+    """
+    Mark claim review as delivered for one or several claims
+    """
+    _mutation_module = "claim"
+    _mutation_class = "DeliverClaimsReviewMutation"
+
+    class Input(OpenIMISMutation.Input):
+        uuids = graphene.List(graphene.String)
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
+            raise PermissionDenied(_("unauthorized"))
+        return set_claims_status(data['uuids'], 'review_status', 8)
 
 class SkipClaimsReviewMutation(OpenIMISMutation):
     """
@@ -643,12 +658,12 @@ def approved_amount(claim):
             if app_service_value['value__sum'] else 0)
 
 
-class DeliverClaimReviewMutation(OpenIMISMutation):
+class SaveClaimReviewMutation(OpenIMISMutation):
     """
-    Deliver review of a claim (items and services)
+    Save the review of a claim (items and services)
     """
     _mutation_module = "claim"
-    _mutation_class = "DeliverClaimReviewMutation"
+    _mutation_class = "SaveClaimReviewMutation"
 
     class Input(OpenIMISMutation.Input):
         claim_uuid = graphene.String(required=False, read_only=True)
@@ -680,7 +695,6 @@ class DeliverClaimReviewMutation(OpenIMISMutation):
                 if service['status'] == ClaimService.STATUS_PASSED:
                     all_rejected = False
             claim.approved = approved_amount(claim)
-            claim.review_status = 8
             if all_rejected:
                 claim.status = Claim.STATUS_REJECTED
             claim.save()
