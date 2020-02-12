@@ -51,6 +51,10 @@ class ClaimOfficerGQLType(DjangoObjectType):
         }
         connection_class = ExtendedConnection
 
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        queryset = queryset.filter(*filter_validity())
+        return queryset
 
 class ClaimGQLType(DjangoObjectType):
     """
