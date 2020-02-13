@@ -7,6 +7,7 @@ DEFAULT_CFG = {
     "gql_query_claims_perms": ["111001"],
     "gql_query_claim_admins_perms": [],
     "gql_query_claim_officers_perms": [],
+    "gql_query_claim_diagnosis_variance_only_on_existing": True,
     "gql_mutation_create_claims_perms": ["111002"],
     "gql_mutation_update_claims_perms": ["111010"],
     "gql_mutation_submit_claims_perms": ["111007"],
@@ -31,6 +32,7 @@ class ClaimConfig(AppConfig):
     gql_query_claims_perms = []
     gql_query_claim_admins_perms = []
     gql_query_claim_officers_perms = []
+    gql_query_claim_diagnosis_variance_only_on_existing: True
     gql_mutation_create_claims_perms = []
     gql_mutation_update_claims_perms = []
     gql_mutation_submit_claims_perms = []
@@ -54,7 +56,9 @@ class ClaimConfig(AppConfig):
         ClaimConfig.gql_query_claim_admins_perms = cfg[
             "gql_query_claim_admins_perms"]
         ClaimConfig.gql_query_claim_officers_perms = cfg[
-            "gql_query_claim_officers_perms"]
+            "gql_query_claim_officers_perms"]            
+        ClaimConfig.gql_query_claim_diagnosis_variance_only_on_existing = cfg[
+            "gql_query_claim_diagnosis_variance_only_on_existing"]
         ClaimConfig.gql_mutation_create_claim_perms = cfg[
             "gql_mutation_create_claims_perms"]
         ClaimConfig.gql_mutation_create_claim_perms = cfg[
