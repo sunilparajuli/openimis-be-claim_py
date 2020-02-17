@@ -195,7 +195,7 @@ class Claim(core_models.VersionedModel):
         return updated_items + updated_services
 
     def save_history(self, **kwargs):
-        prev_id = super(Claim, self).save_history()        
+        prev_id = super(Claim, self).save_history()
         if prev_id:
             prev_items = []
             for item in self.items.all():
