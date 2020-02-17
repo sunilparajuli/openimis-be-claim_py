@@ -220,8 +220,11 @@ class ClaimMutation(core_models.UUIDModel):
         managed = True
         db_table = "claim_ClaimMutation"
 
+class ClaimDetail:
+    STATUS_PASSED = 1
+    STATUS_REJECTED = 2
 
-class ClaimItem(core_models.VersionedModel):
+class ClaimItem(core_models.VersionedModel, ClaimDetail):
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
                               db_column='ClaimID', related_name='items')
@@ -282,9 +285,6 @@ class ClaimItem(core_models.VersionedModel):
         managed = False
         db_table = 'tblClaimItems'
 
-    STATUS_PASSED = 1
-    STATUS_REJECTED = 2
-
 
 class ClaimAttachment(core_models.UUIDModel, core_models.VersionedModel):
     claim = models.ForeignKey(
@@ -302,7 +302,7 @@ class ClaimAttachment(core_models.UUIDModel, core_models.VersionedModel):
         db_table = "claim_ClaimAttachment"
 
 
-class ClaimService(core_models.VersionedModel):
+class ClaimService(core_models.VersionedModel, ClaimDetail):
     id = models.AutoField(db_column='ClaimServiceID', primary_key=True)
     claim = models.ForeignKey(
         Claim, models.DO_NOTHING, db_column='ClaimID', related_name='services')
@@ -361,6 +361,3 @@ class ClaimService(core_models.VersionedModel):
     class Meta:
         managed = False
         db_table = 'tblClaimServices'
-
-    STATUS_PASSED = 1
-    STATUS_REJECTED = 2
