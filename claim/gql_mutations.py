@@ -7,8 +7,8 @@ from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilter
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
-from django.db.models import Sum
-from django.db.models.functions import Coalesce
+from django.db.models import Sum, CharField
+from django.db.models.functions import Coalesce, Cast
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import userDistricts
@@ -192,26 +192,38 @@ def reset_claim_before_update(claim):
     claim.explanation = None
     claim.adjustment = None
 
-
-def process_child_relation(user, data_childeren, prev_claim_id,
-                           claim_id, childeren, create_hook):
+def process_child_relation(user, data_children, prev_claim_id,
+                           claim_id, children, create_hook):
     claimed = 0
-    prev_elts = [s.id for s in childeren.all()]
+    prev_elts = [s.id for s in children.all()]
     from core.utils import TimeUtils
-    for elt in data_childeren:
+    for elt in data_children:
         claimed += elt['qty_provided'] * elt['price_asked']
         elt_id = elt.pop('id') if 'id' in elt else None
         if elt_id:
             prev_elts.remove(elt_id)
-            prev_elt = childeren.filter(id=elt_id, **elt)
+            # explanation and justification are both TextField (ntext in db) and cannot be compared with str
+            # [42000] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]The data types ntext and nvarchar are incompatible in the equal to operator
+            # need to cast!
+            explanation = elt.pop('explanation', None)
+            justification = elt.pop('justification', None)
+            prev_elt = children.\
+                annotate(strexplanation=Cast('explanation', CharField())). \
+                annotate(strjustification=Cast('justification', CharField())). \
+                filter(id=elt_id, **elt). \
+                filter(strexplanation=explanation). \
+                filter(strjustification=justification). \
+                first()
             if not prev_elt:
                 # item has been updated, let's bind the old value to prev_claim
-                prev_elt = childeren.get(id=elt_id)
+                prev_elt = children.get(id=elt_id)
                 prev_elt.claim_id = prev_claim_id
                 prev_elt.save()
                 # ... and update with the new values
                 new_elt = copy(prev_elt)
                 [setattr(new_elt, key, elt[key]) for key in elt]
+                new_elt.explanation = explanation
+                new_elt.justification = justification
                 new_elt.id = None
                 new_elt.validity_from = TimeUtils.now()
                 new_elt.audit_user_id = user.id_for_audit
@@ -223,7 +235,7 @@ def process_child_relation(user, data_childeren, prev_claim_id,
             create_hook(claim_id, elt)
 
     if prev_elts:
-        childeren.filter(id__in=prev_elts).update(
+        children.filter(id__in=prev_elts).update(
             claim_id=prev_claim_id,
             validity_to=TimeUtils.now())
     return claimed
