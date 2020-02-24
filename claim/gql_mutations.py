@@ -667,6 +667,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
 
     class Input(OpenIMISMutation.Input):
         claim_uuid = graphene.String(required=False, read_only=True)
+        adjustment = graphene.String(required=False)
         items = graphene.List(ClaimItemInputType, required=False)
         services = graphene.List(ClaimServiceInputType, required=False)
 
@@ -681,6 +682,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                 return [{'message': _(
                     "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
             claim.save_history()
+            claim.adjustment = data['adjustment']
             items = data.pop('items') if 'items' in data else []
             all_rejected = True
             for item in items:
