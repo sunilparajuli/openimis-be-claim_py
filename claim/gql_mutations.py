@@ -12,7 +12,8 @@ from django.db.models.functions import Coalesce, Cast
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import userDistricts
-from .models import Claim, Feedback, ClaimItem, ClaimService, ClaimAttachment
+from .models import Claim, Feedback, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment
+from product.models import ProductItemOrService
 
 class ClaimItemInputType(InputObjectType):
     id = graphene.Int(required=False)
@@ -752,7 +753,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
             c_errors += validate_claim(claim, False)
             if len(c_errors) == 0:
                 c_errors = validate_assign_prod_to_claimitems_and_services(claim)
-            c_errors += set_claim_processed(claim, c_errors, user)
+            c_errors += set_claim_processed_or_valuated(claim, c_errors, user)
             if c_errors:
                 errors.append({
                     'title': claim.code,
@@ -834,12 +835,22 @@ def set_claim_deleted(claim):
         }
 
 
-def set_claim_processed(claim, errors, user):
+def details_with_relative_prices(details):
+    return details.filter(status=ClaimDetail.STATUS_PASSED) \
+        .filter(price_origin=ProductItemOrService.ORIGIN_RELATIVE) \
+        .exists()
+
+
+def with_relative_prices(claim):
+    return details_with_relative_prices(claim.items) or details_with_relative_prices(claim.services)
+
+
+def set_claim_processed_or_valuated(claim, errors, user):
     try:
         if errors:
             claim.status = Claim.STATUS_REJECTED
         else:
-            claim.status = Claim.STATUS_PROCESSED
+            claim.status = Claim.STATUS_PROCESSED if with_relative_prices(claim) else Claim.STATUS_VALUATED
             claim.audit_user_id_process = user.id_for_audit
             from core.utils import TimeUtils
             claim.process_stamp = TimeUtils.now()
