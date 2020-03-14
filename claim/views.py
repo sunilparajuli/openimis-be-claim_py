@@ -1,6 +1,6 @@
 import base64
 from django.conf import settings
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.http import HttpResponse
 from report.services import ReportService
 from .services import ClaimReportService
@@ -30,13 +30,15 @@ def attach(request):
             claim__health_facility__location__id__in=[
                 l.location.id for l in dist]
         )
-    id = request.GET['id']
     attachment = queryset\
-        .filter(id=id)\
+        .filter(id=request.GET['id'])\
         .first()
     if not attachment:
         raise PermissionDenied(_("unauthorized"))
-    response = HttpResponse(content_type=(attachment.mime))
+    if attachment.document is None:
+        response = HttpResponse(status=404)
+        return response
+    response = HttpResponse(content_type=("application/x-binary" if attachment.mime is None else attachment.mime))
     response['Content-Disposition'] = 'attachment; filename=%s' % attachment.filename
     response.write(base64.b64decode(attachment.document))
     return response

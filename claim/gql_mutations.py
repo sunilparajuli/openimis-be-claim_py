@@ -141,6 +141,29 @@ class ClaimGuaranteeIdInputType(graphene.String):
         return result
 
 
+class Attachment:
+    type = graphene.String(required=False)
+    title = graphene.String(required=False)
+    date = graphene.Date(required=False)
+    filename = graphene.String(required=False)
+    mime = graphene.String(required=False)
+    document = graphene.String(required=False)
+
+
+class ClaimAttachmentInputType(Attachment, InputObjectType):
+    """
+    Claim attachment, used nested in claim object
+    """
+    pass
+
+
+class AttachmentInputType(Attachment, OpenIMISMutation.Input):
+    """
+    Claim attachment, used on its own
+    """
+    claim_uuid = graphene.String(required=True)
+
+
 class ClaimInputType(OpenIMISMutation.Input):
     id = graphene.Int(required=False, read_only=True)
     uuid = graphene.String(required=False)
@@ -173,14 +196,8 @@ class ClaimInputType(OpenIMISMutation.Input):
     services = graphene.List(ClaimServiceInputType, required=False)
 
 
-class ClaimAttachmentInputType(OpenIMISMutation.Input):
-    claim_uuid = graphene.String(required=True)
-    type = graphene.String(required=False)
-    title = graphene.String(required=False)
-    date = graphene.Date(required=False)
-    filename = graphene.String(required=False)
-    mime = graphene.String(required=False)
-    document = graphene.String(required=False)
+class CreateClaimInputType(ClaimInputType):
+    attachments = graphene.List(ClaimAttachmentInputType, required=False)
 
 
 def reset_claim_before_update(claim):
@@ -253,6 +270,18 @@ def service_create_hook(claim_id, service):
     ClaimService.objects.create(claim_id=claim_id, **service)
 
 
+def create_attachment(claim_id, data):
+    data["claim_id"] = claim_id
+    from core import datetime
+    data['validity_from'] = datetime.datetime.now()
+    ClaimAttachment.objects.create(**data)
+
+
+def create_attachments(claim_id, attachments):
+    for attachment in attachments:
+        create_attachment(claim_id, attachment)
+
+
 def update_or_create_claim(data, user):
     items = data.pop('items') if 'items' in data else []
     services = data.pop('services') if 'services' in data else []
@@ -282,6 +311,7 @@ def update_or_create_claim(data, user):
                                       service_create_hook)
     claim.claimed = claimed
     claim.save()
+    return claim
 
 
 class CreateClaimMutation(OpenIMISMutation):
@@ -291,7 +321,7 @@ class CreateClaimMutation(OpenIMISMutation):
     _mutation_module = "claim"
     _mutation_class = "CreateClaimMutation"
 
-    class Input(ClaimInputType):
+    class Input(CreateClaimInputType):
         pass
 
     @classmethod
@@ -312,7 +342,10 @@ class CreateClaimMutation(OpenIMISMutation):
             data['status'] = Claim.STATUS_ENTERED
             from core.utils import TimeUtils
             data['validity_from'] = TimeUtils.now()
-            update_or_create_claim(data, user)
+            attachments = data.pop('attachments') if 'attachments' in data else None
+            claim = update_or_create_claim(data, user)
+            if attachments:
+                create_attachments(claim.id, attachments)
             return None
         except Exception as exc:
             return [{
@@ -348,11 +381,11 @@ class UpdateClaimMutation(OpenIMISMutation):
                 'detail': str(exc)}]
 
 
-class CreateClaimAttachmentMutation(OpenIMISMutation):
+class CreateAttachmentMutation(OpenIMISMutation):
     _mutation_module = "claim"
     _mutation_class = "AddClaimAttachmentMutation"
 
-    class Input(ClaimAttachmentInputType):
+    class Input(AttachmentInputType):
         pass
 
     @classmethod
@@ -375,10 +408,7 @@ class CreateClaimAttachmentMutation(OpenIMISMutation):
             claim = queryset.filter(uuid=claim_uuid).first()
             if not claim:
                 raise PermissionDenied(_("unauthorized"))
-            data["claim_id"] = claim.id
-            from core import datetime
-            data['validity_from'] = datetime.datetime.now()
-            ClaimAttachment.objects.create(**data)
+            create_attachment(claim.id, data)
             return None
         except Exception as exc:
             return [{
@@ -386,7 +416,7 @@ class CreateClaimAttachmentMutation(OpenIMISMutation):
                 'detail': str(exc)}]
 
 
-class DeleteClaimAttachmentMutation(OpenIMISMutation):
+class DeleteAttachmentMutation(OpenIMISMutation):
     _mutation_module = "claim"
     _mutation_class = "DeleteClaimAttachmentMutation"
 

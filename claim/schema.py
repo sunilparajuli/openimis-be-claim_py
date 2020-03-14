@@ -67,8 +67,8 @@ class Query(graphene.ObjectType):
 class Mutation(graphene.ObjectType):
     create_claim = CreateClaimMutation.Field()
     update_claim = UpdateClaimMutation.Field()
-    create_claim_attachment = CreateClaimAttachmentMutation.Field()
-    delete_claim_attachment = DeleteClaimAttachmentMutation.Field()
+    create_claim_attachment = CreateAttachmentMutation.Field()
+    delete_claim_attachment = DeleteAttachmentMutation.Field()
     submit_claims = SubmitClaimsMutation.Field()
     select_claims_for_feedback = SelectClaimsForFeedbackMutation.Field()
     deliver_claim_feedback = DeliverClaimFeedbackMutation.Field()
