@@ -126,6 +126,10 @@ class ClaimAttachmentGQLType(DjangoObjectType):
             "id": ["exact"],
             "type": ["exact", "icontains"],
             "title": ["exact", "icontains"],
+            "date": ["exact", "lt", "lte", "gt", "gte"],
+            "filename": ["exact", "icontains"],
+            "mime": ["exact", "icontains"],
+            "url": ["exact", "icontains"],
             **prefix_filterset("claim__", ClaimGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection

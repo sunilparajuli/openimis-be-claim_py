@@ -141,12 +141,24 @@ class ClaimGuaranteeIdInputType(graphene.String):
         return result
 
 
-class Attachment:
+class BaseAttachment:
+    id = graphene.String(required=False, read_only=True)
     type = graphene.String(required=False)
     title = graphene.String(required=False)
     date = graphene.Date(required=False)
     filename = graphene.String(required=False)
     mime = graphene.String(required=False)
+    url = graphene.String(required=False)
+
+
+class BaseAttachmentInputType(BaseAttachment, OpenIMISMutation.Input):
+    """
+    Claim attachment (without the document), used on its own
+    """
+    claim_uuid = graphene.String(required=True)
+
+
+class Attachment(BaseAttachment):
     document = graphene.String(required=False)
 
 
@@ -416,6 +428,48 @@ class CreateAttachmentMutation(OpenIMISMutation):
                 'detail': str(exc)}]
 
 
+class UpdateAttachmentMutation(OpenIMISMutation):
+    _mutation_module = "claim"
+    _mutation_class = "UpdateAttachmentMutation"
+
+    class Input(BaseAttachmentInputType):
+        pass
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        try:
+            if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
+                raise PermissionDenied(_("unauthorized"))
+            queryset = ClaimAttachment.objects.filter(*filter_validity())
+            if settings.ROW_SECURITY:
+                from location.schema import userDistricts
+                dist = userDistricts(user)
+                queryset = queryset.select_related("claim") \
+                    .filter(
+                    claim__health_facility__location__id__in=[
+                        l.location.id for l in dist]
+                )
+            attachment = queryset \
+                .filter(id=data['id']) \
+                .first()
+            if not attachment:
+                raise PermissionDenied(_("unauthorized"))
+            from core import datetime
+
+            attachment.save_history()
+            data['audit_user_id'] = user.id_for_audit
+            [setattr(attachment, key, data[key]) for key in data]
+            attachment.save()
+            return None
+        except Exception as exc:
+            return [{
+                'message': _("claim.mutation.failed_to_update_claim_attachment") % {
+                    'code': attachment.claim.code,
+                    'filename': attachment.filename
+                },
+                'detail': str(exc)}]
+
+
 class DeleteAttachmentMutation(OpenIMISMutation):
     _mutation_module = "claim"
     _mutation_class = "DeleteClaimAttachmentMutation"
@@ -437,19 +491,19 @@ class DeleteAttachmentMutation(OpenIMISMutation):
                     claim__health_facility__location__id__in=[
                         l.location.id for l in dist]
                 )
-            id = data['id']
             attachment = queryset \
-                .filter(id=id) \
+                .filter(id=data['id']) \
                 .first()
             if not attachment:
                 raise PermissionDenied(_("unauthorized"))
-            from core import datetime
-            attachment.validity_to = datetime.datetime.now()
-            attachment.save()
+            attachment.delete_history()
             return None
         except Exception as exc:
             return [{
-                'message': _("claim.mutation.failed_to_delete_claim_attachment") % {'filename': attachment.filename},
+                'message': _("claim.mutation.failed_to_delete_claim_attachment") % {
+                    'code': attachment.claim.code,
+                    'filename': attachment.filename
+                },
                 'detail': str(exc)}]
 
 

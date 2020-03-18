@@ -286,7 +286,7 @@ class ClaimItem(core_models.VersionedModel, ClaimDetail):
         db_table = 'tblClaimItems'
 
 
-class ClaimAttachment(core_models.UUIDModel, core_models.VersionedModel):
+class ClaimAttachment(core_models.UUIDModel, core_models.UUIDVersionedModel):
     claim = models.ForeignKey(
         Claim, models.DO_NOTHING, related_name='attachments')
     type = models.TextField(blank=True, null=True)
@@ -294,6 +294,8 @@ class ClaimAttachment(core_models.UUIDModel, core_models.VersionedModel):
     date = fields.DateField(blank=True, null=True)
     filename = models.TextField(blank=True, null=True)
     mime = models.TextField(blank=True, null=True)
+    # frontend contributions may lead to externalized (nas) storage for documents
+    url = models.TextField(blank=True, null=True)
     # Support of BinaryField is database-related: prefer to stick to b64-encoded
     document = models.TextField(blank=True, null=True)
 
