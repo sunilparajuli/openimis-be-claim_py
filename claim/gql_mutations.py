@@ -443,7 +443,7 @@ class UpdateAttachmentMutation(OpenIMISMutation):
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
                 from location.schema import userDistricts
-                dist = userDistricts(user)
+                dist = userDistricts(user._u)
                 queryset = queryset.select_related("claim") \
                     .filter(
                     claim__health_facility__location__id__in=[
@@ -454,8 +454,6 @@ class UpdateAttachmentMutation(OpenIMISMutation):
                 .first()
             if not attachment:
                 raise PermissionDenied(_("unauthorized"))
-            from core import datetime
-
             attachment.save_history()
             data['audit_user_id'] = user.id_for_audit
             [setattr(attachment, key, data[key]) for key in data]
@@ -485,7 +483,7 @@ class DeleteAttachmentMutation(OpenIMISMutation):
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
                 from location.schema import userDistricts
-                dist = userDistricts(user)
+                dist = userDistricts(user._u)
                 queryset = queryset.select_related("claim") \
                     .filter(
                     claim__health_facility__location__id__in=[
