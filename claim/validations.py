@@ -317,6 +317,7 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
             prod_found = 1
             product_item = ProductItem.objects.get(pk=product_item_id)
             # START CHECK 17 --> Item/Service waiting period violation (17)
+            waiting_period = None
             if policy_stage == 'N' or policy_effective_date < insuree_policy_effective_date:
                 if adult:
                     waiting_period = product_item.waiting_period_adult
@@ -382,6 +383,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
             expiry_date = core.datetime.date.from_ad_date(expiry_date)
             product_service = ProductService.objects.get(pk=product_service_id)
             # START CHECK 17 --> Item/Service waiting period violation (17)
+            waiting_period = None
             if policy_stage == 'N' or policy_effective_date < insuree_policy_effective_date:
                 if adult:
                     waiting_period = product_service.waiting_period_adult
