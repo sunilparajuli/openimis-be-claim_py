@@ -777,7 +777,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                 return [{'message': _(
                     "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
             claim.save_history()
-            claim.adjustment = data['adjustment']
+            claim.adjustment = data.get('adjustment', None)
             items = data.pop('items') if 'items' in data else []
             all_rejected = True
             for item in items:
