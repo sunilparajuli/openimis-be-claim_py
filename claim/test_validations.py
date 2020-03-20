@@ -1,16 +1,18 @@
+from claim.models import Claim
 from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem
-from claim.validations import get_claim_category, validate_claim
+from claim.validations import get_claim_category, validate_claim, validate_assign_prod_to_claimitems_and_services, \
+    process_dedrem
 from django.test import TestCase
 from insuree.models import Family, Insuree
 from insuree.test_helpers import create_test_insuree
 from location.models import HealthFacility
 from medical.test_helpers import create_test_service, create_test_item
-from medical_pricelist.test_helpers import add_service_to_hf_pricelist
+from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist
 from policy.test_helpers import create_test_policy
 
 # default arguments should not pass a list or a dict because they're mutable but we don't risk mutating them here:
 # noinspection PyDefaultArgument,DuplicatedCode
-from product.test_helpers import create_test_product, create_test_product_service
+from product.test_helpers import create_test_product, create_test_product_service, create_test_product_item
 
 
 class ValidationTest(TestCase):
@@ -291,3 +293,68 @@ class ValidationTest(TestCase):
         pricelist_detail.delete()
         service.delete()
         product.delete()
+
+
+    def test_submit_claim_dedrem(self):
+        # When the insuree already reaches his limit of visits
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        product = create_test_product("VISIT", custom_props={})
+        policy = create_test_policy(product, insuree, link=True)
+        service = create_test_service("V", custom_props={})
+        item = create_test_item("D", custom_props={})
+        #product_service = create_test_product_service(product, service)
+        product_item = create_test_product_item(product, item)
+        #pricelist_detail1 = add_service_to_hf_pricelist(service)
+        pricelist_detail2 = add_item_to_hf_pricelist(item)
+
+        # The insuree has a patient_category of 6, not matching the service category
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        #service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
+        item1 = create_test_claimitem(claim1, "D", custom_props={"item_id": item.id, "product": product, "policy": policy})
+        errors = validate_claim(claim1, True)
+        errors += validate_assign_prod_to_claimitems_and_services(claim1)
+        foo = process_dedrem(claim1, -1, True)
+
+        # Then
+        claim1.refresh_from_db()
+        item1.refresh_from_db()
+        self.assertEqual(len(errors), 0)
+        self.assertEqual(item1.price_adjusted, 100)
+        self.assertEqual(item1.price_valuated, 700)
+        self.assertEqual(item1.deductable_amount, 0)
+        self.assertEqual(item1.exceed_ceiling_amount, 0)
+        self.assertIsNone(item1.exceed_ceiling_amount_category)
+        self.assertEqual(item1.remunerated_amount, 700)
+        self.assertEqual(claim1.status, Claim.STATUS_VALUATED)
+        self.assertEqual(claim1.audit_user_id_process, -1)
+        self.assertIsNotNone(claim1.process_stamp)
+        self.assertIsNotNone(claim1.date_processed)
+
+        dedrem_qs = ClaimDedRem.objects.filter(claim=claim1)
+        self.assertEqual(dedrem_qs.count(), 1)
+        dedrem1 = dedrem_qs.first()
+        self.assertEqual(dedrem1.policy_id, item1.policy_id)
+        self.assertEqual(dedrem1.insuree_id, claim1.insuree_id)
+        self.assertEqual(dedrem1.audit_user_id, -1)
+        self.assertEqual(dedrem1.ded_g, 0)
+        self.assertEqual(dedrem1.rem_g, 700)
+        self.assertIsNotNone(claim1.validity_from)
+        self.assertIsNone(claim1.validity_to)
+
+        # tearDown
+        dedrem_qs.delete()
+        #service1.delete()
+        item1.delete()
+        claim1.delete()
+        policy.insuree_policies.first().delete()
+        policy.delete()
+        product_item.delete()
+        #product_service.delete()
+        #pricelist_detail1.delete()
+        pricelist_detail2.delete()
+        service.delete()
+        item.delete()
+        product.delete()
+

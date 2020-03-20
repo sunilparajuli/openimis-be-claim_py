@@ -1,15 +1,15 @@
-from core import fields
 import uuid
 
+from claim_batch import models as claim_batch_models
+from core import fields
+from core import models as core_models
 from django import dispatch
 from django.db import models
-from core import models as core_models
 from insuree import models as insuree_models
 from location import models as location_models
 from medical import models as medical_models
 from policy import models as policy_models
 from product import models as product_models
-from claim_batch import models as claim_batch_models
 
 
 class ClaimAdmin(core_models.VersionedModel):
@@ -186,6 +186,18 @@ class Claim(core_models.VersionedModel):
     STATUS_PROCESSED = 8
     STATUS_VALUATED = 16
 
+    FEEDBACK_IDLE = 1
+    FEEDBACK_NOT_SELECTED = 2
+    FEEDBACK_SELECTED = 4
+    FEEDBACK_DELIVERED = 8
+    FEEDBACK_BYPASSED = 16
+
+    REVIEW_IDLE = 1
+    REVIEW_NOT_SELECTED = 2
+    REVIEW_SELECTED = 4
+    REVIEW_DELIVERED = 8
+    REVIEW_BYPASSED = 16
+
     def reject(self, rejection_code):
         updated_items = self.items.filter(validity_to__isnull=True).update(
             rejection_reason=rejection_code)
@@ -220,9 +232,20 @@ class ClaimMutation(core_models.UUIDModel):
         managed = True
         db_table = "claim_ClaimMutation"
 
+
 class ClaimDetail:
     STATUS_PASSED = 1
     STATUS_REJECTED = 2
+
+    @property
+    def itemsvc(self):
+        if hasattr(self, "item"):
+            return self.item
+        elif hasattr(self, "service"):
+            return self.service
+        else:
+            raise Exception("ClaimDetail has neither item nor service")
+
 
 class ClaimItem(core_models.VersionedModel, ClaimDetail):
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
@@ -363,3 +386,36 @@ class ClaimService(core_models.VersionedModel, ClaimDetail):
     class Meta:
         managed = False
         db_table = 'tblClaimServices'
+
+
+class ClaimDedRem(models.Model):
+    id = models.AutoField(db_column='ExpenditureID', primary_key=True)
+    legacy_id = models.IntegerField(db_column='LegacyID', blank=True, null=True)
+
+    policy = models.ForeignKey('policy.Policy', models.DO_NOTHING, db_column='PolicyID', blank=True, null=True,
+                               related_name='claim_ded_rems')
+    insuree = models.ForeignKey('insuree.Insuree', models.DO_NOTHING, db_column='InsureeID', blank=True, null=True,
+                                related_name='claim_ded_rems')
+    claim = models.ForeignKey(to=Claim, db_column='ClaimID', db_index=True, related_name="dedrems",
+                              on_delete=models.DO_NOTHING)
+    ded_g = models.DecimalField(db_column='DedG', max_digits=18, decimal_places=2, blank=True, null=True)
+    ded_op = models.DecimalField(db_column='DedOP', max_digits=18, decimal_places=2, blank=True, null=True)
+    ded_ip = models.DecimalField(db_column='DedIP', max_digits=18, decimal_places=2, blank=True, null=True)
+    rem_g = models.DecimalField(db_column='RemG', max_digits=18, decimal_places=2, blank=True, null=True)
+    rem_op = models.DecimalField(db_column='RemOP', max_digits=18, decimal_places=2, blank=True, null=True)
+    rem_ip = models.DecimalField(db_column='RemIP', max_digits=18, decimal_places=2, blank=True, null=True)
+    rem_consult = models.DecimalField(db_column='RemConsult', max_digits=18, decimal_places=2, blank=True, null=True)
+    rem_surgery = models.DecimalField(db_column='RemSurgery', max_digits=18, decimal_places=2, blank=True, null=True)
+    rem_delivery = models.DecimalField(db_column='RemDelivery', max_digits=18, decimal_places=2, blank=True, null=True)
+    rem_hospitalization = models.DecimalField(db_column='RemHospitalization', max_digits=18, decimal_places=2,
+                                              blank=True, null=True)
+    rem_antenatal = models.DecimalField(db_column='RemAntenatal', max_digits=18, decimal_places=2,
+                                        blank=True, null=True)
+
+    audit_user_id = models.IntegerField(db_column='AuditUserID')
+    validity_from = fields.DateTimeField(db_column='ValidityFrom')
+    validity_to = fields.DateTimeField(db_column='ValidityTo', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tblClaimDedRem'

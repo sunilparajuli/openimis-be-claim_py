@@ -1,7 +1,8 @@
 from copy import copy
 import graphene
 from .apps import ClaimConfig
-from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services
+from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
+    process_dedrem
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
 from django.conf import settings
@@ -835,6 +836,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
             c_errors += validate_claim(claim, False)
             if len(c_errors) == 0:
                 c_errors = validate_assign_prod_to_claimitems_and_services(claim)
+                c_errors += process_dedrem(claim, user.id_for_audit, True)
             c_errors += set_claim_processed_or_valuated(claim, c_errors, user)
             if c_errors:
                 errors.append({
