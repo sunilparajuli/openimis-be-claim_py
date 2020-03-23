@@ -1,7 +1,7 @@
 import itertools
 from collections import OrderedDict, namedtuple
 
-from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem
+from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail
 from core import utils
 from core.datetimes.shared import datetimedelta
 from django.db import connection
@@ -247,13 +247,17 @@ def validate_claimservice_limitation_fail(claim, claimservice):
 def frequency_check(qs, claim, elt):
     td = claim.date_from if not claim.date_to else claim.date_to
     delta = datetimedelta(days=elt.frequency)
-    return qs.filter(claim__in=Claim.objects
-                     .filter(validity_to__isnull=True, status__gt=Claim.STATUS_ENTERED, insuree_id=claim.insuree_id)
-                     .annotate(target_date=Coalesce("date_to", "date_from"))
-                     .filter(target_date__gte=td - delta)
-                     .exclude(uuid=claim.uuid)
-                     .order_by('-date_from')
-                     ).exists()
+    return qs.filter(claim__status__gt=Claim.STATUS_ENTERED) \
+        .filter(validity_to__isnull=True) \
+        .filter(status=ClaimDetail.STATUS_PASSED) \
+        .filter(claim__insuree_id=claim.insuree_id) \
+        .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)) \
+        .filter(claim__insuree_id=claim.insuree_id) \
+        .annotate(target_date=Coalesce("claim__date_to", "claim__date_from")) \
+        .filter(target_date__gte=td - delta) \
+        .exclude(claim__uuid=claim.uuid) \
+        .order_by('-date_from') \
+        .exists()
 
 
 def validate_claimitem_frequency(claim, claimitem):
@@ -433,14 +437,14 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
             product = Product.objects.filter(pk=product_id).first()
             # **** START CHECK 13 --> Maximum consultations (13)*****
             if base_category == 'C':
-                if product.max_no_consultations is not None and product.max_no_consultations >= 0:
+                if product.max_no_consultation is not None and product.max_no_consultation >= 0:
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'C')\
                         .count()
-                    if count and count >= product.max_no_consultations:
-                        errors += [{'message': _("claim.validation.product_family.max_nb_consultations") % {
+                    if count and count >= product.max_no_consultation:
+                        errors += [{'message': _("claim.validation.product_family.max_nb_consultation") % {
                             'code': claimservice.claim.code,
                             'count': count,
-                            'max': product.max_no_consultations},
+                            'max': product.max_no_consultation},
                             'detail': claimservice.claim.uuid}]
                         break
 
@@ -727,6 +731,22 @@ def validate_assign_prod_to_claimitems_and_services(claim):
             ProductService.objects.filter(service_id=claimservice.service_id))
 
     return errors
+
+
+def approved_amount(claim):
+    app_item_value = claim.items \
+        .filter(validity_to__isnull=True) \
+        .filter(status=ClaimItem.STATUS_PASSED) \
+        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
+        .aggregate(Sum("value"))
+    app_service_value = claim.services \
+        .filter(validity_to__isnull=True) \
+        .filter(status=ClaimService.STATUS_PASSED) \
+        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
+        .aggregate(Sum("value"))
+    return (app_item_value['value__sum'] if app_item_value['value__sum'] else 0) + \
+           (app_service_value['value__sum']
+            if app_service_value['value__sum'] else 0)
 
 
 def _query_product_item_service_limit(target_date, family_id, elt_qs,

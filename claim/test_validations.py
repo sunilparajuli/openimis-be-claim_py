@@ -1,5 +1,6 @@
-from claim.models import Claim
-from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem
+from claim.models import Claim, ClaimDedRem
+from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem, \
+    mark_test_claim_as_processed
 from claim.validations import get_claim_category, validate_claim, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem
 from django.test import TestCase
@@ -294,6 +295,46 @@ class ValidationTest(TestCase):
         service.delete()
         product.delete()
 
+    def test_frequency(self):
+        # When the insuree already reaches his limit of visits
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        product = create_test_product("CSECT")
+        policy = create_test_policy(product, insuree, link=True)
+        service = create_test_service("C", custom_props={"code": "G34B", "frequency": 180})
+        product_service = create_test_product_service(product, service)
+        pricelist_detail = add_service_to_hf_pricelist(service)
+
+        # A first claim for a visit should be accepted
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
+        errors = validate_claim(claim1, True)
+        mark_test_claim_as_processed(claim1)
+
+        self.assertEquals(len(errors), 0, "The first visit should be accepted")
+
+        # a second visit should be denied
+        claim2 = create_test_claim({"insuree_id": insuree.id})
+        service2 = create_test_claimservice(claim2, custom_props={"service_id": service.id})
+        errors = validate_claim(claim2, True)
+        self.assertGreater(len(errors), 0, "The second service should be refused as it is withing 180 days")
+
+        # Then
+        claim1.refresh_from_db()
+        claim2.refresh_from_db()
+
+        # tearDown
+        service2.delete()
+        claim2.delete()
+        service1.delete()
+        claim1.delete()
+        policy.insuree_policies.first().delete()
+        policy.delete()
+        product_service.delete()
+        pricelist_detail.delete()
+        service.delete()
+        product.delete()
 
     def test_submit_claim_dedrem(self):
         # When the insuree already reaches his limit of visits

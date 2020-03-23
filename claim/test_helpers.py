@@ -1,22 +1,25 @@
 from claim.models import Claim, ClaimService, ClaimItem
+from claim.validations import get_claim_category, approved_amount
 from medical.test_helpers import get_item_of_type, get_service_of_category
 
 
 def create_test_claim(custom_props={}):
+    from core import datetime
     return Claim.objects.create(
         **{
             "health_facility_id": 18,
             "icd_id": 116,
-            "date_from": "2019-06-01",
-            "date_claimed": "2019-06-01",
-            "date_to": "2019-06-01",
+            "date_from": datetime.datetime(2019, 6, 1),
+            "date_claimed": datetime.datetime(2019, 6, 1),
+            "date_to": datetime.datetime(2019, 6, 1),
             "audit_user_id": 1,
             "insuree_id": 2,
             "status": 2,
-            "validity_from": "2019-06-01",
+            "validity_from": datetime.datetime(2019, 6, 1),
             **custom_props
         }
     )
+
 
 def create_test_claimitem(claim, item_type, valid=True, custom_props={}):
     return ClaimItem.objects.create(
@@ -34,6 +37,7 @@ def create_test_claimitem(claim, item_type, valid=True, custom_props={}):
            }
     )
 
+
 def create_test_claimservice(claim, category=None, valid=True, custom_props={}):
     return ClaimService.objects.create(
         **{
@@ -48,3 +52,13 @@ def create_test_claimservice(claim, category=None, valid=True, custom_props={}):
             **custom_props
         }
     )
+
+
+def mark_test_claim_as_processed(claim, status=Claim.STATUS_CHECKED, audit_user_id=-1):
+    claim.approved = approved_amount(claim)
+    claim.status = status
+    claim.audit_user_id_submit = audit_user_id
+    from core.utils import TimeUtils
+    claim.submit_stamp = TimeUtils.now()
+    claim.category = get_claim_category(claim)
+    claim.save()
