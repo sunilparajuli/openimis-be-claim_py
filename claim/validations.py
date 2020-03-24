@@ -149,6 +149,7 @@ def validate_claimservices(claim):
         if claimservice.rejection_reason:
             claimservice.status = ClaimService.STATUS_REJECTED
         else:
+            claimservice.rejection_reason = 0
             claimservice.status = ClaimService.STATUS_PASSED
         claimservice.save()
 
@@ -329,8 +330,10 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
                 if adult:
                     waiting_period = product_item.waiting_period_adult
                 else:
-                    waiting_period = product_item.waiting_period_adult
-            if waiting_period and target_date < (insuree_policy_effective_date + datetimedelta(months=waiting_period)):
+                    waiting_period = product_item.waiting_period_child
+            from core import datetime
+            if waiting_period and target_date < \
+                    insuree_policy_effective_date.to_datetime + datetimedelta(months=waiting_period):
                 claimitem.rejection_reason = REJECTION_REASON_WAITING_PERIOD_FAIL
                 errors += [{'code': REJECTION_REASON_WAITING_PERIOD_FAIL,
                             'message': _("claim.validation.product_family.waiting_period") % {
@@ -356,7 +359,8 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
                     .filter(rejection_reason=0)\
                     .filter(rejection_reason__isnull=True)\
                     .aggregate(Sum("qty_provided"))
-                if total_qty_provided is None or total_qty_provided >= limit_no:
+                if total_qty_provided["qty_provided__sum"] is not None \
+                        and total_qty_provided["qty_provided__sum"] >= limit_no:
                     claimitem.rejection_reason = REJECTION_REASON_QTY_OVER_LIMIT
                     errors += [{'code': REJECTION_REASON_QTY_OVER_LIMIT,
                                 'message': _("claim.validation.product_family.max_nb_allowed") % {
@@ -395,8 +399,9 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                 if adult:
                     waiting_period = product_service.waiting_period_adult
                 else:
-                    waiting_period = product_service.waiting_period_adult
-            if waiting_period and target_date < (insuree_policy_effective_date + datetimedelta(months=waiting_period)):
+                    waiting_period = product_service.waiting_period_child
+            if waiting_period and target_date < \
+                    (insuree_policy_effective_date.to_datetime() + datetimedelta(months=waiting_period)):
                 claimservice.rejection_reason = REJECTION_REASON_WAITING_PERIOD_FAIL
                 errors += [{'code': REJECTION_REASON_WAITING_PERIOD_FAIL,
                             'message': _("claim.validation.product_family.waiting_period") % {
@@ -413,7 +418,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                 # count qty provided
                 total_qty_provided = ClaimService.objects\
                     .filter(claim__insuree_id=insuree_id)\
-                    .filter(service_id=service_id)\
+                    .filter(service_id=service.id)\
                     .annotate(target_date=Coalesce("claim__date_to", "claim__date_from"))\
                     .filter(target_date__gt=insuree_policy_effective_date).filter(target_date__lte=expiry_date)\
                     .filter(claim__status__gt=Policy.STATUS_ACTIVE)\
@@ -422,7 +427,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                     .filter(rejection_reason=0)\
                     .filter(rejection_reason__isnull=True)\
                     .aggregate(Sum("qty_provided"))
-                if total_qty_provided is None or total_qty_provided >= limit_no:
+                if total_qty_provided["qty_provided__sum"] is not None and total_qty_provided >= limit_no:
                     claimservice.rejection_reason = REJECTION_REASON_QTY_OVER_LIMIT
                     errors += [{'code': REJECTION_REASON_QTY_OVER_LIMIT,
                                 'message': _("claim.validation.product_family.max_nb_allowed") % {
@@ -968,7 +973,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             # TODO make sure that this does not return more than one row ?
             itemsvc_pricelist_detail = (ItemsPricelistDetail if detail_is_item else ServicesPricelistDetail).objects\
                 .filter(itemsvcs_pricelist=claim.health_facility.items_pricelist
-                        if detail_is_item else claim.health_facility.items_pricelist,
+                        if detail_is_item else claim.health_facility.services_pricelist,
                         itemsvc=claim_detail.itemsvc,
                         itemsvcs_pricelist__validity_to__isnull=True,
                         validity_to__isnull=True) \
@@ -1157,9 +1162,8 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     claim_detail.deductable_amount = set_price_deducted
                     claim_detail.exceed_ceiling_amount = exceed_ceiling_amount
                     # TODO ExceedCeilingAmountCategory = ExceedCeilingAmountCategory ???
-                    claim_detail.remunerated_amount = remunerated
+                    claim_detail.remunerated_amount = set_price_remunerated
                     # Don't touch relative_prices
-                # TODO: consider doing an update() with a dict of changes and refresh the instance ?
                 claim_detail.save()
 
     if is_process:
