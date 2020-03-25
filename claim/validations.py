@@ -643,7 +643,7 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
     target_date = claim.date_to if claim.date_to else claim.date_from
     visit_type = claim.visit_type if claim.visit_type else "O"
     adult = claim.insuree.is_adult(target_date)
-    (limitation_type_field, limit_adult, limit_child) = visit_type_field
+    (limitation_type_field, limit_adult, limit_child) = visit_type_field[visit_type]
     if elt.price_asked \
             and elt.price_approved \
             and elt.price_asked > elt.price_approved:
@@ -729,16 +729,15 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
 def validate_assign_prod_to_claimitems_and_services(claim):
     errors = []
     for claimitem in claim.items.filter(validity_to__isnull=True) \
-            .filter(rejection_reason=0).filter(rejection_reason__isnull=True):
+            .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         errors += validate_assign_prod_elt(
             claim, claimitem, claimitem.item,
             ProductItem.objects.filter(item_id=claimitem.item_id))
 
     for claimservice in claim.services.filter(validity_to__isnull=True) \
-            .filter(rejection_reason=0).filter(rejection_reason__isnull=True):
+            .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         errors += validate_assign_prod_elt(
-            claim,
-            claimservice, claimservice.service,
+            claim, claimservice, claimservice.service,
             ProductService.objects.filter(service_id=claimservice.service_id))
 
     return errors
@@ -1004,6 +1003,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             work_value = itemsvc_quantity * set_price_adjusted
 
             if claim_detail.limitation == ProductItemOrService.LIMIT_FIXED_AMOUNT \
+                    and claim_detail.limitation_value \
                     and (itemsvc_quantity * claim_detail.limitation_value) < work_value:
                 work_value = itemsvc_quantity * claim_detail.limitation_value
 
@@ -1021,7 +1021,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     work_value -= set_price_deducted
                     deducted += deductible.amount - deductible.prev - deducted
 
-            if claim_detail.limitation == ProductItemOrService.LIMIT_CO_INSURANCE:
+            if claim_detail.limitation == ProductItemOrService.LIMIT_CO_INSURANCE and claim_detail.limitation_value:
                 work_value = claim_detail.limitation_value / 100 * work_value
 
             if category != Service.CATEGORY_VISIT:
