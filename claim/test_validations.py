@@ -336,6 +336,211 @@ class ValidationTest(TestCase):
         service.delete()
         product.delete()
 
+    def test_limit_no(self):
+        # When the insuree already reaches his limit number
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        product = create_test_product("CSECT")
+        policy = create_test_policy(product, insuree, link=True)
+        service = create_test_service("C", custom_props={"code": "G34B"})
+        product_service = create_test_product_service(product, service, custom_props={"limit_no_adult": 1})
+        pricelist_detail = add_service_to_hf_pricelist(service)
+
+        # A first claim for a visit should be accepted
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
+        errors = validate_claim(claim1, True)
+        mark_test_claim_as_processed(claim1)
+
+        self.assertEquals(len(errors), 0, "The first visit should be accepted")
+
+        # a second visit should be denied
+        claim2 = create_test_claim({"insuree_id": insuree.id})
+        service2 = create_test_claimservice(claim2, custom_props={"service_id": service.id})
+        errors = validate_claim(claim2, True)
+        self.assertGreater(len(errors), 0, "The second service should be refused")
+
+        # Then
+        claim1.refresh_from_db()
+        claim2.refresh_from_db()
+
+        # tearDown
+        service2.delete()
+        claim2.delete()
+        service1.delete()
+        claim1.delete()
+        policy.insuree_policies.first().delete()
+        policy.delete()
+        product_service.delete()
+        pricelist_detail.delete()
+        service.delete()
+        product.delete()
+
+    def test_limit_delivery(self):
+        # When the insuree already reaches his limit of visits
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        product = create_test_product("DELIV", custom_props={"max_no_delivery": 1})
+        policy = create_test_policy(product, insuree, link=True)
+        service = create_test_service("D", custom_props={"code": "G34C"})
+        product_service = create_test_product_service(product, service)
+        pricelist_detail = add_service_to_hf_pricelist(service)
+
+        # A first claim for a delivery should be accepted
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
+        errors = validate_claim(claim1, True)
+        mark_test_claim_as_processed(claim1)
+
+        self.assertEquals(len(errors), 0, "The first visit should be accepted")
+
+        # a second delivery should be denied
+        claim2 = create_test_claim({"insuree_id": insuree.id})
+        service2 = create_test_claimservice(claim2, custom_props={"service_id": service.id})
+        errors = validate_claim(claim2, True)
+        self.assertGreater(len(errors), 0, "The second service should fail because there is already one delivery")
+
+        # Then
+        claim1.refresh_from_db()
+        claim2.refresh_from_db()
+
+        # tearDown
+        service2.delete()
+        claim2.delete()
+        service1.delete()
+        claim1.delete()
+        policy.insuree_policies.first().delete()
+        policy.delete()
+        product_service.delete()
+        pricelist_detail.delete()
+        service.delete()
+        product.delete()
+
+    def test_limit_hospital(self):
+        # When the insuree already reaches his limit of visits
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        product = create_test_product("DELIV", custom_props={"max_no_hospitalization": 1})
+        policy = create_test_policy(product, insuree, link=True)
+        service = create_test_service("H", custom_props={"code": "HHHH"})
+        product_service = create_test_product_service(product, service)
+        pricelist_detail = add_service_to_hf_pricelist(service)
+
+        # A first claim for a delivery should be accepted
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
+        errors = validate_claim(claim1, True)
+        mark_test_claim_as_processed(claim1)
+
+        self.assertEquals(len(errors), 0, "The first hospitalization should be accepted")
+
+        # a second delivery should be denied
+        claim2 = create_test_claim({"insuree_id": insuree.id})
+        service2 = create_test_claimservice(claim2, custom_props={"service_id": service.id})
+        errors = validate_claim(claim2, True)
+        self.assertGreater(len(errors), 0, "The second service should fail because there is already one hospitalization")
+
+        # Then
+        claim1.refresh_from_db()
+        claim2.refresh_from_db()
+
+        # tearDown
+        service2.delete()
+        claim2.delete()
+        service1.delete()
+        claim1.delete()
+        policy.insuree_policies.first().delete()
+        policy.delete()
+        product_service.delete()
+        pricelist_detail.delete()
+        service.delete()
+        product.delete()
+
+    def test_limit_surgery(self):
+        # When the insuree already reaches his limit of visits
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        product = create_test_product("DELIV", custom_props={"max_no_surgery": 1})
+        policy = create_test_policy(product, insuree, link=True)
+        service = create_test_service("S", custom_props={"code": "SSSS"})
+        product_service = create_test_product_service(product, service)
+        pricelist_detail = add_service_to_hf_pricelist(service)
+
+        # A first claim for a delivery should be accepted
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
+        errors = validate_claim(claim1, True)
+        mark_test_claim_as_processed(claim1)
+
+        self.assertEquals(len(errors), 0, "The first surgery should be accepted")
+
+        # a second delivery should be denied
+        claim2 = create_test_claim({"insuree_id": insuree.id})
+        service2 = create_test_claimservice(claim2, custom_props={"service_id": service.id})
+        errors = validate_claim(claim2, True)
+        self.assertGreater(len(errors), 0, "The second service should fail because there is already one surgery")
+
+        # Then
+        claim1.refresh_from_db()
+        claim2.refresh_from_db()
+
+        # tearDown
+        service2.delete()
+        claim2.delete()
+        service1.delete()
+        claim1.delete()
+        policy.insuree_policies.first().delete()
+        policy.delete()
+        product_service.delete()
+        pricelist_detail.delete()
+        service.delete()
+        product.delete()
+
+    def test_limit_visit(self):
+        # When the insuree already reaches his limit of visits
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        product = create_test_product("DELIV", custom_props={"max_no_visits": 1})
+        policy = create_test_policy(product, insuree, link=True)
+        service = create_test_service("V", custom_props={"code": "VVVV"})
+        product_service = create_test_product_service(product, service)
+        pricelist_detail = add_service_to_hf_pricelist(service)
+
+        # A first claim for a delivery should be accepted
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
+        errors = validate_claim(claim1, True)
+        mark_test_claim_as_processed(claim1)
+
+        self.assertEquals(len(errors), 0, "The first visit should be accepted")
+
+        # a second delivery should be denied
+        claim2 = create_test_claim({"insuree_id": insuree.id})
+        service2 = create_test_claimservice(claim2, custom_props={"service_id": service.id})
+        errors = validate_claim(claim2, True)
+        self.assertGreater(len(errors), 0, "The second service should fail because there is already one visit")
+
+        # Then
+        claim1.refresh_from_db()
+        claim2.refresh_from_db()
+
+        # tearDown
+        service2.delete()
+        claim2.delete()
+        service1.delete()
+        claim1.delete()
+        policy.insuree_policies.first().delete()
+        policy.delete()
+        product_service.delete()
+        pricelist_detail.delete()
+        service.delete()
+        product.delete()
+
     def test_waiting_period(self):
         # When the insuree already reaches his limit of visits
         # Given
