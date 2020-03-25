@@ -1,7 +1,8 @@
 from copy import copy
 import graphene
 from .apps import ClaimConfig
-from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services
+from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
+    process_dedrem, approved_amount
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
 from django.conf import settings
@@ -737,22 +738,6 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
         return set_claims_status(data['uuids'], 'review_status', 2)
 
 
-def approved_amount(claim):
-    app_item_value = claim.items \
-        .filter(validity_to__isnull=True) \
-        .filter(status=ClaimItem.STATUS_PASSED) \
-        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
-        .aggregate(Sum("value"))
-    app_service_value = claim.services \
-        .filter(validity_to__isnull=True) \
-        .filter(status=ClaimService.STATUS_PASSED) \
-        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
-        .aggregate(Sum("value"))
-    return (app_item_value['value__sum'] if app_item_value['value__sum'] else 0) + \
-           (app_service_value['value__sum']
-            if app_service_value['value__sum'] else 0)
-
-
 class SaveClaimReviewMutation(OpenIMISMutation):
     """
     Save the review of a claim (items and services)
@@ -775,7 +760,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                                       validity_to__isnull=True)
             if claim is None:
                 return [{'message': _(
-                    "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
+                    "claim.validation.id_does_not_exist") % {'id': data['claim_uuid']}}]
             claim.save_history()
             claim.adjustment = data.get('adjustment', None)
             items = data.pop('items') if 'items' in data else []
@@ -835,6 +820,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
             c_errors += validate_claim(claim, False)
             if len(c_errors) == 0:
                 c_errors = validate_assign_prod_to_claimitems_and_services(claim)
+                c_errors += process_dedrem(claim, user.id_for_audit, True)
             c_errors += set_claim_processed_or_valuated(claim, c_errors, user)
             if c_errors:
                 errors.append({
