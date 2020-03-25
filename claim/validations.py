@@ -10,7 +10,7 @@ from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
 from insuree.models import InsureePolicy
 from medical.models import Service
-from medical_pricelist.models import ItemsPricelistDetail, ServicesPricelistDetail, ItemsOrServicesPricelistDetail
+from medical_pricelist.models import ItemsPricelistDetail, ServicesPricelistDetail
 from policy.models import Policy
 from product.models import Product, ProductItem, ProductService, ProductItemOrService
 

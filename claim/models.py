@@ -278,9 +278,6 @@ class ClaimItem(core_models.VersionedModel, ClaimDetail):
     rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
-    validity_from = fields.DateTimeField(db_column='ValidityFrom')
-    validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)
     validity_from_review = fields.DateTimeField(
         db_column='ValidityFromReview', blank=True, null=True)
     validity_to_review = fields.DateTimeField(
@@ -357,9 +354,6 @@ class ClaimService(core_models.VersionedModel, ClaimDetail):
     rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
-    validity_from = fields.DateTimeField(db_column='ValidityFrom')
-    validity_to = fields.DateTimeField(
-        db_column='ValidityTo', blank=True, null=True)
     validity_from_review = fields.DateTimeField(
         db_column='ValidityFromReview', blank=True, null=True)
     validity_to_review = fields.DateTimeField(
@@ -388,9 +382,8 @@ class ClaimService(core_models.VersionedModel, ClaimDetail):
         db_table = 'tblClaimServices'
 
 
-class ClaimDedRem(models.Model):
+class ClaimDedRem(core_models.VersionedModel):
     id = models.AutoField(db_column='ExpenditureID', primary_key=True)
-    legacy_id = models.IntegerField(db_column='LegacyID', blank=True, null=True)
 
     policy = models.ForeignKey('policy.Policy', models.DO_NOTHING, db_column='PolicyID', blank=True, null=True,
                                related_name='claim_ded_rems')
@@ -413,8 +406,6 @@ class ClaimDedRem(models.Model):
                                         blank=True, null=True)
 
     audit_user_id = models.IntegerField(db_column='AuditUserID')
-    validity_from = fields.DateTimeField(db_column='ValidityFrom')
-    validity_to = fields.DateTimeField(db_column='ValidityTo', blank=True, null=True)
 
     class Meta:
         managed = False
