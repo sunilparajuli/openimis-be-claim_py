@@ -356,8 +356,7 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
                     .filter(claim__status__gt=Policy.STATUS_ACTIVE)\
                     .filter(claim__validity_to__isnull=True)\
                     .filter(validity_to__isnull=True)\
-                    .filter(rejection_reason=0)\
-                    .filter(rejection_reason__isnull=True)\
+                    .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))\
                     .aggregate(Sum("qty_provided"))
                 if total_qty_provided["qty_provided__sum"] is not None \
                         and total_qty_provided["qty_provided__sum"] >= limit_no:
@@ -420,14 +419,15 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                     .filter(claim__insuree_id=insuree_id)\
                     .filter(service_id=service.id)\
                     .annotate(target_date=Coalesce("claim__date_to", "claim__date_from"))\
-                    .filter(target_date__gt=insuree_policy_effective_date).filter(target_date__lte=expiry_date)\
+                    .filter(target_date__gte=insuree_policy_effective_date)\
+                    .filter(target_date__lte=expiry_date)\
                     .filter(claim__status__gt=Policy.STATUS_ACTIVE)\
                     .filter(claim__validity_to__isnull=True)\
                     .filter(validity_to__isnull=True)\
-                    .filter(rejection_reason=0)\
-                    .filter(rejection_reason__isnull=True)\
+                    .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))\
                     .aggregate(Sum("qty_provided"))
-                if total_qty_provided["qty_provided__sum"] is not None and total_qty_provided >= limit_no:
+                if total_qty_provided["qty_provided__sum"] is not None \
+                        and total_qty_provided["qty_provided__sum"] >= limit_no:
                     claimservice.rejection_reason = REJECTION_REASON_QTY_OVER_LIMIT
                     errors += [{'code': REJECTION_REASON_QTY_OVER_LIMIT,
                                 'message': _("claim.validation.product_family.max_nb_allowed") % {
@@ -446,6 +446,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'C')\
                         .count()
                     if count and count >= product.max_no_consultation:
+                        claimservice.rejection_reason = REJECTION_REASON_MAX_CONSULTATIONS
                         errors += [{'message': _("claim.validation.product_family.max_nb_consultation") % {
                             'code': claimservice.claim.code,
                             'count': count,
@@ -459,6 +460,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'S')\
                         .count()
                     if count and count >= product.max_no_surgery:
+                        claimservice.rejection_reason = REJECTION_REASON_MAX_SURGERIES
                         errors += [{'message': _("claim.validation.product_family.max_nb_surgeries") % {
                             'code': claimservice.claim.code,
                             'count': count,
@@ -472,6 +474,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'D')\
                         .count()
                     if count and count >= product.max_no_delivery:
+                        claimservice.rejection_reason = REJECTION_REASON_MAX_DELIVERIES
                         errors += [{'message': _("claim.validation.product_family.max_nb_deliveries") % {
                             'code': claimservice.claim.code,
                             'count': count,
@@ -485,6 +488,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'A')\
                         .count()
                     if count and count >= product.max_no_antenatal:
+                        claimservice.rejection_reason = REJECTION_REASON_MAX_ANTENATAL
                         errors += [{'message': _("claim.validation.product_family.max_nb_antenatal") % {
                             'code': claimservice.claim.code,
                             'count': count,
@@ -498,6 +502,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'H')\
                         .count()
                     if count and count >= product.max_no_hospitalization:
+                        claimservice.rejection_reason = REJECTION_REASON_MAX_HOSPITAL_ADMISSIONS
                         errors += [{'message': _("claim.validation.product_family.max_nb_hospitalizations") % {
                             'code': claimservice.claim.code,
                             'count': count,
@@ -511,6 +516,7 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                     count = get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, 'V')\
                         .count()
                     if count and count >= product.max_no_visits:
+                        claimservice.rejection_reason = REJECTION_REASON_MAX_VISITS
                         errors += [{'message': _("claim.validation.product_family.max_nb_visits") % {
                             'code': claimservice.claim.code,
                             'count': count,
@@ -533,7 +539,7 @@ def get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effec
     queryset = Claim.objects \
         .filter(insuree_id=insuree_id) \
         .annotate(target_date=Coalesce("date_to", "date_from")) \
-        .filter(target_date__gt=insuree_policy_effective_date) \
+        .filter(target_date__gte=insuree_policy_effective_date) \
         .filter(target_date__lte=expiry_date) \
         .filter(status__gt=2) \
         .filter(validity_to__isnull=True)
@@ -637,7 +643,7 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
     target_date = claim.date_to if claim.date_to else claim.date_from
     visit_type = claim.visit_type if claim.visit_type else "O"
     adult = claim.insuree.is_adult(target_date)
-    (limitation_type_field, limit_adult, limit_child) = visit_type_field
+    (limitation_type_field, limit_adult, limit_child) = visit_type_field[visit_type]
     if elt.price_asked \
             and elt.price_approved \
             and elt.price_asked > elt.price_approved:
@@ -723,16 +729,15 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
 def validate_assign_prod_to_claimitems_and_services(claim):
     errors = []
     for claimitem in claim.items.filter(validity_to__isnull=True) \
-            .filter(rejection_reason=0).filter(rejection_reason__isnull=True):
+            .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         errors += validate_assign_prod_elt(
             claim, claimitem, claimitem.item,
             ProductItem.objects.filter(item_id=claimitem.item_id))
 
     for claimservice in claim.services.filter(validity_to__isnull=True) \
-            .filter(rejection_reason=0).filter(rejection_reason__isnull=True):
+            .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         errors += validate_assign_prod_elt(
-            claim,
-            claimservice, claimservice.service,
+            claim, claimservice, claimservice.service,
             ProductService.objects.filter(service_id=claimservice.service_id))
 
     return errors
@@ -998,6 +1003,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             work_value = itemsvc_quantity * set_price_adjusted
 
             if claim_detail.limitation == ProductItemOrService.LIMIT_FIXED_AMOUNT \
+                    and claim_detail.limitation_value \
                     and (itemsvc_quantity * claim_detail.limitation_value) < work_value:
                 work_value = itemsvc_quantity * claim_detail.limitation_value
 
@@ -1015,7 +1021,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     work_value -= set_price_deducted
                     deducted += deductible.amount - deductible.prev - deducted
 
-            if claim_detail.limitation == ProductItemOrService.LIMIT_CO_INSURANCE:
+            if claim_detail.limitation == ProductItemOrService.LIMIT_CO_INSURANCE and claim_detail.limitation_value:
                 work_value = claim_detail.limitation_value / 100 * work_value
 
             if category != Service.CATEGORY_VISIT:
