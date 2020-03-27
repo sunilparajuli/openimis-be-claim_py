@@ -1,4 +1,5 @@
 import itertools
+import logging
 from collections import OrderedDict, namedtuple
 
 from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail
@@ -15,6 +16,8 @@ from policy.models import Policy
 from product.models import Product, ProductItem, ProductService, ProductItemOrService
 
 from .apps import ClaimConfig
+
+logger = logging.getLogger(__name__)
 
 REJECTION_REASON_INVALID_ITEM_OR_SERVICE = 1
 REJECTION_REASON_NOT_IN_PRICE_LIST = 2
@@ -42,6 +45,7 @@ def validate_claim(claim, check_max):
     :param claim: claim to be verified
     :return: (result_code, error_details)
     """
+    logger.debug(f"Validating claim {claim.uuid}")
     if ClaimConfig.default_validations_disabled:
         return []
     errors = []
@@ -90,6 +94,7 @@ def validate_claim(claim, check_max):
                     'message': _("claim.validation.all_items_and_services_rejected") % {
                         'code': claim.code},
                     'detail': claim.uuid}]
+    logger.debug(f"Validation found {len(errors)} error(s)")
     return errors
 
 
@@ -640,6 +645,7 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
         "E": ("limitation_type_e", "limit_adult_e", "limit_child_e"),
         "R": ("limitation_type_r", "limit_adult_r", "limit_child_r"),
     }
+    logger.debug(f"Assigning product for {type(elt)} {elt.id}")
     target_date = claim.date_to if claim.date_to else claim.date_from
     visit_type = claim.visit_type if claim.visit_type else "O"
     adult = claim.insuree.is_adult(target_date)
@@ -704,6 +710,10 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
             product_elt = product_elt_f
             product_elt_c = None
 
+    if product_elt is None:
+        logger.warning(f"Could not find a suitable product from {type(elt)} {elt.id}")
+    if product_elt.product_id is None:
+        logger.warning(f"Found a productItem/Service for {type(elt)} {elt.id} but it does not have a product")
     elt.product_id = product_elt.product_id
     elt.policy = product_elt\
         .product\
@@ -714,6 +724,9 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
         .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
         .filter(family_id=claim.insuree.family_id)\
         .first()
+    if elt.policy is None:
+        logger.warning(f"{type(elt)} id {elt.id} doesn't seem to have a valid policy with product"
+                       f" {product_elt.product_id}")
     elt.price_origin = product_elt.price_origin
     # The original code also sets claimservice.price_adjusted but it also always NULL
     if product_elt_c:
@@ -814,6 +827,7 @@ def _get_dedrem(prefix, dedrem_type, field, product, claim, policy_id):
 # - Go through each item and deduce
 # - Go through each service and deduce
 def process_dedrem(claim, audit_user_id=-1, is_process=False):
+    logger.debug(f"processing dedrem for claim {claim.uuid}")
     target_date = claim.date_to if claim.date_to else claim.date_from
     category = get_claim_category(claim)
     if claim.date_from != target_date:
@@ -860,6 +874,8 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             .filter(Q(service__validity_to__isnull=True) | Q(service__legacy_id__isnull=True)) \
             .filter(product__validity_to__isnull=True) \
             .values("policy_id", "product_id")
+    if items_query.count() == 0 and services_query.count() == 0:
+        logger.warning(f"claim {claim.uuid} did not have any item or service to valuate.")
     for policy_product in items_query.union(services_query, all=True):
         product = Product.objects.get(id=policy_product["product_id"])
         policy_members = InsureePolicy.objects \

@@ -133,27 +133,6 @@ class ValidationTest(TestCase):
         service1.delete()
         claim.delete()
 
-    # This test requires a valid policy...
-    # def test_validate_claim_valid(self):
-    #     # Given
-    #     claim = create_test_claim()
-    #     service1 = create_test_claimservice(claim, "S")
-    #     service2 = create_test_claimservice(claim, "S")
-    #     item1 = create_test_claimitem(claim, "D")
-    #     item2 = create_test_claimitem(claim, "D")
-
-    #     # When
-    #     errors = validate_claim(claim, True)
-    #     # Then
-    #     self.assertEquals(len(errors), 0, "The claim should be fully valid")
-
-    #     # tearDown
-    #     service1.delete()
-    #     service2.delete()
-    #     item1.delete()
-    #     item2.delete()
-    #     claim.delete()
-
     # This test cannot be performed because the database constraints don't allow a null date_from.
     # def test_validate_claim_target_date(self):
     #     # Given
@@ -616,9 +595,9 @@ class ValidationTest(TestCase):
 
         claim1 = create_test_claim({"insuree_id": insuree.id})
         service1 = create_test_claimservice(
-            claim1, custom_props={"service_id": service.id, "product": product, "policy": policy})
+            claim1, custom_props={"service_id": service.id})
         item1 = create_test_claimitem(
-            claim1, "D", custom_props={"item_id": item.id, "product": product, "policy": policy})
+            claim1, "D", custom_props={"item_id": item.id})
         errors = validate_claim(claim1, True)
         errors += validate_assign_prod_to_claimitems_and_services(claim1)
         self.assertEqual(len(errors), 0)
@@ -693,9 +672,9 @@ class ValidationTest(TestCase):
         # The insuree has a patient_category of 6, not matching the service category
         claim1 = create_test_claim({"insuree_id": insuree.id})
         service1 = create_test_claimservice(
-            claim1, custom_props={"service_id": service.id, "product": product, "policy": policy})
+            claim1, custom_props={"service_id": service.id})
         item1 = create_test_claimitem(
-            claim1, "D", custom_props={"item_id": item.id, "product": product, "policy": policy})
+            claim1, "D", custom_props={"item_id": item.id})
         errors = validate_claim(claim1, True)
         errors += validate_assign_prod_to_claimitems_and_services(claim1)
         self.assertEqual(len(errors), 0)
