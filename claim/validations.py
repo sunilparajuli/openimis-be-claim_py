@@ -1030,7 +1030,6 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     # remunerated += 0 # why ?
                     set_price_valuated = 0
                     set_price_remunerated = 0
-                    continue  # TODO yuk
                 else:
                     # partial coverage
                     set_price_deducted = deductible.amount - deductible.prev - deducted
