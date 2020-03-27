@@ -607,7 +607,6 @@ class ValidationTest(TestCase):
         claim1.refresh_from_db()
         item1.refresh_from_db()
         service1.refresh_from_db()
-        self.assertFalse(result)
         self.assertEqual(len(errors), 0)
         self.assertEqual(item1.price_adjusted, 100)
         self.assertEqual(item1.price_valuated, 700)
