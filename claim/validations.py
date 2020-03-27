@@ -862,16 +862,16 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             .filter(validity_to__isnull=True) \
             .filter(rejection_reason=0) \
             .filter(product__isnull=False) \
-            .filter(item__validity_from__gte=target_date) \
-            .filter(Q(item__validity_to__isnull=True) | Q(item__legacy_id__isnull=True)) \
+            .filter(item__validity_from__lte=target_date) \
+            .filter(Q(item__validity_to__isnull=True) | Q(item__validity_to__gte=target_date)) \
             .filter(product__validity_to__isnull=True) \
             .values("policy_id", "product_id")
     services_query = claim.services \
             .filter(validity_to__isnull=True) \
             .filter(rejection_reason=0) \
             .filter(product__isnull=False) \
-            .filter(service__validity_from__gte=target_date) \
-            .filter(Q(service__validity_to__isnull=True) | Q(service__legacy_id__isnull=True)) \
+            .filter(service__validity_from__lte=target_date) \
+            .filter(Q(service__validity_to__isnull=True) | Q(service__validity_to__gte=target_date)) \
             .filter(product__validity_to__isnull=True) \
             .values("policy_id", "product_id")
     if items_query.count() == 0 and services_query.count() == 0:
@@ -881,8 +881,8 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
         policy_members = InsureePolicy.objects \
             .filter(policy_id=policy_product["policy_id"]) \
             .filter(effective_date__isnull=False) \
-            .filter(effective_date__lte=claim.date_to) \
-            .filter(expiry_date__gte=claim.date_to) \
+            .filter(effective_date__lte=target_date) \
+            .filter(expiry_date__gte=target_date) \
             .filter(validity_to__isnull=True) \
             .count()
 
@@ -1231,9 +1231,4 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
 
         claim.save()
 
-        return relative_prices
-
-    return None
-
-
-
+    return []  # process_dedrem will never put the claim in error status (beside technical error and until it changes)

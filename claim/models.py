@@ -233,9 +233,21 @@ class ClaimMutation(core_models.UUIDModel):
         db_table = "claim_ClaimMutation"
 
 
+class ClaimDetailManager(models.Manager):
+
+    def filter(self, *args, **kwargs):
+        keys = [x for x in kwargs if "itemsvc" in x]
+        for key in keys:
+            new_key = key.replace("itemsvc", self.model.model_prefix)
+            kwargs[new_key] = kwargs.pop(key)
+        return super(ClaimDetailManager, self).filter(*args, **kwargs)
+
+
 class ClaimDetail:
     STATUS_PASSED = 1
     STATUS_REJECTED = 2
+
+    objects = ClaimDetailManager()
 
     @property
     def itemsvc(self):
@@ -246,8 +258,12 @@ class ClaimDetail:
         else:
             raise Exception("ClaimDetail has neither item nor service")
 
+    class Meta:
+        abstract = True
+
 
 class ClaimItem(core_models.VersionedModel, ClaimDetail):
+    model_prefix = "item"
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
                               db_column='ClaimID', related_name='items')
@@ -300,6 +316,7 @@ class ClaimItem(core_models.VersionedModel, ClaimDetail):
         db_column='PriceOrigin', max_length=1, blank=True, null=True)
     exceed_ceiling_amount_category = models.DecimalField(
         db_column='ExceedCeilingAmountCategory', max_digits=18, decimal_places=2, blank=True, null=True)
+    objects = ClaimDetailManager()
 
     class Meta:
         managed = False
@@ -325,6 +342,7 @@ class ClaimAttachment(core_models.UUIDModel, core_models.UUIDVersionedModel):
 
 
 class ClaimService(core_models.VersionedModel, ClaimDetail):
+    model_prefix = "service"
     id = models.AutoField(db_column='ClaimServiceID', primary_key=True)
     claim = models.ForeignKey(
         Claim, models.DO_NOTHING, db_column='ClaimID', related_name='services')
@@ -376,6 +394,7 @@ class ClaimService(core_models.VersionedModel, ClaimDetail):
         db_column='PriceOrigin', max_length=1, blank=True, null=True)
     exceed_ceiling_amount_category = models.DecimalField(
         db_column='ExceedCeilingAmountCategory', max_digits=18, decimal_places=2, blank=True, null=True)
+    objects = ClaimDetailManager()
 
     class Meta:
         managed = False

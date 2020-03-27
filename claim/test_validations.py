@@ -600,8 +600,8 @@ class ValidationTest(TestCase):
             claim1, "D", custom_props={"item_id": item.id})
         errors = validate_claim(claim1, True)
         errors += validate_assign_prod_to_claimitems_and_services(claim1)
+        errors += process_dedrem(claim1, -1, True)
         self.assertEqual(len(errors), 0)
-        result = process_dedrem(claim1, -1, True)
 
         # Then
         claim1.refresh_from_db()
@@ -677,14 +677,13 @@ class ValidationTest(TestCase):
             claim1, "D", custom_props={"item_id": item.id})
         errors = validate_claim(claim1, True)
         errors += validate_assign_prod_to_claimitems_and_services(claim1)
+        errors += process_dedrem(claim1, -1, True)
         self.assertEqual(len(errors), 0)
-        result = process_dedrem(claim1, -1, True)
 
         # Then
         claim1.refresh_from_db()
         item1.refresh_from_db()
         service1.refresh_from_db()
-        self.assertEqual(result, False)  # Not relative prices
         self.assertEqual(len(errors), 0)
         self.assertEqual(item1.price_adjusted, 100)
         self.assertEqual(item1.price_valuated, 700)
