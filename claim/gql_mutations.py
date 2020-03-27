@@ -1,3 +1,4 @@
+import logging
 from copy import copy
 import graphene
 from .apps import ClaimConfig
@@ -15,6 +16,9 @@ from graphene import InputObjectType
 from location.schema import userDistricts
 from .models import Claim, Feedback, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment
 from product.models import ProductItemOrService
+
+logger = logging.getLogger(__name__)
+
 
 class ClaimItemInputType(InputObjectType):
     id = graphene.Int(required=False)
@@ -803,6 +807,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
             raise PermissionDenied(_("unauthorized"))
         errors = []
         for claim_uuid in data["uuids"]:
+            logger.debug("ProcessClaimsMutation: processing %s", claim_uuid)
             c_errors = []
             claim = Claim.objects \
                 .filter(uuid=claim_uuid) \
@@ -817,11 +822,17 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 }
                 continue
             claim.save_history()
+            logger.debug("ProcessClaimsMutation: validating claim %s", claim_uuid)
             c_errors += validate_claim(claim, False)
+            logger.debug("ProcessClaimsMutation: claim %s validated, nb of errors: ", claim_uuid, len(c_errors))
             if len(c_errors) == 0:
                 c_errors = validate_assign_prod_to_claimitems_and_services(claim)
+                logger.debug("ProcessClaimsMutation: claim %s assigned, nb of errors: ", claim_uuid, len(c_errors))
                 c_errors += process_dedrem(claim, user.id_for_audit, True)
+                logger.debug("ProcessClaimsMutation: claim %s processed for dedrem, nb of errors: ", claim_uuid,
+                             len(errors))
             c_errors += set_claim_processed_or_valuated(claim, c_errors, user)
+            logger.debug("ProcessClaimsMutation: claim %s set processed or valuated", claim.uuid)
             if c_errors:
                 errors.append({
                     'title': claim.code,
@@ -830,6 +841,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
         if len(errors) == 1:
             errors = errors[0]['list']
+        logger.debug("ProcessClaimsMutation: done, errors: %s", len(errors))
         return errors
 
 

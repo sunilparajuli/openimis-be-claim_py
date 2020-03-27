@@ -645,9 +645,10 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
         "E": ("limitation_type_e", "limit_adult_e", "limit_child_e"),
         "R": ("limitation_type_r", "limit_adult_r", "limit_child_r"),
     }
-    logger.debug(f"Assigning product for {type(elt)} {elt.id}")
+    logger.debug("[claim: %s] Assigning product for %s %s", claim.uuid, type(elt), elt.id)
+    logger.debug("[claim: %s] ")
     target_date = claim.date_to if claim.date_to else claim.date_from
-    visit_type = claim.visit_type if claim.visit_type else "O"
+    visit_type = claim.visit_type if claim.visit_type and claim.visit_type in visit_type_field else "O"
     adult = claim.insuree.is_adult(target_date)
     (limitation_type_field, limit_adult, limit_child) = visit_type_field[visit_type]
     if elt.price_asked \
@@ -656,15 +657,21 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
         claim_price = elt.price_asked
     else:
         claim_price = elt.price_approved
-
+    logger.debug("[claim: %s] claim_price: %s", claim.uuid, claim_price)
+    logger.debug("[claim: %s] Checking product itemsvc limit at date %s for family %s with field %s C for adult: %s",
+                 claim.uuid, target_date, claim.insuree.family_id, limitation_type_field, adult)
     product_elt_c = _query_product_item_service_limit(
         target_date, claim.insuree.family_id, elt_qs, limitation_type_field, "C",
         limit_adult if adult else limit_child
     )
+    logger.debug("[claim: %s] C product found: %s, checking product itemsvc limit at date %s for family %s "
+                 "with field %s F for adult: %s", claim.uuid, product_elt_c is not None, target_date,
+                 claim.insuree.family_id, limitation_type_field, adult)
     product_elt_f = _query_product_item_service_limit(
         target_date, claim.insuree.family_id, elt_qs, limitation_type_field, "F",
         limit_adult if adult else limit_child
     )
+    logger.debug("[claim: %s] F found: %s", claim.uuid, product_elt_f is not None)
     if not product_elt_c and not product_elt_f:
         elt.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
         elt.save()
@@ -677,12 +684,14 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
     if product_elt_f:
         fixed_limit = getattr(
             product_elt_f, limit_adult if adult else limit_child)
+        logger.debug("[claim: %s] fixed_limit: %s", claim.uuid, fixed_limit)
     else:
         fixed_limit = None
 
     if product_elt_c:
         co_sharing_percent = getattr(
             product_elt_c, limit_adult if adult else limit_child)
+        logger.debug("[claim: %s] co_sharing_percent: %s", claim.uuid, co_sharing_percent)
     else:
         co_sharing_percent = None
 
@@ -714,7 +723,9 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
         logger.warning(f"Could not find a suitable product from {type(elt)} {elt.id}")
     if product_elt.product_id is None:
         logger.warning(f"Found a productItem/Service for {type(elt)} {elt.id} but it does not have a product")
+    logger.debug("[claim: %s] product_id found: %s", claim.uuid, product_elt.product_id)
     elt.product_id = product_elt.product_id
+    logger.debug("[claim: %s] fetching policy %s", claim.uuid, )
     elt.policy = product_elt\
         .product\
         .policies\
@@ -727,6 +738,7 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
     if elt.policy is None:
         logger.warning(f"{type(elt)} id {elt.id} doesn't seem to have a valid policy with product"
                        f" {product_elt.product_id}")
+    logger.debug("[claim: %s] setting policy %s", claim.uuid, elt.policy.id if elt.policy else None)
     elt.price_origin = product_elt.price_origin
     # The original code also sets claimservice.price_adjusted but it also always NULL
     if product_elt_c:
@@ -735,24 +747,32 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
     else:
         elt.limitation = "F"
         elt.limitation_value = fixed_limit
+    logger.debug("[claim: %s] setting limitation %s to %s", claim.uuid, elt.limitation, elt.limitation_value)
     elt.save()
     return []
 
 
 def validate_assign_prod_to_claimitems_and_services(claim):
     errors = []
+    logger.debug("[claim: %s] validate_assign_prod_to_claimitems_and_services", claim.uuid)
     for claimitem in claim.items.filter(validity_to__isnull=True) \
             .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
+        logger.debug("[claim: %s] validating item %s", claim.uuid, claimitem.id)
+        logger.debug("[claim: %s] nb of ProductItems %s", ProductItem.objects.filter(item_id=claimitem.item_id).count())
         errors += validate_assign_prod_elt(
             claim, claimitem, claimitem.item,
             ProductItem.objects.filter(item_id=claimitem.item_id))
 
     for claimservice in claim.services.filter(validity_to__isnull=True) \
             .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
+        logger.debug("[claim: %s] validating service %s", claim.uuid, claimservice.id)
+        logger.debug("[claim: %s] nb of ProductServices %s",
+                     ProductService.objects.filter(service_id=claimservice.service_id).count())
         errors += validate_assign_prod_elt(
             claim, claimservice, claimservice.service,
             ProductService.objects.filter(service_id=claimservice.service_id))
 
+    logger.debug("[claim: %s] validate_assign_prod_to_claimitems_and_services nb of errors %s", claim.uuid, len(errors))
     return errors
 
 
