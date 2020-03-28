@@ -1,4 +1,7 @@
 import logging
+import uuid
+import pathlib
+import base64
 from copy import copy
 import graphene
 from .apps import ClaimConfig
@@ -287,10 +290,31 @@ def service_create_hook(claim_id, service):
     ClaimService.objects.create(claim_id=claim_id, **service)
 
 
+def create_file(date, claim_id, document):
+    date_iso = date.isoformat()
+    root = ClaimConfig.claim_attachments_root_path
+    file_dir = '%s/%s/%s/%s' % (
+        date_iso[0:4],
+        date_iso[5:7],
+        date_iso[8:10],
+        claim_id
+    )
+    file_path = '%s/%s' % (file_dir, uuid.uuid4())
+    pathlib.Path('%s/%s' % (root, file_dir)).mkdir(parents=True, exist_ok=True)
+    f = open('%s/%s' % (root, file_path), "xb")
+    f.write(base64.b64decode(document))
+    f.close()
+    return file_path
+
+
 def create_attachment(claim_id, data):
     data["claim_id"] = claim_id
     from core import datetime
-    data['validity_from'] = datetime.datetime.now()
+    now = datetime.datetime.now()
+    if ClaimConfig.claim_attachments_root_path:
+        # don't use data date as it may be updated by user afterwards!
+        data['url'] = create_file(now, claim_id, data.pop('document'))
+    data['validity_from'] = now
     ClaimAttachment.objects.create(**data)
 
 

@@ -21,7 +21,8 @@ DEFAULT_CFG = {
     "gql_mutation_deliver_claim_review_perms": ["111010"],
     "gql_mutation_process_claims_perms": ["111011"],
     "gql_mutation_delete_claims_perms": ["111004"],
-    "claim_print_perms": ["111006"]
+    "claim_print_perms": ["111006"],
+    "claim_attachments_root_path": None
 }
 
 
@@ -47,6 +48,7 @@ class ClaimConfig(AppConfig):
     gql_mutation_process_claims_perms = []
     gql_mutation_delete_claims_perms = []
     claim_print_perms = []
+    claim_attachments_root_path = None
 
     def _configure_perms(self, cfg):
         ClaimConfig.default_validations_disabled = cfg[
@@ -87,6 +89,8 @@ class ClaimConfig(AppConfig):
             "gql_mutation_delete_claims_perms"]
         ClaimConfig.claim_print_perms = cfg[
             "claim_print_perms"]
+        ClaimConfig.claim_attachments_root_path = cfg[
+            "claim_attachments_root_path"]
 
     def ready(self):
         from core.models import ModuleConfiguration

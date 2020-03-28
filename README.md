@@ -71,6 +71,13 @@ None
 * gql_mutation_process_claims_perms: required rights to call process_claims GraphQL Mutation (default: ["111011"])
 * gql_mutation_delete_claims_perms: required rights to call delete_claims GraphQL Mutation (default: ["111004"])
 * claim_print_perms: required rights to call print endpoint (default: ["111006"])
+* claim_attachments_root_path: using os standard file system, root path for the claim attachments (default: None ... documents B64 in database)
+
+  WARNINGS:
+  * attachments in input are NOT streamed (posted in a GraphQL query and fully read when serving), gateway must be configure to limit request payload size
+  * attachments in output are served from the python (django) os process, generating load (memory consumption) on the application server, customisation of the view to output a redirect to a static file server is recommended
+  * in an attempt to prevent encoding problems, files are written as binaries on the filesystem, please ensure the mounted file system supports python binary access (wb flag)
+
 
 ## openIMIS Modules Dependencies
 * core.models.VersionedModel
