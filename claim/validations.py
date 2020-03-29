@@ -948,12 +948,21 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             prev_remunerated = rem_g.prev
         if product.max_policy:
             if policy_members > product.threshold:  # Threshold is NOT NULL
-                ceiling.amount = product.max_policy + \
-                                 (policy_members - product.threshold) * product.max_policy_extra_member
+                if product.max_policy_extra_member:
+                    ceiling = Deductible(
+                        product.max_policy + (policy_members - product.threshold) * product.max_policy_extra_member,
+                        ceiling.type,
+                        ceiling.prev)
                 if product.max_ceiling_policy and ceiling.amount > product.max_ceiling_policy:
-                    ceiling.amount = product.max_ceiling_policy
+                    ceiling = Deductible(
+                        product.max_ceiling_policy,
+                        ceiling.type,
+                        ceiling.prev)
             else:
-                ceiling.amount = product.max_policy
+                ceiling = Deductible(
+                    product.max_policy,
+                    ceiling.type,
+                    ceiling.prev)
 
         # Then check IP deductibles
         if not deductible:
@@ -980,12 +989,24 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     prev_remunerated = max_ip.prev
                 if product.max_ip_policy:
                     if policy_members > product.threshold:  # Threshold is NOT NULL
-                        ceiling.amount = product.max_ip_policy + \
-                                         (policy_members - product.threshold) * product.max_policy_extra_member_ip
+                        if product.max_policy_extra_member_ip:
+                            ceiling = Deductible(
+                                product.max_ip_policy + (policy_members - product.threshold) * product.max_policy_extra_member_ip,
+                                ceiling.type,
+                                ceiling.prev
+                            )
                         if product.max_ceiling_policy_ip and ceiling.amount > product.max_ceiling_policy_ip:
-                            ceiling.amount = product.max_ceiling_policy_ip
+                            ceiling = Deductible(
+                                product.max_ceiling_policy_ip,
+                                ceiling.type,
+                                ceiling.prev
+                            )
                     else:
-                        ceiling.amount = product.max_ip_policy
+                        ceiling = Deductible(
+                            product.max_ip_policy,
+                            ceiling.type,
+                            ceiling.prev
+                        )
             else:
                 max_op = _get_dedrem("max_op", "O", "rem_op", product, claim, policy_product["policy_id"])
                 if max_op:
@@ -993,12 +1014,24 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     prev_remunerated = max_op.prev
                 if product.max_op_policy:
                     if policy_members > product.threshold:  # Threshold is NOT NULL
-                        ceiling.amount = product.max_op_policy + \
-                                         (policy_members - product.threshold) * product.max_policy_extra_member_op
+                        if product.max_policy_extra_member_op:
+                            ceiling = Deductible(
+                                product.max_op_policy + (policy_members - product.threshold) * product.max_policy_extra_member_op,
+                                ceiling.type,
+                                ceiling.prev
+                            )
                         if product.max_ceiling_policy_op and ceiling.amount > product.max_ceiling_policy_op:
-                            ceiling.amount = product.max_ceiling_policy_op
+                            ceiling = Deductible(
+                                product.max_ceiling_policy_op,
+                                ceiling.type,
+                                ceiling.prev
+                            )
                     else:
-                        ceiling.amount = product.max_op_policy
+                        ceiling = Deductible(
+                            product.max_op_policy,
+                            ceiling.type,
+                            ceiling.prev
+                        )
 
         # Loop through items
         deducted = 0
