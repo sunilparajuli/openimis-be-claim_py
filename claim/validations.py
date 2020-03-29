@@ -833,7 +833,7 @@ def _get_dedrem(prefix, dedrem_type, field, product, claim, policy_id):
             ClaimDedRem.objects
                 .filter(policy_id=policy_id, insuree_id=claim.insuree_id)
                 .exclude(claim_id=claim.id)
-                .aggregate(Sum(field))
+                .aggregate(sum=Sum(field))["sum"]
         )
     if getattr(product, prefix + "_policy", None):
         deductible = Deductible(
@@ -842,7 +842,7 @@ def _get_dedrem(prefix, dedrem_type, field, product, claim, policy_id):
             ClaimDedRem.objects
                 .filter(policy_id=policy_id)
                 .exclude(claim_id=claim.id)
-                .aggregate(Sum(field))
+                .aggregate(sum=Sum(field))["sum"]
         )
     return deductible
 
