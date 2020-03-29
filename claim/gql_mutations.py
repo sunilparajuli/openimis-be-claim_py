@@ -848,15 +848,15 @@ class ProcessClaimsMutation(OpenIMISMutation):
             claim.save_history()
             logger.debug("ProcessClaimsMutation: validating claim %s", claim_uuid)
             c_errors += validate_claim(claim, False)
-            logger.debug("ProcessClaimsMutation: claim %s validated, nb of errors: ", claim_uuid, len(c_errors))
+            logger.debug("ProcessClaimsMutation: claim %s validated, nb of errors: %s", claim_uuid, len(c_errors))
             if len(c_errors) == 0:
                 c_errors = validate_assign_prod_to_claimitems_and_services(claim)
-                logger.debug("ProcessClaimsMutation: claim %s assigned, nb of errors: ", claim_uuid, len(c_errors))
+                logger.debug("ProcessClaimsMutation: claim %s assigned, nb of errors: %s", claim_uuid, len(c_errors))
                 c_errors += process_dedrem(claim, user.id_for_audit, True)
-                logger.debug("ProcessClaimsMutation: claim %s processed for dedrem, nb of errors: ", claim_uuid,
+                logger.debug("ProcessClaimsMutation: claim %s processed for dedrem, nb of errors: %s", claim_uuid,
                              len(errors))
             c_errors += set_claim_processed_or_valuated(claim, c_errors, user)
-            logger.debug("ProcessClaimsMutation: claim %s set processed or valuated", claim.uuid)
+            logger.debug("ProcessClaimsMutation: claim %s set processed or valuated", claim_uuid)
             if c_errors:
                 errors.append({
                     'title': claim.code,
@@ -865,7 +865,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
         if len(errors) == 1:
             errors = errors[0]['list']
-        logger.debug("ProcessClaimsMutation: done, errors: %s", len(errors))
+        logger.debug("ProcessClaimsMutation: claim %s done, errors: %s", claim_uuid, len(errors))
         return errors
 
 

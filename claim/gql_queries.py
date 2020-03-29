@@ -7,7 +7,7 @@ from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from location.schema import userDistricts
 from claim_batch.schema import BatchRunGQLType
-from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment, ClaimMutation
+from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
 from core.models import Officer
 
 

@@ -4,6 +4,7 @@ from core import filter_validity
 import graphene
 import graphene_django_optimizer as gql_optimizer
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
+from .models import ClaimMutation
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils.translation import gettext as _
 from graphene_django.filter import DjangoFilterConnectionField

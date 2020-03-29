@@ -179,10 +179,11 @@ def validate_claimservice_validity(claimservice):
 
 def validate_claimitem_in_price_list(claim, claimitem):
     pricelist_detail = ItemsPricelistDetail.objects\
-        .filter(items_pricelist=claim.health_facility.items_pricelist)\
-        .filter(item_id=claimitem.item_id)\
-        .filter(validity_to__isnull=True)\
-        .filter(items_pricelist__validity_to__isnull=True)\
+        .filter(item_id=claimitem.item_id,
+                validity_to__isnull=True,
+                items_pricelist=claim.health_facility.items_pricelist,
+                items_pricelist__validity_to__isnull=True
+                )\
         .first()
     if not pricelist_detail:
         claimitem.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
@@ -190,10 +191,11 @@ def validate_claimitem_in_price_list(claim, claimitem):
 
 def validate_claimservice_in_price_list(claim, claimservice):
     pricelist_detail = ServicesPricelistDetail.objects\
-        .filter(services_pricelist=claim.health_facility.services_pricelist)\
-        .filter(service_id=claimservice.service_id)\
-        .filter(validity_to__isnull=True)\
-        .filter(services_pricelist__validity_to__isnull=True)\
+        .filter(service_id=claimservice.service_id,
+                validity_to__isnull=True,
+                services_pricelist=claim.health_facility.services_pricelist,
+                services_pricelist__validity_to__isnull=True
+                )\
         .first()
     if not pricelist_detail:
         claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
@@ -253,14 +255,15 @@ def validate_claimservice_limitation_fail(claim, claimservice):
 def frequency_check(qs, claim, elt):
     td = claim.date_from if not claim.date_to else claim.date_to
     delta = datetimedelta(days=elt.frequency)
-    return qs.filter(claim__status__gt=Claim.STATUS_ENTERED) \
-        .filter(validity_to__isnull=True) \
-        .filter(status=ClaimDetail.STATUS_PASSED) \
-        .filter(claim__insuree_id=claim.insuree_id) \
-        .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)) \
-        .filter(claim__insuree_id=claim.insuree_id) \
+    return qs \
         .annotate(target_date=Coalesce("claim__date_to", "claim__date_from")) \
-        .filter(target_date__gte=td - delta) \
+        .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True),
+                validity_to__isnull=True,
+                target_date__gte=td - delta,
+                status=ClaimDetail.STATUS_PASSED,
+                claim__insuree_id=claim.insuree_id,
+                claim__status__gt=Claim.STATUS_ENTERED
+                ) \
         .exclude(claim__uuid=claim.uuid) \
         .order_by('-date_from') \
         .exists()
@@ -353,15 +356,17 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
                 limit_no = product_item.limit_no_child
             if limit_no is not None and limit_no >= 0:
                 # count qty provided
-                total_qty_provided = ClaimItem.objects\
-                    .filter(claim__insuree_id=insuree_id)\
-                    .filter(item_id=item.id)\
-                    .annotate(target_date=Coalesce("claim__date_to", "claim__date_from"))\
-                    .filter(target_date__gt=insuree_policy_effective_date).filter(target_date__lte=expiry_date)\
-                    .filter(claim__status__gt=Policy.STATUS_ACTIVE)\
-                    .filter(claim__validity_to__isnull=True)\
-                    .filter(validity_to__isnull=True)\
-                    .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))\
+                total_qty_provided = ClaimItem.objects \
+                    .annotate(target_date=Coalesce("claim__date_to", "claim__date_from")) \
+                    .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True),
+                            validity_to__isnull=True,
+                            claim__insuree_id=insuree_id,
+                            item_id=item.id,
+                            target_date__gt=insuree_policy_effective_date,
+                            target_date__lte=expiry_date,
+                            claim__status__gt=Policy.STATUS_ACTIVE,
+                            claim__validity_to__isnull=True
+                            ) \
                     .aggregate(Sum("qty_provided"))
                 if total_qty_provided["qty_provided__sum"] is not None \
                         and total_qty_provided["qty_provided__sum"] >= limit_no:
@@ -420,16 +425,17 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                 limit_no = product_service.limit_no_child
             if limit_no is not None and limit_no >= 0:
                 # count qty provided
-                total_qty_provided = ClaimService.objects\
-                    .filter(claim__insuree_id=insuree_id)\
-                    .filter(service_id=service.id)\
-                    .annotate(target_date=Coalesce("claim__date_to", "claim__date_from"))\
-                    .filter(target_date__gte=insuree_policy_effective_date)\
-                    .filter(target_date__lte=expiry_date)\
-                    .filter(claim__status__gt=Policy.STATUS_ACTIVE)\
-                    .filter(claim__validity_to__isnull=True)\
-                    .filter(validity_to__isnull=True)\
-                    .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))\
+                total_qty_provided = ClaimService.objects \
+                    .annotate(target_date=Coalesce("claim__date_to", "claim__date_from")) \
+                    .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True),
+                            validity_to__isnull=True,
+                            service_id=service.id,
+                            target_date__gte=insuree_policy_effective_date,
+                            target_date__lte=expiry_date,
+                            claim__insuree_id=insuree_id,
+                            claim__status__gt=Policy.STATUS_ACTIVE,
+                            claim__validity_to__isnull=True
+                            ) \
                     .aggregate(Sum("qty_provided"))
                 if total_qty_provided["qty_provided__sum"] is not None \
                         and total_qty_provided["qty_provided__sum"] >= limit_no:
@@ -542,12 +548,12 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
 
 def get_claim_queryset_by_category(expiry_date, insuree_id, insuree_policy_effective_date, category):
     queryset = Claim.objects \
-        .filter(insuree_id=insuree_id) \
         .annotate(target_date=Coalesce("date_to", "date_from")) \
-        .filter(target_date__gte=insuree_policy_effective_date) \
-        .filter(target_date__lte=expiry_date) \
-        .filter(status__gt=2) \
-        .filter(validity_to__isnull=True)
+        .filter(insuree_id=insuree_id,
+                validity_to__isnull=True,
+                status__gt=2,
+                target_date__gte=insuree_policy_effective_date,
+                target_date__lte=expiry_date)
     if category == 'V':
         queryset = queryset.filter(
             Q(category=category) | Q(category__isnull=True))
@@ -616,12 +622,12 @@ def get_claim_category(claim):
         (Service.CATEGORY_OTHER, "Other"),
         (Service.CATEGORY_VISIT, "Visit"),
     ])
-    claim_service_categories = [
-        item["service__category"]
-        for item in claim.services
-        .filter(validity_to__isnull=True)
-        .filter(service__validity_to__isnull=True)
+    services = claim.services \
+        .filter(validity_to__isnull=True, service__validity_to__isnull=True) \
         .values("service__category").distinct()
+    claim_service_categories = [
+        service["service__category"]
+        for service in services
     ]
     for category in service_categories:
         if category in claim_service_categories:
@@ -646,7 +652,6 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
         "R": ("limitation_type_r", "limit_adult_r", "limit_child_r"),
     }
     logger.debug("[claim: %s] Assigning product for %s %s", claim.uuid, type(elt), elt.id)
-    logger.debug("[claim: %s] ")
     target_date = claim.date_to if claim.date_to else claim.date_from
     visit_type = claim.visit_type if claim.visit_type and claim.visit_type in visit_type_field else "O"
     adult = claim.insuree.is_adult(target_date)
@@ -725,16 +730,16 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
         logger.warning(f"Found a productItem/Service for {type(elt)} {elt.id} but it does not have a product")
     logger.debug("[claim: %s] product_id found: %s", claim.uuid, product_elt.product_id)
     elt.product_id = product_elt.product_id
-    logger.debug("[claim: %s] fetching policy %s", claim.uuid, )
+    logger.debug("[claim: %s] fetching policy for family %s", claim.uuid, claim.insuree.family_id)
     elt.policy = product_elt\
         .product\
-        .policies\
-        .filter(effective_date__lte=target_date)\
-        .filter(expiry_date__gte=target_date)\
-        .filter(validity_to__isnull=True)\
-        .filter(status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED])\
-        .filter(family_id=claim.insuree.family_id)\
-        .first()
+        .policies.filter(
+            family_id=claim.insuree.family_id,
+            validity_to__isnull=True,
+            effective_date__lte=target_date,
+            expiry_date__gte=target_date,
+            status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED]
+        ).first()
     if elt.policy is None:
         logger.warning(f"{type(elt)} id {elt.id} doesn't seem to have a valid policy with product"
                        f" {product_elt.product_id}")
@@ -758,7 +763,9 @@ def validate_assign_prod_to_claimitems_and_services(claim):
     for claimitem in claim.items.filter(validity_to__isnull=True) \
             .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         logger.debug("[claim: %s] validating item %s", claim.uuid, claimitem.id)
-        logger.debug("[claim: %s] nb of ProductItems %s", ProductItem.objects.filter(item_id=claimitem.item_id).count())
+        logger.debug("[claim: %s] nb of ProductItems %s",
+                     claim.uuid,
+                     ProductItem.objects.filter(item_id=claimitem.item_id).count())
         errors += validate_assign_prod_elt(
             claim, claimitem, claimitem.item,
             ProductItem.objects.filter(item_id=claimitem.item_id))
@@ -767,6 +774,7 @@ def validate_assign_prod_to_claimitems_and_services(claim):
             .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         logger.debug("[claim: %s] validating service %s", claim.uuid, claimservice.id)
         logger.debug("[claim: %s] nb of ProductServices %s",
+                     claim.uuid,
                      ProductService.objects.filter(service_id=claimservice.service_id).count())
         errors += validate_assign_prod_elt(
             claim, claimservice, claimservice.service,
@@ -778,14 +786,12 @@ def validate_assign_prod_to_claimitems_and_services(claim):
 
 def approved_amount(claim):
     app_item_value = claim.items \
-        .filter(validity_to__isnull=True) \
-        .filter(status=ClaimItem.STATUS_PASSED) \
         .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
+        .filter(validity_to__isnull=True, status=ClaimItem.STATUS_PASSED) \
         .aggregate(Sum("value"))
     app_service_value = claim.services \
-        .filter(validity_to__isnull=True) \
-        .filter(status=ClaimService.STATUS_PASSED) \
         .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
+        .filter(validity_to__isnull=True, status=ClaimService.STATUS_PASSED) \
         .aggregate(Sum("value"))
     return (app_item_value['value__sum'] if app_item_value['value__sum'] else 0) + \
            (app_service_value['value__sum']
@@ -796,14 +802,15 @@ def _query_product_item_service_limit(target_date, family_id, elt_qs,
                                       limitation_field, limitation_type,
                                       limit_ordering):
     return elt_qs \
-        .filter(product__policies__family_id=family_id) \
-        .filter(product__policies__effective_date__lte=target_date) \
-        .filter(product__policies__expiry_date__gte=target_date) \
-        .filter(product__policies__validity_to__isnull=True) \
-        .filter(validity_to__isnull=True) \
-        .filter(product__policies__status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED]) \
-        .filter(product__validity_to__isnull=True) \
-        .filter(**{limitation_field: limitation_type})\
+        .filter(validity_to__isnull=True,
+                product__validity_to__isnull=True,
+                product__policies__family_id=family_id,
+                product__policies__effective_date__lte=target_date,
+                product__policies__expiry_date__gte=target_date,
+                product__policies__validity_to__isnull=True,
+                product__policies__status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED],
+                **{limitation_field: limitation_type}
+                )\
         .order_by("-" + limit_ordering)\
         .first()
 
@@ -824,8 +831,7 @@ def _get_dedrem(prefix, dedrem_type, field, product, claim, policy_id):
             getattr(product, prefix + "_insuree", None),
             dedrem_type,
             ClaimDedRem.objects
-                .filter(policy_id=policy_id)
-                .filter(insuree_id=claim.insuree_id)
+                .filter(policy_id=policy_id, insuree_id=claim.insuree_id)
                 .exclude(claim_id=claim.id)
                 .aggregate(Sum(field))
         )
@@ -878,33 +884,32 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
 
     # The original code has a pretty complex query here called product_loop that refers to policies while it is
     # actually looping on ClaimItem and ClaimService.
-    items_query = claim.items \
-            .filter(validity_to__isnull=True) \
-            .filter(rejection_reason=0) \
-            .filter(product__isnull=False) \
-            .filter(item__validity_from__lte=target_date) \
-            .filter(Q(item__validity_to__isnull=True) | Q(item__validity_to__gte=target_date)) \
-            .filter(product__validity_to__isnull=True) \
-            .values("policy_id", "product_id")
-    services_query = claim.services \
-            .filter(validity_to__isnull=True) \
-            .filter(rejection_reason=0) \
-            .filter(product__isnull=False) \
-            .filter(service__validity_from__lte=target_date) \
-            .filter(Q(service__validity_to__isnull=True) | Q(service__validity_to__gte=target_date)) \
-            .filter(product__validity_to__isnull=True) \
-            .values("policy_id", "product_id")
+    items_query = claim.items.filter(
+        Q(item__validity_to__isnull=True) | Q(item__validity_to__gte=target_date),
+        validity_to__isnull=True,
+        rejection_reason=0,
+        item__validity_from__lte=target_date,
+        product__isnull=False,
+        product__validity_to__isnull=True
+    ).values("policy_id", "product_id")
+    services_query = claim.services.filter(
+        Q(service__validity_to__isnull=True) | Q(service__validity_to__gte=target_date),
+        validity_to__isnull=True,
+        rejection_reason=0,
+        service__validity_from__lte=target_date,
+        product__isnull=False, product__validity_to__isnull=True
+    ).values("policy_id", "product_id")
     if items_query.count() == 0 and services_query.count() == 0:
         logger.warning(f"claim {claim.uuid} did not have any item or service to valuate.")
     for policy_product in items_query.union(services_query, all=True):
         product = Product.objects.get(id=policy_product["product_id"])
-        policy_members = InsureePolicy.objects \
-            .filter(policy_id=policy_product["policy_id"]) \
-            .filter(effective_date__isnull=False) \
-            .filter(effective_date__lte=target_date) \
-            .filter(expiry_date__gte=target_date) \
-            .filter(validity_to__isnull=True) \
-            .count()
+        policy_members = InsureePolicy.objects.filter(
+            policy_id=policy_product["policy_id"],
+            effective_date__isnull=False,
+            effective_date__lte=target_date,
+            expiry_date__gte=target_date,
+            validity_to__isnull=True
+        ).count()
 
         # TODO see declaration of policy_id above
         policy = Policy.objects.get(id=policy_product["policy_id"])
@@ -1059,8 +1064,8 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             if claim_detail.limitation == ProductItemOrService.LIMIT_CO_INSURANCE and claim_detail.limitation_value:
                 work_value = claim_detail.limitation_value / 100 * work_value
 
-            if category != Service.CATEGORY_VISIT:
-                if product.max_amount_surgery and category == Service.CATEGORY_SURGERY:
+            if product.max_amount_surgery and category != Service.CATEGORY_VISIT:
+                if category == Service.CATEGORY_SURGERY:
                     remunerated_surgery += work_value
                 else:
                     if prev_remunerated_surgery + remunerated_surgery >= product.max_amount_surgery:
