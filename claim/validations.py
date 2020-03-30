@@ -1153,18 +1153,18 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                                                              - product.max_amount_hospitalization
                             work_value -= exceed_ceiling_amount_category
                             remunerated_hospitalization += work_value
-                if product.max_amount_consult and category == Service.CATEGORY_CONSULTATION:
+                if product.max_amount_consultation and category == Service.CATEGORY_CONSULTATION:
                     if work_value + prev_remunerated_consult + remunerated_consultation \
-                            <= product.max_amount_consult:
+                            <= product.max_amount_consultation:
                         remunerated_consultation += work_value
                     else:
-                        if prev_remunerated_consult + remunerated_consultation >= product.max_amount_consult:
+                        if prev_remunerated_consult + remunerated_consultation >= product.max_amount_consultation:
                             exceed_ceiling_amount_category = work_value
                             # remunerated_consult += 0
                             work_value = 0
                         else:
                             exceed_ceiling_amount_category = work_value + prev_remunerated_consult \
-                                                             + remunerated_consultation - product.max_amount_consult
+                                                             + remunerated_consultation - product.max_amount_consultation
                             work_value -= exceed_ceiling_amount_category
                             remunerated_consultation += work_value
 
