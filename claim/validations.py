@@ -1097,19 +1097,20 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             if claim_detail.limitation == ProductItemOrService.LIMIT_CO_INSURANCE and claim_detail.limitation_value:
                 work_value = claim_detail.limitation_value / 100 * work_value
 
-            if product.max_amount_surgery and category != Service.CATEGORY_VISIT:
-                if category == Service.CATEGORY_SURGERY:
-                    remunerated_surgery += work_value
-                else:
-                    if prev_remunerated_surgery + remunerated_surgery >= product.max_amount_surgery:
-                        exceed_ceiling_amount_category = work_value
-                        # remunerated_surgery += 0
-                        work_value = 0
-                    else:
-                        exceed_ceiling_amount_category = work_value + prev_remunerated_surgery + remunerated_surgery \
-                                                         - product.max_amount_surgery
-                        work_value -= exceed_ceiling_amount_category
+            if category != Service.CATEGORY_VISIT:
+                if product.max_amount_surgery and category == Service.CATEGORY_SURGERY:
+                    if work_value + prev_remunerated_surgery + remunerated_surgery <= product.max_amount_surgery:
                         remunerated_surgery += work_value
+                    else:
+                        if prev_remunerated_surgery + remunerated_surgery >= product.max_amount_surgery:
+                            exceed_ceiling_amount_category = work_value
+                            # remunerated_surgery += 0
+                            work_value = 0
+                        else:
+                            exceed_ceiling_amount_category = work_value + prev_remunerated_surgery \
+                                                             + remunerated_surgery - product.max_amount_surgery
+                            work_value -= exceed_ceiling_amount_category
+                            remunerated_surgery += work_value
                 if product.max_amount_delivery and category == Service.CATEGORY_DELIVERY:
                     if work_value + prev_remunerated_delivery + remunerated_delivery <= product.max_amount_delivery:
                         remunerated_delivery += work_value
