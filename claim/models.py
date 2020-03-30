@@ -222,6 +222,15 @@ class Claim(core_models.VersionedModel):
         return prev_id
 
 
+class ClaimAttachmentsCount(models.Model):
+    claim = models.OneToOneField(Claim, primary_key=True, related_name='attachments_count', on_delete=models.DO_NOTHING)
+    value = models.IntegerField(db_column='attachments_count')
+
+    class Meta:
+        managed = False
+        db_table = 'claim_ClaimAttachmentsCountView'
+
+
 class ClaimMutation(core_models.UUIDModel):
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
                               related_name='mutations')
