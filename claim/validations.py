@@ -819,32 +819,33 @@ Deductible = namedtuple('Deductible', ['amount', 'type', 'prev'])
 
 
 def _get_dedrem(prefix, dedrem_type, field, product, claim, policy_id):
-    deductible = None
     if getattr(product, prefix + "_treatment", None):
-        deductible = Deductible(
+        return Deductible(
             getattr(product, prefix + "_treatment", None),
             dedrem_type,
             0
         )
     if getattr(product, prefix + "_insuree", None):
-        deductible = Deductible(
+        prev = ClaimDedRem.objects\
+            .filter(policy_id=policy_id, insuree_id=claim.insuree_id)\
+            .exclude(claim_id=claim.id)\
+            .aggregate(sum=Sum(field))["sum"]
+        return Deductible(
             getattr(product, prefix + "_insuree", None),
             dedrem_type,
-            ClaimDedRem.objects
-                .filter(policy_id=policy_id, insuree_id=claim.insuree_id)
-                .exclude(claim_id=claim.id)
-                .aggregate(sum=Sum(field))["sum"]
+            prev if prev else 0
         )
     if getattr(product, prefix + "_policy", None):
-        deductible = Deductible(
+        prev = ClaimDedRem.objects \
+            .filter(policy_id=policy_id) \
+            .exclude(claim_id=claim.id) \
+            .aggregate(sum=Sum(field))["sum"]
+        return Deductible(
             getattr(product, prefix + "_policy", None),
             dedrem_type,
-            ClaimDedRem.objects
-                .filter(policy_id=policy_id)
-                .exclude(claim_id=claim.id)
-                .aggregate(sum=Sum(field))["sum"]
+            prev if prev else 0
         )
-    return deductible
+    return None
 
 
 # This method is replicating the step 2 of the stored procedure mostly as-is. It will be refactored in several steps.
