@@ -567,8 +567,17 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 }
                 continue
             claim.save_history()
+            logger.debug("SubmitClaimsMutation: validating claim %s", claim_uuid)
             c_errors += validate_claim(claim, True)
+            logger.debug("SubmitClaimsMutation: claim %s validated, nb of errors: %s", claim_uuid, len(c_errors))
+            if len(c_errors) == 0:
+                c_errors = validate_assign_prod_to_claimitems_and_services(claim)
+                logger.debug("SubmitClaimsMutation: claim %s assigned, nb of errors: %s", claim_uuid, len(c_errors))
+                c_errors += process_dedrem(claim, user.id_for_audit, False)
+                logger.debug("SubmitClaimsMutation: claim %s processed for dedrem, nb of errors: %s", claim_uuid,
+                             len(errors))
             c_errors += set_claim_submitted(claim, c_errors, user)
+            logger.debug("SubmitClaimsMutation: claim %s set submitted", claim_uuid)
             if c_errors:
                 errors.append({
                     'title': claim.code,
@@ -576,6 +585,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 })
         if len(errors) == 1:
             errors = errors[0]['list']
+        logger.debug("SubmitClaimsMutation: claim %s done, errors: %s", claim_uuid, len(errors))
         return errors
 
 

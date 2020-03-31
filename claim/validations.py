@@ -1247,8 +1247,9 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     # Don't touch relative_prices
                 claim_detail.save()
 
-    if is_process:
-        ClaimDedRem.objects.filter(claim=claim).delete()
+    # amount is 'locked' from the submit
+    # ... so re-creating the ClaimDedRem according to adjusted/valuated price
+    ClaimDedRem.objects.filter(claim=claim).delete()
 
     from core import datetime
     now = datetime.datetime.now()
