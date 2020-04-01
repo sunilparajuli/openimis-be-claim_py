@@ -577,7 +577,10 @@ def get_products(target_date, elt_id, insuree_id, adult, item_or_service):
             tblProduct.ProdID, tblProduct{item_or_service}s.Prod{item_or_service}ID,            
             tblInsureePolicy.EffectiveDate,
             tblPolicy.EffectiveDate,
-            tblInsureePolicy.ExpiryDate,
+            CASE
+                WHEN tblPolicy.ExpiryDate < tblInsureePolicy.ExpiryDate THEN tblPolicy.ExpiryDate
+                ELSE tblInsureePolicy.ExpiryDate
+            END AS ExpiryDate,
             tblPolicy.PolicyStage
         FROM tblInsuree 
             INNER JOIN tblInsureePolicy ON tblInsureePolicy.InsureeID = tblInsuree.InsureeID
@@ -588,14 +591,17 @@ def get_products(target_date, elt_id, insuree_id, adult, item_or_service):
             ON tblInsuree.FamilyID = tblFamilies.FamilyID
         WHERE (tblInsuree.ValidityTo IS NULL) AND (tblInsuree.InsureeId = %s)
             AND (tblInsureePolicy.PolicyId = tblPolicy.PolicyID)
-            AND (tblPolicy.ValidityTo IS NULL) AND (tblPolicy.EffectiveDate <= %s) AND (tblPolicy.ExpiryDate >= %s)
+            AND (tblPolicy.ValidityTo IS NULL)
+            AND (tblPolicy.EffectiveDate <= %s) AND (tblPolicy.ExpiryDate >= %s)
+            AND (tblInsureePolicy.ValidityTo IS NULL)
+            AND (tblInsureePolicy.EffectiveDate <= %s) AND (tblInsureePolicy.ExpiryDate >= %s)
             AND (tblPolicy.PolicyStatus in ({Policy.STATUS_ACTIVE}, {Policy.STATUS_EXPIRED}))
             AND (tblProduct{item_or_service}s.ValidityTo IS NULL) AND (tblProduct{item_or_service}s.{item_or_service}ID = %s)
         ORDER BY DATEADD(m,ISNULL(tblProduct{item_or_service}s.{waiting_period}, 0),
             tblPolicy.EffectiveDate)            
     """
     cursor.execute(sql,
-                   [insuree_id, target_date, target_date, elt_id])
+                   [insuree_id, target_date, target_date, target_date, target_date, elt_id])
     return cursor
 
 
@@ -613,15 +619,15 @@ def get_claim_category(claim):
     :return: category if a service is defined, None if not service at all
     """
 
-    service_categories = OrderedDict([
-        (Service.CATEGORY_SURGERY, "Surgery"),
-        (Service.CATEGORY_DELIVERY, "Delivery"),
-        (Service.CATEGORY_ANTENATAL, "Antenatal care"),
-        (Service.CATEGORY_HOSPITALIZATION, "Hospitalization"),
-        (Service.CATEGORY_CONSULTATION, "Consultation"),
-        (Service.CATEGORY_OTHER, "Other"),
-        (Service.CATEGORY_VISIT, "Visit"),
-    ])
+    service_categories = [
+        Service.CATEGORY_SURGERY,
+        Service.CATEGORY_DELIVERY,
+        Service.CATEGORY_ANTENATAL,
+        Service.CATEGORY_HOSPITALIZATION,
+        Service.CATEGORY_CONSULTATION,
+        Service.CATEGORY_OTHER,
+        Service.CATEGORY_VISIT,
+    ]
     services = claim.services \
         .filter(validity_to__isnull=True, service__validity_to__isnull=True) \
         .values("service__category").distinct()
@@ -763,9 +769,6 @@ def validate_assign_prod_to_claimitems_and_services(claim):
     for claimitem in claim.items.filter(validity_to__isnull=True) \
             .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         logger.debug("[claim: %s] validating item %s", claim.uuid, claimitem.id)
-        logger.debug("[claim: %s] nb of ProductItems %s",
-                     claim.uuid,
-                     ProductItem.objects.filter(item_id=claimitem.item_id).count())
         errors += validate_assign_prod_elt(
             claim, claimitem, claimitem.item,
             ProductItem.objects.filter(item_id=claimitem.item_id))
@@ -773,9 +776,6 @@ def validate_assign_prod_to_claimitems_and_services(claim):
     for claimservice in claim.services.filter(validity_to__isnull=True) \
             .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         logger.debug("[claim: %s] validating service %s", claim.uuid, claimservice.id)
-        logger.debug("[claim: %s] nb of ProductServices %s",
-                     claim.uuid,
-                     ProductService.objects.filter(service_id=claimservice.service_id).count())
         errors += validate_assign_prod_elt(
             claim, claimservice, claimservice.service,
             ProductService.objects.filter(service_id=claimservice.service_id))
