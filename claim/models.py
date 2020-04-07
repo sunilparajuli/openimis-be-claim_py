@@ -6,6 +6,7 @@ from core import models as core_models
 from django import dispatch
 from django.conf import settings
 from django.db import models
+from graphql import ResolveInfo
 from insuree import models as insuree_models
 from location import models as location_models
 from location.models import UserDistrict
@@ -41,6 +42,22 @@ class ClaimAdmin(core_models.VersionedModel):
     def __str__(self):
         return self.code + " " + self.last_name + " " + self.other_names
 
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        queryset = cls.filter_queryset(queryset)
+        # GraphQL calls with an info object while Rest calls with the user itself
+        if isinstance(user, ResolveInfo):
+            user = user.context.user
+        if settings.ROW_SECURITY and user.is_anonymous:
+            return queryset.filter(id=-1)
+        if settings.ROW_SECURITY:
+            dist = UserDistrict.get_user_districts(user._u)
+            return queryset.filter(
+                health_facility__location_id__in=[l.location.id for l in dist]
+            )
+        return queryset
+
+
     class Meta:
         managed = False
         db_table = 'tblClaimAdmin'
@@ -73,6 +90,21 @@ class Feedback(core_models.VersionedModel):
     class Meta:
         managed = False
         db_table = 'tblFeedback'
+
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        queryset = cls.filter_queryset(queryset)
+        # GraphQL calls with an info object while Rest calls with the user itself
+        if isinstance(user, ResolveInfo):
+            user = user.context.user
+        if settings.ROW_SECURITY and user.is_anonymous:
+            return queryset.filter(id=-1)
+        if settings.ROW_SECURITY:
+            dist = UserDistrict.get_user_districts(user._u)
+            return queryset.filter(
+                claim__health_facility__location_id__in=[l.location.id for l in dist]
+            )
+        return queryset
 
 
 signal_claim_rejection = dispatch.Signal(providing_args=["claim"])
@@ -226,6 +258,9 @@ class Claim(core_models.VersionedModel):
     @classmethod
     def get_queryset(cls, queryset, user):
         queryset = Claim.filter_queryset(queryset)
+        # GraphQL calls with an info object while Rest calls with the user itself
+        if isinstance(user, ResolveInfo):
+            user = user.context.user
         if settings.ROW_SECURITY and user.is_anonymous:
             return queryset.filter(id=-1)
         if settings.ROW_SECURITY:
