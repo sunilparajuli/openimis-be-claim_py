@@ -17,26 +17,19 @@ from product import models as product_models
 
 class ClaimAdmin(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimAdminId', primary_key=True)
-    uuid = models.CharField(db_column='ClaimAdminUUID',
-                            max_length=36, default=uuid.uuid4, unique=True)
-    code = models.CharField(db_column='ClaimAdminCode',
-                            max_length=8, blank=True, null=True)
-    last_name = models.CharField(
-        db_column='LastName', max_length=100, blank=True, null=True)
-    other_names = models.CharField(
-        db_column='OtherNames', max_length=100, blank=True, null=True)
+    uuid = models.CharField(db_column='ClaimAdminUUID', max_length=36, default=uuid.uuid4, unique=True)
+
+    code = models.CharField(db_column='ClaimAdminCode', max_length=8, blank=True, null=True)
+    last_name = models.CharField(db_column='LastName', max_length=100, blank=True, null=True)
+    other_names = models.CharField(db_column='OtherNames', max_length=100, blank=True, null=True)
     dob = models.DateField(db_column='DOB', blank=True, null=True)
-    email_id = models.CharField(
-        db_column='EmailId', max_length=200, blank=True, null=True)
-    phone = models.CharField(
-        db_column='Phone', max_length=50, blank=True, null=True)
+    email_id = models.CharField(db_column='EmailId', max_length=200, blank=True, null=True)
+    phone = models.CharField(db_column='Phone', max_length=50, blank=True, null=True)
     health_facility = models.ForeignKey(
         location_models.HealthFacility, models.DO_NOTHING, db_column='HFId', blank=True, null=True)
-    has_login = models.BooleanField(
-        db_column='HasLogin', blank=True, null=True)
+    has_login = models.BooleanField(db_column='HasLogin', blank=True, null=True)
 
-    audit_user_id = models.IntegerField(
-        db_column='AuditUserId', blank=True, null=True)
+    audit_user_id = models.IntegerField(db_column='AuditUserId', blank=True, null=True)
     # row_id = models.BinaryField(db_column='RowId', blank=True, null=True)
 
     def __str__(self):
@@ -65,26 +58,17 @@ class ClaimAdmin(core_models.VersionedModel):
 
 class Feedback(core_models.VersionedModel):
     id = models.AutoField(db_column='FeedbackID', primary_key=True)
-    uuid = models.CharField(db_column='FeedbackUUID',
-                            max_length=36, default=uuid.uuid4, unique=True)
+    uuid = models.CharField(db_column='FeedbackUUID', max_length=36, default=uuid.uuid4, unique=True)
     claim = models.OneToOneField(
-        "Claim", models.DO_NOTHING,
-        db_column='ClaimID', blank=True, null=True, related_name="+")
-    care_rendered = models.NullBooleanField(
-        db_column='CareRendered', blank=True, null=True)
-    payment_asked = models.NullBooleanField(
-        db_column='PaymentAsked', blank=True, null=True)
-    drug_prescribed = models.NullBooleanField(
-        db_column='DrugPrescribed', blank=True, null=True)
-    drug_received = models.NullBooleanField(
-        db_column='DrugReceived', blank=True, null=True)
-    asessment = models.SmallIntegerField(
-        db_column='Asessment', blank=True, null=True)
+        "Claim", models.DO_NOTHING, db_column='ClaimID', blank=True, null=True, related_name="+")
+    care_rendered = models.NullBooleanField(db_column='CareRendered', blank=True, null=True)
+    payment_asked = models.NullBooleanField(db_column='PaymentAsked', blank=True, null=True)
+    drug_prescribed = models.NullBooleanField(db_column='DrugPrescribed', blank=True, null=True)
+    drug_received = models.NullBooleanField(db_column='DrugReceived', blank=True, null=True)
+    asessment = models.SmallIntegerField(db_column='Asessment', blank=True, null=True)
     # No FK in database (so value may not be an existing officer.id !)
-    officer_id = models.IntegerField(
-        db_column='CHFOfficerCode', blank=True, null=True)
-    feedback_date = fields.DateTimeField(
-        db_column='FeedbackDate', blank=True, null=True)
+    officer_id = models.IntegerField(db_column='CHFOfficerCode', blank=True, null=True)
+    feedback_date = fields.DateTimeField(db_column='FeedbackDate', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
 
     class Meta:
