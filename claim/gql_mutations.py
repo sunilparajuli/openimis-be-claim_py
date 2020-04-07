@@ -16,7 +16,7 @@ from django.db.models import Sum, CharField
 from django.db.models.functions import Coalesce, Cast
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
-from location.schema import userDistricts
+from location.schema import UserDistrict
 from .models import Claim, Feedback, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment
 from product.models import ProductItemOrService
 
@@ -441,7 +441,7 @@ class CreateAttachmentMutation(OpenIMISMutation):
             claim_uuid = data.pop("claim_uuid")
             queryset = Claim.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                dist = userDistricts(user._u)
+                dist = UserDistrict.get_user_districts(user._u)
                 queryset = queryset.filter(
                     health_facility__location__id__in=[
                         l.location.id for l in dist]
@@ -471,8 +471,8 @@ class UpdateAttachmentMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                from location.schema import userDistricts
-                dist = userDistricts(user._u)
+                from location.models import UserDistrict
+                dist = UserDistrict.get_user_districts(user._u)
                 queryset = queryset.select_related("claim") \
                     .filter(
                     claim__health_facility__location__id__in=[
@@ -511,8 +511,8 @@ class DeleteAttachmentMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                from location.schema import userDistricts
-                dist = userDistricts(user._u)
+                from location.models import UserDistrict
+                dist = UserDistrict.get_user_districts(user._u)
                 queryset = queryset.select_related("claim") \
                     .filter(
                     claim__health_facility__location__id__in=[

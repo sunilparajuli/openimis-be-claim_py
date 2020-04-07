@@ -4,9 +4,11 @@ from claim_batch import models as claim_batch_models
 from core import fields
 from core import models as core_models
 from django import dispatch
+from django.conf import settings
 from django.db import models
 from insuree import models as insuree_models
 from location import models as location_models
+from location.models import UserDistrict
 from medical import models as medical_models
 from policy import models as policy_models
 from product import models as product_models
@@ -220,6 +222,18 @@ class Claim(core_models.VersionedModel):
             ClaimService.objects.filter(
                 id__in=prev_services).update(claim_id=prev_id)
         return prev_id
+
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        queryset = Claim.filter_queryset(queryset)
+        if settings.ROW_SECURITY and user.is_anonymous:
+            return queryset.filter(id=-1)
+        if settings.ROW_SECURITY:
+            dist = UserDistrict.get_user_districts(user._u)
+            return queryset.filter(
+                health_facility__location_id__in=[l.location.id for l in dist]
+            )
+        return queryset
 
 
 class ClaimAttachmentsCount(models.Model):

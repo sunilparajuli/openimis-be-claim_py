@@ -194,8 +194,8 @@ class ClaimReportService(object):
         from .models import Claim
         queryset = Claim.objects.filter(*core.filter_validity())
         if settings.ROW_SECURITY:
-            from location.schema import userDistricts
-            dist = userDistricts(self.user._u)
+            from location.models import UserDistrict
+            dist = UserDistrict.get_user_districts(self.user._u)
             queryset = queryset.filter(
                 health_facility__location__id__in=[l.location.id for l in dist]
             )

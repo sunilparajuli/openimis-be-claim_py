@@ -23,8 +23,8 @@ def print(request):
 def attach(request):
     queryset = ClaimAttachment.objects.filter(*core.filter_validity())
     if settings.ROW_SECURITY:
-        from location.schema import userDistricts
-        dist = userDistricts(request.user._u)
+        from location.models import UserDistrict
+        dist = UserDistrict.get_user_districts(request.user._u)
         queryset = queryset.select_related("claim")\
             .filter(
             claim__health_facility__location__id__in=[
