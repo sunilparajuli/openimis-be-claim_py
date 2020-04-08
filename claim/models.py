@@ -46,7 +46,7 @@ class ClaimAdmin(core_models.VersionedModel):
         if settings.ROW_SECURITY:
             dist = UserDistrict.get_user_districts(user._u)
             return queryset.filter(
-                health_facility__location_id__in=[l.location.id for l in dist]
+                health_facility__location_id__in=[l.location_id for l in dist]
             )
         return queryset
 
@@ -86,7 +86,7 @@ class Feedback(core_models.VersionedModel):
         if settings.ROW_SECURITY:
             dist = UserDistrict.get_user_districts(user._u)
             return queryset.filter(
-                claim__health_facility__location_id__in=[l.location.id for l in dist]
+                claim__health_facility__location_id__in=[l.location_id for l in dist]
             )
         return queryset
 
@@ -250,7 +250,7 @@ class Claim(core_models.VersionedModel):
         if settings.ROW_SECURITY:
             dist = UserDistrict.get_user_districts(user._u)
             return queryset.filter(
-                health_facility__location_id__in=[l.location.id for l in dist]
+                health_facility__location_id__in=[l.location_id for l in dist]
             )
         return queryset
 

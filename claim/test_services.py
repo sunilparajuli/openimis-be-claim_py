@@ -115,41 +115,45 @@ class ClaimSubmitServiceTestCase(TestCase):
         self.assertEquals(expected, claim.to_xml())
 
     def test_claim_submit_error(self):
-        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
-            mock_cursor.return_value.__enter__.return_value.fetchone.return_value = [
-                2]
-            mock_user = mock.Mock(is_anonymous=False)
-            mock_user.has_perm = mock.MagicMock(return_value=True)
-            claim = ClaimSubmit(
-                date=core.datetime.date(2020, 1, 9),
-                code="code_ABVC",
-                icd_code="ICD_CODE_WWQ",
-                total=334,
-                start_date=core.datetime.date(2020, 1, 13),
-                claim_admin_code='ADM_CODE_ADKJ',
-                insuree_chf_id='CHFID_UUZIS',
-                health_facility_code="HFCode_JQL"
-            )
-            service = ClaimSubmitService(user=mock_user)
-            with self.assertRaises(ClaimSubmitError) as cm:
-                service.submit(claim)
-            self.assertEquals(cm.exception.code, 2)
+        with mock.patch("claim.services.ClaimSubmitService.hf_scope_check") as mock_security:
+            mock_security.return_value = None
+            with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
+                mock_cursor.return_value.__enter__.return_value.fetchone.return_value = [
+                    2]
+                mock_user = mock.Mock(is_anonymous=False)
+                mock_user.has_perm = mock.MagicMock(return_value=True)
+                claim = ClaimSubmit(
+                    date=core.datetime.date(2020, 1, 9),
+                    code="code_ABVC",
+                    icd_code="ICD_CODE_WWQ",
+                    total=334,
+                    start_date=core.datetime.date(2020, 1, 13),
+                    claim_admin_code='ADM_CODE_ADKJ',
+                    insuree_chf_id='CHFID_UUZIS',
+                    health_facility_code="HFCode_JQL"
+                )
+                service = ClaimSubmitService(user=mock_user)
+                with self.assertRaises(ClaimSubmitError) as cm:
+                    service.submit(claim)
+                self.assertEquals(cm.exception.code, 2)
 
     def test_claim_submit_allgood(self):
-        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
-            mock_cursor.return_value.__enter__.return_value.description = None
-            mock_user = mock.Mock(is_anonymous=False)
-            mock_user.has_perm = mock.MagicMock(return_value=True)
-            claim = ClaimSubmit(
-                date=core.datetime.date(2020, 1, 9),
-                code="code_ABVC",
-                icd_code="ICD_CODE_WWQ",
-                total=334,
-                start_date=core.datetime.date(2020, 1, 13),
-                claim_admin_code='ADM_CODE_ADKJ',
-                insuree_chf_id='CHFID_UUZIS',
-                health_facility_code="HFCode_JQL"
-            )
-            service = ClaimSubmitService(user=mock_user)
-            service.submit(claim)  # doesn't raise an error
+        with mock.patch("claim.services.ClaimSubmitService.hf_scope_check") as mock_security:
+            mock_security.return_value = None
+            with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
+                mock_cursor.return_value.__enter__.return_value.description = None
+                mock_user = mock.Mock(is_anonymous=False)
+                mock_user.has_perm = mock.MagicMock(return_value=True)
+                claim = ClaimSubmit(
+                    date=core.datetime.date(2020, 1, 9),
+                    code="code_ABVC",
+                    icd_code="ICD_CODE_WWQ",
+                    total=334,
+                    start_date=core.datetime.date(2020, 1, 13),
+                    claim_admin_code='ADM_CODE_ADKJ',
+                    insuree_chf_id='CHFID_UUZIS',
+                    health_facility_code="HFCode_JQL"
+                )
+                service = ClaimSubmitService(user=mock_user)
+                service.submit(claim)  # doesn't raise an error
 

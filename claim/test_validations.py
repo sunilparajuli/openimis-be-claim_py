@@ -328,7 +328,7 @@ class ValidationTest(TestCase):
 
         # A first claim for a visit should be accepted
         claim1 = create_test_claim({"insuree_id": insuree.id})
-        service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
+        service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id, "qty_provided": 1})
         errors = validate_claim(claim1, True)
         mark_test_claim_as_processed(claim1)
 

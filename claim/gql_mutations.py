@@ -444,7 +444,7 @@ class CreateAttachmentMutation(OpenIMISMutation):
                 dist = UserDistrict.get_user_districts(user._u)
                 queryset = queryset.filter(
                     health_facility__location__id__in=[
-                        l.location.id for l in dist]
+                        l.location_id for l in dist]
                 )
             claim = queryset.filter(uuid=claim_uuid).first()
             if not claim:
@@ -476,7 +476,7 @@ class UpdateAttachmentMutation(OpenIMISMutation):
                 queryset = queryset.select_related("claim") \
                     .filter(
                     claim__health_facility__location__id__in=[
-                        l.location.id for l in dist]
+                        l.location_id for l in dist]
                 )
             attachment = queryset \
                 .filter(id=data['id']) \
@@ -516,7 +516,7 @@ class DeleteAttachmentMutation(OpenIMISMutation):
                 queryset = queryset.select_related("claim") \
                     .filter(
                     claim__health_facility__location__id__in=[
-                        l.location.id for l in dist]
+                        l.location_id for l in dist]
                 )
             attachment = queryset \
                 .filter(id=data['id']) \

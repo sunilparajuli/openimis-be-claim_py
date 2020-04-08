@@ -28,7 +28,7 @@ def attach(request):
         queryset = queryset.select_related("claim")\
             .filter(
             claim__health_facility__location__id__in=[
-                l.location.id for l in dist]
+                l.location_id for l in dist]
         )
     attachment = queryset\
         .filter(id=request.GET['id'])\

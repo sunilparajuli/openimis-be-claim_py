@@ -152,16 +152,18 @@ class ClaimSubmitService(object):
     def __init__(self, user):
         self.user = user
 
-    def submit(self, claim_submit):
+    def hf_scope_check(self, claim_submit):
         from location.models import UserDistrict, HealthFacility
-        user_districts = UserDistrict.get_user_districts(self.user._u)
+        dist = UserDistrict.get_user_districts(self.user._u)
         hf = HealthFacility.filter_queryset()\
             .filter(code=claim_submit.health_facility_code)\
-            .filter(location_id__in=user_districts.values("location_id"))\
+            .filter(location_id__in=[l.location_id for l in dist])\
             .first()
         if not hf:
             raise ClaimSubmitError("Invalid health facility code or health facility not allowed for user")
 
+    def submit(self, claim_submit):
+        self.hf_scope_check(claim_submit)
         with connection.cursor() as cur:
             sql = """\
                 DECLARE @ret int;
@@ -207,7 +209,7 @@ class ClaimReportService(object):
             from location.models import UserDistrict
             dist = UserDistrict.get_user_districts(self.user._u)
             queryset = queryset.filter(
-                health_facility__location__id__in=[l.location.id for l in dist]
+                health_facility__location__id__in=[l.location_id for l in dist]
             )
         claim = queryset\
             .select_related('health_facility') \
