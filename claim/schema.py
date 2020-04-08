@@ -20,7 +20,6 @@ class Query(graphene.ObjectType):
         diagnosisVariance=graphene.Int(),
         codeIsNot=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
-        # attachmentsCountGte=graphene.Int()
     )
     claim_attachments = DjangoFilterConnectionField(ClaimAttachmentGQLType)
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
@@ -50,14 +49,6 @@ class Query(graphene.ObjectType):
                     .filter(date_claimed__gt=last_year).values('icd__code').distinct()
                 variance_filter = (variance_filter | ~Q(icd__code__in=diags))
             query = query.filter(variance_filter)
-        # if 'attachmentsCountGte' in kwargs:
-        #     count_gte = kwargs.pop('attachmentsCountGte')
-        #     query = query.annotate(
-        #         attachments_count=RawSQL(
-        #             'SELECT count(*) FROM claim_ClaimAttachment WHERE claim_id=tblClaim.ClaimID AND ValidityTo is NULL',
-        #             ())
-        #     ).filter(attachments_count__gte=count_gte)
-        #     return query.all()
         return gql_optimizer.query(query.all(), info)
 
     def resolve_claim_attachments(self, info, **kwargs):

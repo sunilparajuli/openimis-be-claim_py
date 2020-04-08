@@ -368,8 +368,9 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
                             claim__validity_to__isnull=True
                             ) \
                     .aggregate(Sum("qty_provided"))
-                if total_qty_provided["qty_provided__sum"] is not None \
-                        and total_qty_provided["qty_provided__sum"] >= limit_no:
+                qty = total_qty_provided["qty_provided__sum"] or 0
+                qty += claimitem.qty_provided if claimitem.qty_approved is None else claimitem.qty_approved
+                if qty > limit_no:
                     claimitem.rejection_reason = REJECTION_REASON_QTY_OVER_LIMIT
                     errors += [{'code': REJECTION_REASON_QTY_OVER_LIMIT,
                                 'message': _("claim.validation.product_family.max_nb_allowed") % {
@@ -437,8 +438,9 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
                             claim__validity_to__isnull=True
                             ) \
                     .aggregate(Sum("qty_provided"))
-                if total_qty_provided["qty_provided__sum"] is not None \
-                        and total_qty_provided["qty_provided__sum"] >= limit_no:
+                qty = total_qty_provided["qty_provided__sum"] or 0
+                qty += claimservice.qty_provided if claimservice.qty_approved is None else claimservice.qty_approved
+                if qty > limit_no:
                     claimservice.rejection_reason = REJECTION_REASON_QTY_OVER_LIMIT
                     errors += [{'code': REJECTION_REASON_QTY_OVER_LIMIT,
                                 'message': _("claim.validation.product_family.max_nb_allowed") % {
@@ -1014,7 +1016,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     ceiling = max_op
                     prev_remunerated = max_op.prev
                 if product.max_op_policy:
-                    if policy_members > product.threshold:  # Threshold is NOT NULL
+                    if product.threshold and policy_members > product.threshold:
                         if product.max_policy_extra_member_op:
                             ceiling = Deductible(
                                 product.max_op_policy + (policy_members - product.threshold) * product.max_policy_extra_member_op,

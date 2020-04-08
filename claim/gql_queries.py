@@ -1,11 +1,9 @@
 import graphene
 from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
-from django.conf import settings
 from graphene_django import DjangoObjectType
 from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
-from location.schema import userDistricts
 from claim_batch.schema import BatchRunGQLType
 from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
 from core.models import Officer
@@ -107,15 +105,7 @@ class ClaimGQLType(DjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        queryset = queryset.filter(*filter_validity())
-        if settings.ROW_SECURITY & info.context.user.is_anonymous:
-            return queryset.filter(id=-1)
-        if settings.ROW_SECURITY:
-            dist = userDistricts(info.context.user._u)
-            return queryset.filter(
-                health_facility__location__id__in=[l.location.id for l in dist]
-            )
-        return queryset
+        return Claim.get_queryset(queryset, info)
 
 
 class ClaimAttachmentGQLType(DjangoObjectType):

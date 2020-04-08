@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 from django.core.exceptions import PermissionDenied
 import core
 from django.db import connection
+
 from .apps import ClaimConfig
 from django.conf import settings
 
@@ -151,7 +152,18 @@ class ClaimSubmitService(object):
     def __init__(self, user):
         self.user = user
 
+    def hf_scope_check(self, claim_submit):
+        from location.models import UserDistrict, HealthFacility
+        dist = UserDistrict.get_user_districts(self.user._u)
+        hf = HealthFacility.filter_queryset()\
+            .filter(code=claim_submit.health_facility_code)\
+            .filter(location_id__in=[l.location_id for l in dist])\
+            .first()
+        if not hf:
+            raise ClaimSubmitError("Invalid health facility code or health facility not allowed for user")
+
     def submit(self, claim_submit):
+        self.hf_scope_check(claim_submit)
         with connection.cursor() as cur:
             sql = """\
                 DECLARE @ret int;
@@ -194,10 +206,10 @@ class ClaimReportService(object):
         from .models import Claim
         queryset = Claim.objects.filter(*core.filter_validity())
         if settings.ROW_SECURITY:
-            from location.schema import userDistricts
-            dist = userDistricts(self.user._u)
+            from location.models import UserDistrict
+            dist = UserDistrict.get_user_districts(self.user._u)
             queryset = queryset.filter(
-                health_facility__location__id__in=[l.location.id for l in dist]
+                health_facility__location__id__in=[l.location_id for l in dist]
             )
         claim = queryset\
             .select_related('health_facility') \
