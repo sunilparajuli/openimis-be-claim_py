@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 from django.core.exceptions import PermissionDenied
 import core
 from django.db import connection
+
 from .apps import ClaimConfig
 from django.conf import settings
 
@@ -152,6 +153,15 @@ class ClaimSubmitService(object):
         self.user = user
 
     def submit(self, claim_submit):
+        from location.models import UserDistrict, HealthFacility
+        user_districts = UserDistrict.get_user_districts(self.user._u)
+        hf = HealthFacility.filter_queryset()\
+            .filter(code=claim_submit.health_facility_code)\
+            .filter(location_id__in=user_districts.values("location_id"))\
+            .first()
+        if not hf:
+            raise ClaimSubmitError("Invalid health facility code or health facility not allowed for user")
+
         with connection.cursor() as cur:
             sql = """\
                 DECLARE @ret int;
