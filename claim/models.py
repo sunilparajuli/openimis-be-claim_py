@@ -248,10 +248,16 @@ class Claim(core_models.VersionedModel):
         if settings.ROW_SECURITY and user.is_anonymous:
             return queryset.filter(id=-1)
         if settings.ROW_SECURITY:
-            dist = UserDistrict.get_user_districts(user._u)
-            return queryset.filter(
-                health_facility__location_id__in=[l.location_id for l in dist]
-            )
+            # TechnicalUsers don't have health_facility_id attribute
+            if hasattr(user._u, 'health_facility_id') and user._u.health_facility_id:
+                return queryset.filter(
+                    health_facility_id=user._u.health_facility_id
+                )
+            else:
+                dist = UserDistrict.get_user_districts(user._u)
+                return queryset.filter(
+                    health_facility__location_id__in=[l.location_id for l in dist]
+                )
         return queryset
 
 
