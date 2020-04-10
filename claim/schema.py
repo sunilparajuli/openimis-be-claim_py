@@ -23,6 +23,10 @@ class Query(graphene.ObjectType):
     )
     claim_attachments = DjangoFilterConnectionField(ClaimAttachmentGQLType)
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
+    claim_admins_str = DjangoFilterConnectionField(
+        ClaimAdminGQLType,
+        str=graphene.String(),
+    )
     claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
 
     def resolve_claims(self, info, **kwargs):
@@ -60,6 +64,15 @@ class Query(graphene.ObjectType):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
             raise PermissionDenied(_("unauthorized"))
         pass
+
+    def resolve_claim_admins_str(self, info, **kwargs):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
+            raise PermissionDenied(_("unauthorized"))
+        filters = [*filter_validity(**kwargs)]
+        str = kwargs.get('str')
+        if str is not None:
+            filters += [Q(code__icontains=str) | Q(last_name__icontains=str) | Q(other_names__icontains=str)]
+        return ClaimAdmin.filter_queryset().filter(*filters)
 
     def resolve_claim_officers(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):

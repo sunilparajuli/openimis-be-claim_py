@@ -23,6 +23,7 @@ class ClaimAdminGQLType(DjangoObjectType):
             "code": ["exact", "icontains"],
             "last_name": ["exact", "icontains"],
             "other_names": ["exact", "icontains"],
+            **prefix_filterset("health_facility__", HealthFacilityGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
 
