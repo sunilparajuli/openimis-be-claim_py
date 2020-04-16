@@ -172,8 +172,8 @@ class ClaimSubmitService(object):
             """
 
             cur.execute(sql, (claim_submit.to_xml(),))
-            cur.nextset()  # skip 'DECLARE...' (non) result
-            cur.nextset()  # skip 'EXEC...' (non) result
+            for i in range(int(ClaimConfig.claim_uspUpdateClaimFromPhone_intermediate_sets)):
+                cur.nextset()
             if cur.description is None:  # 0 is considered as 'no result' by pyodbc
                 return
             res = cur.fetchone()[0]  # FETCH 'SELECT @ret' returned value
