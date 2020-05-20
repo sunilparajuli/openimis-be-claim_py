@@ -7,8 +7,8 @@ import graphene
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, approved_amount
-from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
-from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
+from core import filter_validity, assert_string_length
+from core.schema import TinyInt, SmallInt, OpenIMISMutation
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -119,8 +119,8 @@ class ClaimCodeInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(res, 8)
-        return res
+        assert_string_length(value, 8)
+        return value
 
     serialize = coerce_string
     parse_value = coerce_string
@@ -136,8 +136,8 @@ class ClaimGuaranteeIdInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(res, 50)
-        return res
+        assert_string_length(value, 50)
+        return value
 
     serialize = coerce_string
     parse_value = coerce_string
@@ -229,6 +229,7 @@ def reset_claim_before_update(claim):
     claim.guarantee_id = None
     claim.explanation = None
     claim.adjustment = None
+
 
 def process_child_relation(user, data_children, prev_claim_id,
                            claim_id, children, create_hook):
@@ -742,6 +743,7 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
             raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', 16)
 
+
 class DeliverClaimsReviewMutation(OpenIMISMutation):
     """
     Mark claim review as delivered for one or several claims
@@ -757,6 +759,7 @@ class DeliverClaimsReviewMutation(OpenIMISMutation):
         if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', 8)
+
 
 class SkipClaimsReviewMutation(OpenIMISMutation):
     """

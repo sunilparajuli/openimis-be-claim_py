@@ -1,6 +1,6 @@
 import base64
 from django.conf import settings
-from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from report.services import ReportService
 from .services import ClaimReportService

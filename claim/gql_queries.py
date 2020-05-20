@@ -1,5 +1,5 @@
 import graphene
-from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
+from core import prefix_filterset, ExtendedConnection, filter_validity
 from graphene_django import DjangoObjectType
 from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType
@@ -16,7 +16,6 @@ class ClaimAdminGQLType(DjangoObjectType):
 
     class Meta:
         model = ClaimAdmin
-        exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "uuid": ["exact"],
@@ -40,7 +39,6 @@ class ClaimOfficerGQLType(DjangoObjectType):
 
     class Meta:
         model = Officer
-        exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "uuid": ["exact"],
@@ -67,7 +65,6 @@ class ClaimGQLType(DjangoObjectType):
 
     class Meta:
         model = Claim
-        exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "uuid": ["exact"],
@@ -136,7 +133,6 @@ class ClaimAttachmentGQLType(DjangoObjectType):
 class FeedbackGQLType(DjangoObjectType):
     class Meta:
         model = Feedback
-        exclude_fields = ('row_id',)
 
 
 class ClaimItemGQLType(DjangoObjectType):
@@ -146,7 +142,6 @@ class ClaimItemGQLType(DjangoObjectType):
 
     class Meta:
         model = ClaimItem
-        exclude_fields = ('row_id',)
 
 
 class ClaimServiceGQLType(DjangoObjectType):
@@ -156,4 +151,3 @@ class ClaimServiceGQLType(DjangoObjectType):
 
     class Meta:
         model = ClaimService
-        exclude_fields = ('row_id',)
