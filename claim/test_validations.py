@@ -1,9 +1,9 @@
 from claim.gql_mutations import set_claims_status, update_claims_dedrems
-from claim.models import Claim, ClaimDedRem, ClaimItem
+from claim.models import Claim, ClaimDedRem, ClaimItem, ClaimDetail
 from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem, \
     mark_test_claim_as_processed, delete_claim_with_itemsvc_dedrem_and_history
 from claim.validations import get_claim_category, validate_claim, validate_assign_prod_to_claimitems_and_services, \
-    process_dedrem, REJECTION_REASON_WAITING_PERIOD_FAIL
+    process_dedrem, REJECTION_REASON_WAITING_PERIOD_FAIL, REJECTION_REASON_INVALID_ITEM_OR_SERVICE
 from core.models import User
 from django.test import TestCase
 from insuree.models import Family, Insuree
@@ -865,7 +865,7 @@ class ValidationTest(TestCase):
         item.delete()
         product.delete()
 
-    def test_review_reject_delete_dedrem(self):
+    def test_review_reject_update_dedrem(self):
         """
         This test creates a claim, submits it so that it gets dedrem entries,
         then submits a review rejecting part of it, then process the claim.
@@ -929,6 +929,102 @@ class ValidationTest(TestCase):
         dedrem = ClaimDedRem.objects.filter(claim=claim1).first()
         self.assertIsNotNone(dedrem)
         self.assertEquals(dedrem.rem_g, 37 + 53)
+
+        # tearDown
+        # dedrem.delete() # already done if the test passed
+        delete_claim_with_itemsvc_dedrem_and_history(claim1)
+        policy.insuree_policies.first().delete()
+        policy.delete()
+        product_item.delete()
+        product_service.delete()
+        pricelist_detail1.delete()
+        pricelist_detail2.delete()
+        service.delete()
+        item.delete()
+        product.delete()
+
+
+    def test_review_reject_delete_dedrem(self):
+        """
+        This test creates a claim, submits it so that it gets dedrem entries,
+        then submits a review rejecting part of it, then process the claim.
+        It should not be processed (which was ok) but the dedrem should be deleted.
+        """
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        service = create_test_service("A", custom_props={"name": "test_review_reject_delete_dedrem"})
+        item = create_test_item("A", custom_props={"name": "test_review_reject_delete_dedrem"})
+
+        product = create_test_product("BCUL0001", custom_props={
+            "name": "Basic Cover Ultha deldedrem",
+            "lump_sum": 10_000,
+        })
+        product_service = create_test_product_service(product, service)
+        product_item = create_test_product_item(product, item)
+        policy = create_test_policy(product, insuree, link=True)
+        pricelist_detail1 = add_service_to_hf_pricelist(service)
+        pricelist_detail2 = add_item_to_hf_pricelist(item)
+
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        service1 = create_test_claimservice(
+            claim1, custom_props={"service_id": service.id, "qty_provided": 2})
+        item1 = create_test_claimitem(
+            claim1, "A", custom_props={"item_id": item.id, "qty_provided": 3})
+        errors = validate_claim(claim1, True)
+        errors += validate_assign_prod_to_claimitems_and_services(claim1)
+        errors += process_dedrem(claim1, -1, False)
+
+        self.assertEqual(len(errors), 0)
+        # Make sure that the dedrem was generated
+        dedrem = ClaimDedRem.objects.filter(claim=claim1).first()
+        self.assertIsNotNone(dedrem)
+        self.assertEquals(dedrem.rem_g, 500)  # 100*2 + 100*3
+
+        # Review the claim and reject all of it
+        # A partial rejection would still trigger the process_dedrem and be fine
+        item1.qty_approved = 0
+        item1.price_approved = 0
+        item1.status = ClaimItem.STATUS_REJECTED
+        item1.rejection_reason = -1
+        item1.audit_user_id_review = -1
+        item1.justification = "Review comment item"
+        item1.save()
+
+        service1.qty_approved = 0
+        service1.price_approved = 0
+        service1.status = ClaimItem.STATUS_REJECTED
+        service1.rejection_reason = -1
+        service1.audit_user_id_review = -1
+        service1.justification = "Review comment svc"
+        service1.save()
+
+        claim1.refresh_from_db()
+        item1.refresh_from_db()
+        service1.refresh_from_db()
+
+        set_claims_status([claim1.uuid], "review_status", Claim.REVIEW_DELIVERED)
+        update_claims_dedrems([claim1.uuid], User.objects.first())
+
+        errors = validate_claim(claim1, True)
+        if len(errors) == 0:
+            errors += validate_assign_prod_to_claimitems_and_services(claim1)
+            errors += process_dedrem(claim1, -1, False)
+
+        # The claim should be globally rejected since the review rejected all items/svc
+        claim1.refresh_from_db()
+        item1.refresh_from_db()
+        service1.refresh_from_db()
+        self.assertEquals(claim1.status, Claim.STATUS_REJECTED)
+        self.assertEquals(claim1.rejection_reason, REJECTION_REASON_INVALID_ITEM_OR_SERVICE)
+        self.assertEquals(item1.status, ClaimDetail.STATUS_REJECTED)
+        self.assertEquals(item1.rejection_reason, -1)
+        self.assertEquals(service1.status, ClaimDetail.STATUS_REJECTED)
+        self.assertEquals(service1.rejection_reason, -1)
+
+        # Then dedrem should have been deleted
+        dedrem = ClaimDedRem.objects.filter(claim=claim1).first()
+        self.assertIsNone(dedrem)
 
         # tearDown
         # dedrem.delete() # already done if the test passed
