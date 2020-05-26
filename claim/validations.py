@@ -1,6 +1,6 @@
 import itertools
 import logging
-from collections import OrderedDict, namedtuple
+from collections import namedtuple
 
 from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail
 from core import utils
@@ -81,6 +81,8 @@ def validate_claim(claim, check_max):
             rtn_services_rejected = claim.services.filter(validity_to__isnull=True)\
                 .exclude(rejection_reason=0).exclude(rejection_reason__isnull=True)\
                 .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
+        if rtn_items_rejected or rtn_services_rejected:
+            logger.debug(f"Marked {rtn_items_rejected} items as rejected and {rtn_services_rejected} services")
 
     rtn_items_passed = claim.items.filter(validity_to__isnull=True)\
         .exclude(status=ClaimItem.STATUS_REJECTED)\
@@ -330,7 +332,6 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
             insuree_policy_effective_date = core.datetime.date.from_ad_date(
                 insuree_policy_effective_date)
             expiry_date = core.datetime.date.from_ad_date(expiry_date)
-            prod_found = 1
             product_item = ProductItem.objects.get(pk=product_item_id)
             # START CHECK 17 --> Item/Service waiting period violation (17)
             waiting_period = None
@@ -339,7 +340,6 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
                     waiting_period = product_item.waiting_period_adult
                 else:
                     waiting_period = product_item.waiting_period_child
-            from core import datetime
             if waiting_period and target_date < \
                     insuree_policy_effective_date.to_datetime + datetimedelta(months=waiting_period):
                 claimitem.rejection_reason = REJECTION_REASON_WAITING_PERIOD_FAIL

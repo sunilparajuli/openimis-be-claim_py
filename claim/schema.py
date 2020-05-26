@@ -6,8 +6,9 @@ from .models import ClaimMutation
 from django.utils.translation import gettext as _
 from graphene_django.filter import DjangoFilterConnectionField
 
-from .gql_queries import *
-from .gql_mutations import *
+# We do need all queries and mutations in the namespace here.
+from .gql_queries import *  # lgtm [py/polluting-import]
+from .gql_mutations import *  # lgtm [py/polluting-import]
 
 
 class Query(graphene.ObjectType):
@@ -54,12 +55,10 @@ class Query(graphene.ObjectType):
     def resolve_claim_attachments(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        pass
 
     def resolve_claim_admins(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
             raise PermissionDenied(_("unauthorized"))
-        pass
 
     def resolve_claim_admins_str(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
@@ -73,7 +72,6 @@ class Query(graphene.ObjectType):
     def resolve_claim_officers(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
             raise PermissionDenied(_("unauthorized"))
-        pass
 
 
 class Mutation(graphene.ObjectType):

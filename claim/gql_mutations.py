@@ -12,8 +12,8 @@ from core.schema import TinyInt, SmallInt, OpenIMISMutation
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
-from django.db.models import Sum, CharField
-from django.db.models.functions import Coalesce, Cast
+from django.db.models import CharField
+from django.db.models.functions import Cast
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import UserDistrict

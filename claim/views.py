@@ -11,7 +11,6 @@ from django.utils.translation import gettext as _
 import core
 
 
-
 def print(request):
     if not request.user.has_perms(ClaimConfig.claim_print_perms):
         raise PermissionDenied(_("unauthorized"))
@@ -19,6 +18,7 @@ def print(request):
     report_data_service = ClaimReportService(request.user)
     data = report_data_service.fetch(request.GET['uuid'])
     return report_service.process('claim_claim', data, claim.template)
+
 
 def attach(request):
     queryset = ClaimAttachment.objects.filter(*core.filter_validity())
