@@ -7,7 +7,7 @@ import graphene
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, approved_amount
-from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
+from core import prefix_filterset, ExtendedConnection, filter_validity, assert_string_length
 from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
@@ -17,7 +17,7 @@ from django.db.models.functions import Coalesce, Cast
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import UserDistrict
-from .models import Claim, Feedback, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment
+from .models import Claim, Feedback, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment, ClaimDedRem
 from product.models import ProductItemOrService
 
 logger = logging.getLogger(__name__)
@@ -612,6 +612,16 @@ def set_claims_status(uuids, field, status):
     return errors
 
 
+def update_claims_dedrems(uuids, user):
+    # We could do it in one query with filter(claim__uuid__in=uuids) but we'd loose the logging
+    errors = []
+    for uuid in uuids:
+        logger.debug(f"delivering review on {uuid}, reprocessing dedrem ({user})")
+        claim = Claim.objects.get(uuid=uuid)
+        errors += validate_and_process_dedrem_claim(claim, user, False)
+    return errors
+
+
 class SelectClaimsForFeedbackMutation(OpenIMISMutation):
     """
     Select one or several claims for feedback.
@@ -698,7 +708,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
                 defaults=feedback
             )
             claim.feedback = f
-            claim.feedback_status = 8
+            claim.feedback_status = Claim.FEEDBACK_DELIVERED
             claim.feedback_available = True
             claim.save()
             return None
@@ -742,6 +752,7 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
             raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', 16)
 
+
 class DeliverClaimsReviewMutation(OpenIMISMutation):
     """
     Mark claim review as delivered for one or several claims
@@ -756,7 +767,12 @@ class DeliverClaimsReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 8)
+        errors = set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_DELIVERED)
+        # OMT-208 update the dedrem for the reviewed claims
+        errors += update_claims_dedrems(data["uuids"], user)
+
+        return errors
+
 
 class SkipClaimsReviewMutation(OpenIMISMutation):
     """
@@ -857,15 +873,8 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 continue
             claim.save_history()
             logger.debug("ProcessClaimsMutation: validating claim %s", claim_uuid)
-            c_errors += validate_claim(claim, False)
-            logger.debug("ProcessClaimsMutation: claim %s validated, nb of errors: %s", claim_uuid, len(c_errors))
-            if len(c_errors) == 0:
-                c_errors = validate_assign_prod_to_claimitems_and_services(claim)
-                logger.debug("ProcessClaimsMutation: claim %s assigned, nb of errors: %s", claim_uuid, len(c_errors))
-                c_errors += process_dedrem(claim, user.id_for_audit, True)
-                logger.debug("ProcessClaimsMutation: claim %s processed for dedrem, nb of errors: %s", claim_uuid,
-                             len(errors))
-            c_errors += set_claim_processed_or_valuated(claim, c_errors, user)
+            c_errors += validate_and_process_dedrem_claim(claim, user, True)
+
             logger.debug("ProcessClaimsMutation: claim %s set processed or valuated", claim_uuid)
             if c_errors:
                 errors.append({
@@ -875,7 +884,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
         if len(errors) == 1:
             errors = errors[0]['list']
-        logger.debug("ProcessClaimsMutation: claim %s done, errors: %s", claim_uuid, len(errors))
+        logger.debug("ProcessClaimsMutation: claims %s done, errors: %s", data["uuids"], len(errors))
         return errors
 
 
@@ -976,3 +985,22 @@ def set_claim_processed_or_valuated(claim, errors, user):
             'list': [{'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
                       'detail': claim.uuid}]
         }
+
+
+def validate_and_process_dedrem_claim(claim, user, is_process):
+    errors = validate_claim(claim, False)
+    logger.debug("ProcessClaimsMutation: claim %s validated, nb of errors: %s", claim.uuid, len(errors))
+    if len(errors) == 0:
+        errors = validate_assign_prod_to_claimitems_and_services(claim)
+        logger.debug("ProcessClaimsMutation: claim %s assigned, nb of errors: %s", claim.uuid, len(errors))
+        errors += process_dedrem(claim, user.id_for_audit, is_process)
+        logger.debug("ProcessClaimsMutation: claim %s processed for dedrem, nb of errors: %s", claim.uuid,
+                     len(errors))
+    else:
+        # OMT-208 the claim is invalid. If there is a dedrem, we need to clear it (caused by a review)
+        deleted_dedrems = ClaimDedRem.objects.filter(claim=claim).delete()
+        if deleted_dedrems:
+            logger.debug(f"Claim {claim.uuid} is invalid, we deleted its dedrem ({deleted_dedrems})")
+    if is_process:
+        errors += set_claim_processed_or_valuated(claim, errors, user)
+    return errors
