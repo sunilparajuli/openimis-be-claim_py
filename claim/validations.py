@@ -43,6 +43,7 @@ def validate_claim(claim, check_max):
     """
     Based on the legacy validation, this method returns standard codes along with details
     :param claim: claim to be verified
+    :param check_max: max amount to validate. Everything above will be rejected
     :return: (result_code, error_details)
     """
     logger.debug(f"Validating claim {claim.uuid}")
@@ -96,14 +97,18 @@ def validate_claim(claim, check_max):
                     'message': _("claim.validation.all_items_and_services_rejected") % {
                         'code': claim.code},
                     'detail': claim.uuid}]
+        claim.status = Claim.STATUS_REJECTED
+        claim.rejection_reason = REJECTION_REASON_INVALID_ITEM_OR_SERVICE
+        claim.save()
     logger.debug(f"Validation found {len(errors)} error(s)")
     return errors
 
 
 def validate_claimitems(claim):
     target_date = claim.date_from if claim.date_from else claim.date_to
-    for claimitem in claim.items.filter(validity_to__isnull=True):
-        claimitem.rejection_reason = None
+    for claimitem in claim.items\
+            .filter(validity_to__isnull=True)\
+            .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         validate_claimitem_validity(claimitem)
         if not claimitem.rejection_reason:
             validate_claimitem_in_price_list(claim, claimitem)
@@ -133,8 +138,9 @@ def validate_claimservices(claim):
     target_date = claim.date_from if claim.date_from else claim.date_to
     base_category = get_claim_category(claim)
 
-    for claimservice in claim.services.all():
-        claimservice.rejection_reason = None
+    for claimservice in claim.services\
+            .filter(validity_to__isnull=True)\
+            .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
         validate_claimservice_validity(claimservice)
         if not claimservice.rejection_reason:
             validate_claimservice_in_price_list(claim, claimservice)
