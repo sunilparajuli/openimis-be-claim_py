@@ -73,7 +73,8 @@ class ClaimConfig(AppConfig):
         ClaimConfig.gql_mutation_delete_claims_perms = cfg["gql_mutation_delete_claims_perms"]
         ClaimConfig.claim_print_perms = cfg["claim_print_perms"]
         ClaimConfig.claim_attachments_root_path = cfg["claim_attachments_root_path"]
-        ClaimConfig.claim_uspUpdateClaimFromPhone_intermediate_sets = cfg["claim_uspUpdateClaimFromPhone_intermediate_sets"]
+        ClaimConfig.claim_uspUpdateClaimFromPhone_intermediate_sets = \
+            cfg["claim_uspUpdateClaimFromPhone_intermediate_sets"]
 
     def ready(self):
         from core.models import ModuleConfiguration

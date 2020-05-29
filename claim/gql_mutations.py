@@ -7,13 +7,13 @@ import graphene
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, approved_amount
-from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
-from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
+from core import filter_validity, assert_string_length
+from core.schema import TinyInt, SmallInt, OpenIMISMutation
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
-from django.db.models import Sum, CharField
-from django.db.models.functions import Coalesce, Cast
+from django.db.models import CharField
+from django.db.models.functions import Cast
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import UserDistrict
@@ -119,8 +119,8 @@ class ClaimCodeInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(res, 8)
-        return res
+        assert_string_length(value, 8)
+        return value
 
     serialize = coerce_string
     parse_value = coerce_string
@@ -136,8 +136,8 @@ class ClaimGuaranteeIdInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(res, 50)
-        return res
+        assert_string_length(value, 50)
+        return value
 
     serialize = coerce_string
     parse_value = coerce_string
@@ -229,6 +229,7 @@ def reset_claim_before_update(claim):
     claim.guarantee_id = None
     claim.explanation = None
     claim.adjustment = None
+
 
 def process_child_relation(user, data_children, prev_claim_id,
                            claim_id, children, create_hook):
@@ -626,7 +627,7 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_select_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 4)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.FEEDBACK_SELECTED)
 
 
 class BypassClaimsFeedbackMutation(OpenIMISMutation):
@@ -643,7 +644,7 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 16)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.FEEDBACK_BYPASSED)
 
 
 class SkipClaimsFeedbackMutation(OpenIMISMutation):
@@ -661,7 +662,7 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_skip_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 2)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.FEEDBACK_NOT_SELECTED)
 
 
 class DeliverClaimFeedbackMutation(OpenIMISMutation):
@@ -722,7 +723,7 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_select_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 4)
+        return set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_SELECTED)
 
 
 class BypassClaimsReviewMutation(OpenIMISMutation):
@@ -740,7 +741,8 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 16)
+        return set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_BYPASSED)
+
 
 class DeliverClaimsReviewMutation(OpenIMISMutation):
     """
@@ -756,7 +758,8 @@ class DeliverClaimsReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 8)
+        return set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_DELIVERED)
+
 
 class SkipClaimsReviewMutation(OpenIMISMutation):
     """
@@ -773,7 +776,7 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_skip_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 2)
+        return set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_NOT_SELECTED)
 
 
 class SaveClaimReviewMutation(OpenIMISMutation):
@@ -875,7 +878,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
         if len(errors) == 1:
             errors = errors[0]['list']
-        logger.debug("ProcessClaimsMutation: claim %s done, errors: %s", claim_uuid, len(errors))
+        logger.debug("ProcessClaimsMutation: claims %s done, errors: %s", data["uuids"], len(errors))
         return errors
 
 

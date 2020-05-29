@@ -1,6 +1,6 @@
 import itertools
 import logging
-from collections import OrderedDict, namedtuple
+from collections import namedtuple
 
 from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail
 from core import utils
@@ -81,6 +81,8 @@ def validate_claim(claim, check_max):
             rtn_services_rejected = claim.services.filter(validity_to__isnull=True)\
                 .exclude(rejection_reason=0).exclude(rejection_reason__isnull=True)\
                 .update(status=ClaimService.STATUS_REJECTED, qty_approved=0)
+        if rtn_items_rejected or rtn_services_rejected:
+            logger.debug(f"Marked {rtn_items_rejected} items as rejected and {rtn_services_rejected} services")
 
     rtn_items_passed = claim.items.filter(validity_to__isnull=True)\
         .exclude(status=ClaimItem.STATUS_REJECTED)\
@@ -106,9 +108,9 @@ def validate_claimitems(claim):
         if not claimitem.rejection_reason:
             validate_claimitem_in_price_list(claim, claimitem)
         if not claimitem.rejection_reason:
-            validate_claimitem_care_type(claim, claimitem)
+            validate_claimdetail_care_type(claim, claimitem)
         if not claimitem.rejection_reason:
-            validate_claimitem_limitation_fail(claim, claimitem)
+            validate_claimdetail_limitation_fail(claim, claimitem)
         if not claimitem.rejection_reason:
             validate_claimitem_frequency(claim, claimitem)
         if not claimitem.rejection_reason:
@@ -137,11 +139,11 @@ def validate_claimservices(claim):
         if not claimservice.rejection_reason:
             validate_claimservice_in_price_list(claim, claimservice)
         if not claimservice.rejection_reason:
-            validate_claimservice_care_type(claim, claimservice)
+            validate_claimdetail_care_type(claim, claimservice)
         if not claimservice.rejection_reason:
             validate_claimservice_frequency(claim, claimservice)
         if not claimservice.rejection_reason:
-            validate_claimservice_limitation_fail(claim, claimservice)
+            validate_claimdetail_limitation_fail(claim, claimservice)
         if not claimservice.rejection_reason:
             validate_service_product_family(
                 claimservice=claimservice,
@@ -201,8 +203,8 @@ def validate_claimservice_in_price_list(claim, claimservice):
         claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
 
 
-def validate_claimservice_care_type(claim, claimservice):
-    care_type = claimservice.service.care_type
+def validate_claimdetail_care_type(claim, claimdetail):
+    care_type = claimdetail.itemsvc.care_type
     hf_care_type = claim.health_facility.care_type if claim.health_facility.care_type else 'B'
     target_date = claim.date_to if claim.date_to else claim.date_from
 
@@ -215,41 +217,16 @@ def validate_claimservice_care_type(claim, claimservice):
             hf_care_type == 'I'
             or target_date != claim.date_from)
     ):
-        claimservice.rejection_reason = REJECTION_REASON_CARE_TYPE
+        claimdetail.rejection_reason = REJECTION_REASON_CARE_TYPE
 
 
-def validate_claimitem_care_type(claim, claimitem):
-    care_type = claimitem.item.care_type
-    hf_care_type = claim.health_facility.care_type if claim.health_facility.care_type else 'B'
-    target_date = claim.date_to if claim.date_to else claim.date_from
-
-    if (
-            care_type == 'I' and (
-            hf_care_type == 'O'
-            or target_date == claim.date_from)
-    ) or (
-            care_type == 'O' and (
-            hf_care_type == 'I'
-            or target_date != claim.date_from)
-    ):
-        claimitem.rejection_reason = REJECTION_REASON_CARE_TYPE
-
-
-def validate_claimitem_limitation_fail(claim, claimitem):
+def validate_claimdetail_limitation_fail(claim, claimdetail):
     target_date = claim.date_to if claim.date_to else claim.date_from
     patient_category_mask = utils.patient_category_mask(
         claim.insuree, target_date)
 
-    if claimitem.item.patient_category & patient_category_mask != patient_category_mask:
-        claimitem.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
-
-
-def validate_claimservice_limitation_fail(claim, claimservice):
-    target_date = claim.date_to if claim.date_to else claim.date_from
-    patient_category_mask = utils.patient_category_mask(
-        claim.insuree, target_date)
-    if claimservice.service.patient_category & patient_category_mask != patient_category_mask:
-        claimservice.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
+    if claimdetail.itemsvc.patient_category & patient_category_mask != patient_category_mask:
+        claimdetail.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
 
 
 def frequency_check(qs, claim, elt):
@@ -330,7 +307,6 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
             insuree_policy_effective_date = core.datetime.date.from_ad_date(
                 insuree_policy_effective_date)
             expiry_date = core.datetime.date.from_ad_date(expiry_date)
-            prod_found = 1
             product_item = ProductItem.objects.get(pk=product_item_id)
             # START CHECK 17 --> Item/Service waiting period violation (17)
             waiting_period = None
@@ -339,7 +315,6 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
                     waiting_period = product_item.waiting_period_adult
                 else:
                     waiting_period = product_item.waiting_period_child
-            from core import datetime
             if waiting_period and target_date < \
                     insuree_policy_effective_date.to_datetime + datetimedelta(months=waiting_period):
                 claimitem.rejection_reason = REJECTION_REASON_WAITING_PERIOD_FAIL
