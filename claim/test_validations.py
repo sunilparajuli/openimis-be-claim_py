@@ -4,7 +4,7 @@ from claim.test_helpers import create_test_claim, create_test_claimservice, crea
     mark_test_claim_as_processed, delete_claim_with_itemsvc_dedrem_and_history
 from claim.validations import get_claim_category, validate_claim, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, REJECTION_REASON_WAITING_PERIOD_FAIL, REJECTION_REASON_INVALID_ITEM_OR_SERVICE
-from core.models import User
+from core.models import User, InteractiveUser
 from django.test import TestCase
 from insuree.models import Family, Insuree
 from insuree.test_helpers import create_test_insuree
@@ -26,6 +26,11 @@ class ValidationTest(TestCase):
     service_A_invalid = None
 
     def setUp(self) -> None:
+        self.i_user = InteractiveUser(
+            login_name="test_batch_run", audit_user_id=978911, id=97891
+        )
+        self.user = User(i_user=self.i_user)
+
         self.service_H = create_test_service("H")
         self.service_O = create_test_service("O")
         self.service_D = create_test_service("D")
@@ -923,7 +928,7 @@ class ValidationTest(TestCase):
         service1.refresh_from_db()
 
         set_claims_status([claim1.uuid], "review_status", Claim.REVIEW_DELIVERED)
-        update_claims_dedrems([claim1.uuid], User.objects.first())
+        update_claims_dedrems([claim1.uuid], self.user)
 
         # Then dedrem should have been updated
         dedrem = ClaimDedRem.objects.filter(claim=claim1).first()
@@ -1004,7 +1009,7 @@ class ValidationTest(TestCase):
         service1.refresh_from_db()
 
         set_claims_status([claim1.uuid], "review_status", Claim.REVIEW_DELIVERED)
-        update_claims_dedrems([claim1.uuid], User.objects.first())
+        update_claims_dedrems([claim1.uuid], self.user)
 
         errors = validate_claim(claim1, True)
         if len(errors) == 0:
