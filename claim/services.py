@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 from django.core.exceptions import PermissionDenied
 import core
 from django.db import connection
+from gettext import gettext as _
 
 from .apps import ClaimConfig
 from django.conf import settings
