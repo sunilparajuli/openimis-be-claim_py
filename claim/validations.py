@@ -1234,6 +1234,12 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
     # ... so re-creating the ClaimDedRem according to adjusted/valuated price
     ClaimDedRem.objects.filter(claim=claim).delete()
 
+    if not policy:
+        logger.error("Tried to create a dedrem but couldn't find a valid policy for claim %s and insuree ",
+                     claim.id, claim.insuree_id)
+        raise Exception("Tried to create a dedrem but couldn't find a valid policy for claim %s and insuree ".format(
+                        claim.id, claim.insuree_id))
+
     from core import datetime
     now = datetime.datetime.now()
     claim_ded_rem_to_create = {

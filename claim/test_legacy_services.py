@@ -1,6 +1,6 @@
 from django.test import TestCase
 from unittest import mock
-from .services import *
+from .legacy_services import *
 import core
 
 
@@ -112,7 +112,7 @@ class ClaimSubmitServiceTestCase(TestCase):
         self.assertEquals(expected, claim.to_xml())
 
     def test_claim_submit_error(self):
-        with mock.patch("claim.services.ClaimSubmitService.hf_scope_check") as mock_security:
+        with mock.patch("claim.legacy_services.ClaimSubmitService.hf_scope_check") as mock_security:
             mock_security.return_value = None
             with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
                 mock_cursor.return_value.__enter__.return_value.fetchone.return_value = [
@@ -135,7 +135,7 @@ class ClaimSubmitServiceTestCase(TestCase):
                 self.assertEquals(cm.exception.code, 2)
 
     def test_claim_submit_allgood(self):
-        with mock.patch("claim.services.ClaimSubmitService.hf_scope_check") as mock_security:
+        with mock.patch("claim.legacy_services.ClaimSubmitService.hf_scope_check") as mock_security:
             mock_security.return_value = None
             with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
                 mock_cursor.return_value.__enter__.return_value.description = None

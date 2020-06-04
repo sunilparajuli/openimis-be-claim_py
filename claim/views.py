@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from report.services import ReportService
-from .services import ClaimReportService
+from .legacy_services import ClaimReportService
 from .reports import claim
 from .apps import ClaimConfig
 from .models import ClaimAttachment

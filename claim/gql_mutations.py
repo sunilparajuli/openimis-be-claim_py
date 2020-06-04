@@ -4,9 +4,11 @@ import pathlib
 import base64
 from copy import copy
 import graphene
+from claim.services import submit_claim, set_claim_deleted, validate_and_process_dedrem_claim, set_claims_status, \
+    update_claims_dedrems
+
 from .apps import ClaimConfig
-from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
-    process_dedrem, approved_amount
+from claim.validations import approved_amount
 from core import filter_validity, assert_string_length
 from core.schema import TinyInt, SmallInt, OpenIMISMutation
 from django.conf import settings
@@ -17,8 +19,7 @@ from django.db.models.functions import Cast
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import UserDistrict
-from .models import Claim, Feedback, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment, ClaimDedRem
-from product.models import ProductItemOrService
+from .models import Claim, Feedback, ClaimItem, ClaimService, ClaimAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -433,6 +434,7 @@ class CreateAttachmentMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        claim = None
         try:
             if user.is_anonymous or not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
@@ -455,7 +457,7 @@ class CreateAttachmentMutation(OpenIMISMutation):
             return None
         except Exception as exc:
             return [{
-                'message': _("claim.mutation.failed_to_attach_document") % {'code': claim.code},
+                'message': _("claim.mutation.failed_to_attach_document") % {'code': claim.code if claim else None},
                 'detail': str(exc)}]
 
 
@@ -468,6 +470,7 @@ class UpdateAttachmentMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        attachment = None
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
@@ -493,7 +496,7 @@ class UpdateAttachmentMutation(OpenIMISMutation):
         except Exception as exc:
             return [{
                 'message': _("claim.mutation.failed_to_update_claim_attachment") % {
-                    'code': attachment.claim.code,
+                    'code': attachment.claim.code if attachment and attachment.claim else None,
                     'filename': attachment.filename
                 },
                 'detail': str(exc)}]
@@ -508,6 +511,7 @@ class DeleteAttachmentMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        attachment = None
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
@@ -530,7 +534,7 @@ class DeleteAttachmentMutation(OpenIMISMutation):
         except Exception as exc:
             return [{
                 'message': _("claim.mutation.failed_to_delete_claim_attachment") % {
-                    'code': attachment.claim.code,
+                    'code': attachment.claim.code if attachment and attachment.claim else None,
                     'filename': attachment.filename
                 },
                 'detail': str(exc)}]
@@ -570,16 +574,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 continue
             claim.save_history()
             logger.debug("SubmitClaimsMutation: validating claim %s", claim_uuid)
-            c_errors += validate_claim(claim, True)
-            logger.debug("SubmitClaimsMutation: claim %s validated, nb of errors: %s", claim_uuid, len(c_errors))
-            if len(c_errors) == 0:
-                c_errors = validate_assign_prod_to_claimitems_and_services(claim)
-                logger.debug("SubmitClaimsMutation: claim %s assigned, nb of errors: %s", claim_uuid, len(c_errors))
-                c_errors += process_dedrem(claim, user.id_for_audit, False)
-                logger.debug("SubmitClaimsMutation: claim %s processed for dedrem, nb of errors: %s", claim_uuid,
-                             len(errors))
-            c_errors += set_claim_submitted(claim, c_errors, user)
-            logger.debug("SubmitClaimsMutation: claim %s set submitted", claim_uuid)
+            c_errors += submit_claim(claim, user.id_for_audit)
             if c_errors:
                 errors.append({
                     'title': claim.code,
@@ -587,41 +582,8 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 })
         if len(errors) == 1:
             errors = errors[0]['list']
-        logger.debug("SubmitClaimsMutation: claim %s done, errors: %s", claim_uuid, len(errors))
+        logger.debug("SubmitClaimsMutation: %s claims done, errors: %s", len(data["uuids"]), len(errors))
         return errors
-
-
-def set_claims_status(uuids, field, status):
-    errors = []
-    for claim_uuid in uuids:
-        claim = Claim.objects \
-            .filter(uuid=claim_uuid,
-                    validity_to__isnull=True) \
-            .first()
-        if claim is None:
-            errors += [{'message': _(
-                "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
-            continue
-        try:
-            claim.save_history()
-            setattr(claim, field, status)
-            claim.save()
-        except Exception as exc:
-            errors += [
-                {'message': _("claim.mutation.failed_to_change_status_of_claim") %
-                            {'code': claim.code}}]
-
-    return errors
-
-
-def update_claims_dedrems(uuids, user):
-    # We could do it in one query with filter(claim__uuid__in=uuids) but we'd loose the logging
-    errors = []
-    for uuid in uuids:
-        logger.debug(f"delivering review on {uuid}, reprocessing dedrem ({user})")
-        claim = Claim.objects.get(uuid=uuid)
-        errors += validate_and_process_dedrem_claim(claim, user, False)
-    return errors
 
 
 class SelectClaimsForFeedbackMutation(OpenIMISMutation):
@@ -689,6 +651,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        claim = None
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
                 raise PermissionDenied(_("unauthorized"))
@@ -716,7 +679,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
             return None
         except Exception as exc:
             return [{
-                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code},
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code if claim else None},
                 'detail': str(exc)}]
 
 
@@ -753,8 +716,6 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
         if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_BYPASSED)
-
-
 
 
 class DeliverClaimsReviewMutation(OpenIMISMutation):
@@ -811,6 +772,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        claim = None
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
                 raise PermissionDenied(_("unauthorized"))
@@ -841,7 +803,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
             return None
         except Exception as exc:
             return [{
-                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code},
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code if claim else None},
                 'detail': str(exc)}]
 
 
@@ -926,85 +888,3 @@ class DeleteClaimsMutation(OpenIMISMutation):
             errors = errors[0]['list']
         return errors
 
-
-def set_claim_submitted(claim, errors, user):
-    try:
-        if errors:
-            claim.status = Claim.STATUS_REJECTED
-        else:
-            claim.approved = approved_amount(claim)
-            claim.status = Claim.STATUS_CHECKED
-            claim.audit_user_id_submit = user.id_for_audit
-            from core.utils import TimeUtils
-            claim.submit_stamp = TimeUtils.now()
-            claim.category = get_claim_category(claim)
-        claim.save()
-        return []
-    except Exception as exc:
-        return {
-            'title': claim.code,
-            'list': [{
-                'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
-                'detail': claim.uuid}]
-        }
-
-
-def set_claim_deleted(claim):
-    try:
-        claim.delete_history()
-        return []
-    except Exception as exc:
-        return {
-            'title': claim.code,
-            'list': [{
-                'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
-                'detail': claim.uuid}]
-        }
-
-
-def details_with_relative_prices(details):
-    return details.filter(status=ClaimDetail.STATUS_PASSED) \
-        .filter(price_origin=ProductItemOrService.ORIGIN_RELATIVE) \
-        .exists()
-
-
-def with_relative_prices(claim):
-    return details_with_relative_prices(claim.items) or details_with_relative_prices(claim.services)
-
-
-def set_claim_processed_or_valuated(claim, errors, user):
-    try:
-        if errors:
-            claim.status = Claim.STATUS_REJECTED
-        else:
-            claim.status = Claim.STATUS_PROCESSED if with_relative_prices(claim) else Claim.STATUS_VALUATED
-            claim.audit_user_id_process = user.id_for_audit
-            from core.utils import TimeUtils
-            claim.process_stamp = TimeUtils.now()
-        claim.save()
-        return []
-    except Exception as ex:
-        return {
-            'title': claim.code,
-            'list': [{'message': _("claim.mutation.failed_to_change_status_of_claim") % {'code': claim.code},
-                      'detail': claim.uuid}]
-        }
-
-
-def validate_and_process_dedrem_claim(claim, user, is_process):
-    errors = validate_claim(claim, False)
-    logger.debug("ProcessClaimsMutation: claim %s validated, nb of errors: %s", claim.uuid, len(errors))
-    if len(errors) == 0:
-        errors = validate_assign_prod_to_claimitems_and_services(claim)
-        logger.debug("ProcessClaimsMutation: claim %s assigned, nb of errors: %s", claim.uuid, len(errors))
-        errors += process_dedrem(claim, user.id_for_audit, is_process)
-        logger.debug("ProcessClaimsMutation: claim %s processed for dedrem, nb of errors: %s", claim.uuid,
-                     len(errors))
-    else:
-        # OMT-208 the claim is invalid. If there is a dedrem, we need to clear it (caused by a review)
-        deleted_dedrems = ClaimDedRem.objects.filter(claim=claim).delete()
-        if deleted_dedrems:
-            logger.debug(f"Claim {claim.uuid} is invalid, we deleted its dedrem ({deleted_dedrems})")
-    if is_process:
-        errors += set_claim_processed_or_valuated(claim, errors, user)
-    return errors

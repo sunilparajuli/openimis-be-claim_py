@@ -1,6 +1,5 @@
 import uuid
 
-from claim_batch import models as claim_batch_models
 from core import fields
 from core import models as core_models
 from django import dispatch
@@ -141,7 +140,7 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
     rejection_reason = models.SmallIntegerField(
         db_column='RejectionReason', blank=True, null=True)
 
-    batch_run = models.ForeignKey(claim_batch_models.BatchRun,
+    batch_run = models.ForeignKey("claim_batch.BatchRun",
                                   models.DO_NOTHING, db_column='RunID', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
     validity_from_review = fields.DateTimeField(
