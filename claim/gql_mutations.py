@@ -207,6 +207,7 @@ class ClaimInputType(OpenIMISMutation.Input):
     guarantee_id = ClaimGuaranteeIdInputType(required=False)
     explanation = graphene.String(required=False)
     adjustment = graphene.String(required=False)
+    ext = graphene.types.json.JSONString(required=False)
 
     feedback_available = graphene.Boolean(default=False)
     feedback_status = TinyInt(required=False)
@@ -383,6 +384,8 @@ class CreateClaimMutation(OpenIMISMutation):
             data['status'] = Claim.STATUS_ENTERED
             from core.utils import TimeUtils
             data['validity_from'] = TimeUtils.now()
+            # Claim ext must be treated by external module
+            data.pop('ext')
             attachments = data.pop('attachments') if 'attachments' in data else None
             claim = update_or_create_claim(data, user)
             if attachments:
