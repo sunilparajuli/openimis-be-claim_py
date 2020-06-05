@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2020-06-05 10:22+0200\n"
+"POT-Creation-Date: 2020-06-05 10:25+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -28,7 +28,8 @@ msgstr ""
 #: claim/gql_mutations.py:793 claim/gql_mutations.py:814
 #: claim/gql_mutations.py:859 claim/gql_mutations.py:907 claim/views.py:16
 #: claim/views.py:37 claim/schema.py:31 claim/schema.py:58 claim/schema.py:62
-#: claim/schema.py:66 claim/schema.py:75 claim/gql_mutations.py:377
+#: claim/schema.py:66 claim/schema.py:75 claim/schema.py:57 claim/schema.py:61
+#: claim/schema.py:65 claim/schema.py:74 claim/gql_mutations.py:377
 #: claim/gql_mutations.py:416 claim/gql_mutations.py:437
 #: claim/gql_mutations.py:452 claim/gql_mutations.py:472
 #: claim/gql_mutations.py:486 claim/gql_mutations.py:512
