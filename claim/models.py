@@ -13,7 +13,7 @@ from location.models import UserDistrict
 from medical import models as medical_models
 from policy import models as policy_models
 from product import models as product_models
-
+from jsonfallback.fields import FallbackJSONField
 
 class ClaimAdmin(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimAdminId', primary_key=True)
@@ -192,6 +192,8 @@ class Claim(core_models.VersionedModel):
         db_column='AuditUserIDSubmit', blank=True, null=True)
     audit_user_id_process = models.IntegerField(
         db_column='AuditUserIDProcess', blank=True, null=True)
+    json_ext = FallbackJSONField(
+        db_column='JsonExt', blank=True, null=True)
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     class Meta:
