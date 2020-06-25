@@ -207,6 +207,7 @@ class ClaimInputType(OpenIMISMutation.Input):
     guarantee_id = ClaimGuaranteeIdInputType(required=False)
     explanation = graphene.String(required=False)
     adjustment = graphene.String(required=False)
+    json_ext = graphene.types.json.JSONString(required=False)
 
     feedback_available = graphene.Boolean(default=False)
     feedback_status = TinyInt(required=False)
@@ -752,6 +753,7 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
         if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
         return set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_BYPASSED)
+
 
 
 
