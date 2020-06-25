@@ -207,6 +207,7 @@ class ClaimInputType(OpenIMISMutation.Input):
     guarantee_id = ClaimGuaranteeIdInputType(required=False)
     explanation = graphene.String(required=False)
     adjustment = graphene.String(required=False)
+    json_ext = graphene.types.json.JSONString(required=False)
 
     feedback_available = graphene.Boolean(default=False)
     feedback_status = TinyInt(required=False)
