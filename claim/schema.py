@@ -1,7 +1,7 @@
 from core.schema import signal_mutation_module_validate
 from django.db.models import OuterRef, Subquery, Avg, Q
 import graphene_django_optimizer as gql_optimizer
-from core.schema import OrderedDjangoFilterConnectionField
+from core.schema import OrderedDjangoFilterConnectionField, OfficerGQLType
 from .models import ClaimMutation
 from django.utils.translation import gettext as _
 from graphene_django.filter import DjangoFilterConnectionField
@@ -24,7 +24,7 @@ class Query(graphene.ObjectType):
         ClaimAdminGQLType,
         str=graphene.String(),
     )
-    claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
+    claim_officers = DjangoFilterConnectionField(OfficerGQLType)
 
     def resolve_claims(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):

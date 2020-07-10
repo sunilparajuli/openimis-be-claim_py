@@ -6,8 +6,7 @@ from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from claim_batch.schema import BatchRunGQLType
 from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
-from core.models import Officer
-
+from core.gql_queries import OfficerGQLType
 
 class ClaimAdminGQLType(DjangoObjectType):
     """
@@ -23,28 +22,6 @@ class ClaimAdminGQLType(DjangoObjectType):
             "last_name": ["exact", "icontains"],
             "other_names": ["exact", "icontains"],
             **prefix_filterset("health_facility__", HealthFacilityGQLType._meta.filter_fields),
-        }
-        connection_class = ExtendedConnection
-
-    @classmethod
-    def get_queryset(cls, queryset, info):
-        queryset = queryset.filter(*filter_validity())
-        return queryset
-
-
-class ClaimOfficerGQLType(DjangoObjectType):
-    """
-    Details about a Claim Officer
-    """
-
-    class Meta:
-        model = Officer
-        interfaces = (graphene.relay.Node,)
-        filter_fields = {
-            "uuid": ["exact"],
-            "code": ["exact", "icontains"],
-            "last_name": ["exact", "icontains"],
-            "other_names": ["exact", "icontains"],
         }
         connection_class = ExtendedConnection
 
