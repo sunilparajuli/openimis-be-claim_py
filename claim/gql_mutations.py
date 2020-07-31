@@ -230,6 +230,7 @@ def reset_claim_before_update(claim):
     claim.guarantee_id = None
     claim.explanation = None
     claim.adjustment = None
+    claim.json_ext = None
 
 
 def process_child_relation(user, data_children, prev_claim_id,
