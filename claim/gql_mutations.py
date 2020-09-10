@@ -242,10 +242,10 @@ def process_child_relation(user, data_children,
             # elt has been historized along with claim historization
             elt = children.get(id=elt_id)
             [setattr(elt, key, data_elt[key]) for key in data_elt]
-            new_elt.validity_from = TimeUtils.now()
-            new_elt.audit_user_id = user.id_for_audit
-            new_elt.claim_id = claim_id
-            new_elt.save()
+            elt.validity_from = TimeUtils.now()
+            elt.audit_user_id = user.id_for_audit
+            elt.claim_id = claim_id
+            elt.save()
         else:
             elt['validity_from'] = TimeUtils.now()
             elt['audit_user_id'] = user.id_for_audit
