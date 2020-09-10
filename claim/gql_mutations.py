@@ -231,52 +231,26 @@ def reset_claim_before_update(claim):
     claim.explanation = None
     claim.adjustment = None
 
-def process_child_relation(user, data_children, prev_claim_id,
+def process_child_relation(user, data_children,
                            claim_id, children, create_hook):
     claimed = 0
-    prev_elts = [s.id for s in children.all()]
     from core.utils import TimeUtils
-    for elt in data_children:
-        claimed += elt['qty_provided'] * elt['price_asked']
-        elt_id = elt.pop('id') if 'id' in elt else None
+    for data_elt in data_children:
+        claimed += data_elt['qty_provided'] * elt['price_asked']
+        elt_id = data_elt.pop('id') if 'id' in elt else None
         if elt_id:
-            prev_elts.remove(elt_id)
-            # explanation and justification are both TextField (ntext in db) and cannot be compared with str
-            # [42000] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]The data types ntext and nvarchar are incompatible in the equal to operator
-            # need to cast!
-            explanation = elt.pop('explanation', None)
-            justification = elt.pop('justification', None)
-            prev_elt = children.\
-                annotate(strexplanation=Cast('explanation', CharField())). \
-                annotate(strjustification=Cast('justification', CharField())). \
-                filter(id=elt_id, **elt). \
-                filter(strexplanation=explanation). \
-                filter(strjustification=justification). \
-                first()
-            if not prev_elt:
-                # item has been updated, let's bind the old value to prev_claim
-                prev_elt = children.get(id=elt_id)
-                prev_elt.claim_id = prev_claim_id
-                prev_elt.save()
-                # ... and update with the new values
-                new_elt = copy(prev_elt)
-                [setattr(new_elt, key, elt[key]) for key in elt]
-                new_elt.explanation = explanation
-                new_elt.justification = justification
-                new_elt.id = None
-                new_elt.validity_from = TimeUtils.now()
-                new_elt.audit_user_id = user.id_for_audit
-                new_elt.claim_id = claim_id
-                new_elt.save()
+            # elt has been historized along with claim historization
+            elt = children.get(id=elt_id)
+            [setattr(elt, key, data_elt[key]) for key in data_elt]
+            new_elt.validity_from = TimeUtils.now()
+            new_elt.audit_user_id = user.id_for_audit
+            new_elt.claim_id = claim_id
+            new_elt.save()
         else:
             elt['validity_from'] = TimeUtils.now()
             elt['audit_user_id'] = user.id_for_audit
-            create_hook(claim_id, elt)
+            create_hook(claim_id, data_elt)
 
-    if prev_elts:
-        children.filter(id__in=prev_elts).update(
-            claim_id=prev_claim_id,
-            validity_to=TimeUtils.now())
     return claimed
 
 
@@ -345,10 +319,10 @@ def update_or_create_claim(data, user):
     else:
         claim = Claim.objects.create(**data)
     claimed = 0
-    claimed += process_child_relation(user, items, prev_claim_id,
+    claimed += process_child_relation(user, items,
                                       claim.id, claim.items,
                                       item_create_hook)
-    claimed += process_child_relation(user, services, prev_claim_id,
+    claimed += process_child_relation(user, services,
                                       claim.id, claim.services,
                                       service_create_hook)
     claim.claimed = claimed
