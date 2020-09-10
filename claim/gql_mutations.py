@@ -564,7 +564,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
         return errors
 
 
-def set_claims_status(uuids, field, status):
+def set_claims_status(uuids, field, status, audit_data):
     errors = []
     for claim_uuid in uuids:
         claim = Claim.objects \
@@ -578,6 +578,7 @@ def set_claims_status(uuids, field, status):
         try:
             claim.save_history()
             setattr(claim, field, status)
+            [setattr(claim, key, audit_data[key]) for key in audit_data]
             claim.save()
         except Exception as exc:
             errors += [
@@ -611,7 +612,7 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_select_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 4)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.STATUS_CHECKED)
 
 
 class BypassClaimsFeedbackMutation(OpenIMISMutation):
@@ -628,7 +629,7 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 16)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.STATUS_VALUATED)
 
 
 class SkipClaimsFeedbackMutation(OpenIMISMutation):
@@ -646,7 +647,7 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_skip_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 2)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.STATUS_ENTERED)
 
 
 class DeliverClaimFeedbackMutation(OpenIMISMutation):
@@ -707,7 +708,7 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_select_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 4)
+        return set_claims_status(data['uuids'], 'review_status', Claim.STATUS_CHECKED)
 
 
 class BypassClaimsReviewMutation(OpenIMISMutation):
@@ -725,7 +726,7 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 16)
+        return set_claims_status(data['uuids'], 'review_status', Claim.STATUS_VALUATED)
 
 
 class DeliverClaimsReviewMutation(OpenIMISMutation):
@@ -740,9 +741,10 @@ class DeliverClaimsReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        logger.error("SaveClaimReviewMutation")
         if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        errors = set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_DELIVERED)
+        errors = set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_DELIVERED, {'audit_user_id_review': user.id_for_audit})
         # OMT-208 update the dedrem for the reviewed claims
         errors += update_claims_dedrems(data["uuids"], user)
 
@@ -764,7 +766,7 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_skip_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 2)
+        return set_claims_status(data['uuids'], 'review_status', Claim.STATUS_ENTERED)
 
 
 class SaveClaimReviewMutation(OpenIMISMutation):
@@ -806,6 +808,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                 if service['status'] == ClaimService.STATUS_PASSED:
                     all_rejected = False
             claim.approved = approved_amount(claim)
+            claim.audit_user_id_review = user.id_for_audit
             if all_rejected:
                 claim.status = Claim.STATUS_REJECTED
             claim.save()
@@ -847,6 +850,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 }
                 continue
             claim.save_history()
+            claim.audit_user_id_process = user.id_for_audit
             logger.debug("ProcessClaimsMutation: validating claim %s", claim_uuid)
             c_errors += validate_and_process_dedrem_claim(claim, user, True)
 
@@ -900,12 +904,12 @@ class DeleteClaimsMutation(OpenIMISMutation):
 
 def set_claim_submitted(claim, errors, user):
     try:
+        claim.audit_user_id_submit = user.id_for_audit
         if errors:
             claim.status = Claim.STATUS_REJECTED
         else:
             claim.approved = approved_amount(claim)
             claim.status = Claim.STATUS_CHECKED
-            claim.audit_user_id_submit = user.id_for_audit
             from core.utils import TimeUtils
             claim.submit_stamp = TimeUtils.now()
             claim.category = get_claim_category(claim)
