@@ -2,7 +2,6 @@ import logging
 import uuid
 import pathlib
 import base64
-from copy import copy
 import graphene
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
@@ -13,7 +12,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.db.models import Sum, CharField
-from django.db.models.functions import Coalesce, Cast
+from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import UserDistrict
@@ -119,8 +118,8 @@ class ClaimCodeInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(res, 8)
-        return res
+        assert_string_length(value, 8)
+        return value
 
     serialize = coerce_string
     parse_value = coerce_string
@@ -136,8 +135,8 @@ class ClaimGuaranteeIdInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(res, 50)
-        return res
+        assert_string_length(value, 50)
+        return value
 
     serialize = coerce_string
     parse_value = coerce_string
@@ -231,6 +230,7 @@ def reset_claim_before_update(claim):
     claim.explanation = None
     claim.adjustment = None
 
+
 def process_child_relation(user, data_children,
                            claim_id, children, create_hook):
     claimed = 0
@@ -241,7 +241,7 @@ def process_child_relation(user, data_children,
         if elt_id:
             # elt has been historized along with claim historization
             elt = children.get(id=elt_id)
-            [setattr(elt, key, data_elt[key]) for key in data_elt]
+            [setattr(elt, k, v) for k, v in data_elt.items()]
             elt.validity_from = TimeUtils.now()
             elt.audit_user_id = user.id_for_audit
             elt.claim_id = claim_id
@@ -560,11 +560,11 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 })
         if len(errors) == 1:
             errors = errors[0]['list']
-        logger.debug("SubmitClaimsMutation: claim %s done, errors: %s", claim_uuid, len(errors))
+        logger.debug("SubmitClaimsMutation: claim done, errors: %s", len(errors))
         return errors
 
 
-def set_claims_status(uuids, field, status, audit_data):
+def set_claims_status(uuids, field, status, audit_data=None):
     errors = []
     for claim_uuid in uuids:
         claim = Claim.objects \
@@ -578,7 +578,9 @@ def set_claims_status(uuids, field, status, audit_data):
         try:
             claim.save_history()
             setattr(claim, field, status)
-            [setattr(claim, key, audit_data[key]) for key in audit_data]
+            if audit_data:
+                for k, v in audit_data.items():
+                    setattr(claim, k, v)
             claim.save()
         except Exception as exc:
             errors += [
@@ -663,6 +665,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        claim = None
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
                 raise PermissionDenied(_("unauthorized"))
@@ -690,7 +693,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
             return None
         except Exception as exc:
             return [{
-                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code},
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code if claim else None},
                 'detail': str(exc)}]
 
 
@@ -744,7 +747,8 @@ class DeliverClaimsReviewMutation(OpenIMISMutation):
         logger.error("SaveClaimReviewMutation")
         if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        errors = set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_DELIVERED, {'audit_user_id_review': user.id_for_audit})
+        errors = set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_DELIVERED,
+                                   {'audit_user_id_review': user.id_for_audit})
         # OMT-208 update the dedrem for the reviewed claims
         errors += update_claims_dedrems(data["uuids"], user)
 
