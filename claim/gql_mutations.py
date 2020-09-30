@@ -406,6 +406,7 @@ class CreateAttachmentMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        claim = None
         try:
             if user.is_anonymous or not user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
@@ -428,7 +429,7 @@ class CreateAttachmentMutation(OpenIMISMutation):
             return None
         except Exception as exc:
             return [{
-                'message': _("claim.mutation.failed_to_attach_document") % {'code': claim.code},
+                'message': _("claim.mutation.failed_to_attach_document") % {'code': claim.code if claim else None},
                 'detail': str(exc)}]
 
 

@@ -6,7 +6,7 @@ from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from claim_batch.schema import BatchRunGQLType
 from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
-from core.gql_queries import OfficerGQLType
+
 
 class ClaimAdminGQLType(DjangoObjectType):
     """
