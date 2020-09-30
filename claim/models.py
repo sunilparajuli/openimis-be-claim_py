@@ -133,13 +133,13 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
     explanation = models.TextField(
         db_column='Explanation', blank=True, null=True)
     feedback_status = models.SmallIntegerField(
-        db_column='FeedbackStatus', blank=True, null=True)
+        db_column='FeedbackStatus', blank=True, null=True, default=1)
     review_status = models.SmallIntegerField(
-        db_column='ReviewStatus', blank=True, null=True)
+        db_column='ReviewStatus', blank=True, null=True, default=1)
     approval_status = models.SmallIntegerField(
-        db_column='ApprovalStatus', blank=True, null=True)
+        db_column='ApprovalStatus', blank=True, null=True, default=1)
     rejection_reason = models.SmallIntegerField(
-        db_column='RejectionReason', blank=True, null=True)
+        db_column='RejectionReason', blank=True, null=True, default=0)
 
     batch_run = models.ForeignKey(claim_batch_models.BatchRun,
                                   models.DO_NOTHING, db_column='RunID', blank=True, null=True)
