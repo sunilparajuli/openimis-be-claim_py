@@ -2,7 +2,6 @@ import logging
 import uuid
 import pathlib
 import base64
-from copy import copy
 import graphene
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
@@ -13,7 +12,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.db.models import Sum, CharField
-from django.db.models.functions import Coalesce, Cast
+from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import UserDistrict
@@ -119,8 +118,8 @@ class ClaimCodeInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(res, 8)
-        return res
+        assert_string_length(value, 8)
+        return value
 
     serialize = coerce_string
     parse_value = coerce_string
@@ -136,8 +135,8 @@ class ClaimGuaranteeIdInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(res, 50)
-        return res
+        assert_string_length(value, 50)
+        return value
 
     serialize = coerce_string
     parse_value = coerce_string
@@ -231,52 +230,27 @@ def reset_claim_before_update(claim):
     claim.explanation = None
     claim.adjustment = None
 
-def process_child_relation(user, data_children, prev_claim_id,
+
+def process_child_relation(user, data_children,
                            claim_id, children, create_hook):
     claimed = 0
-    prev_elts = [s.id for s in children.all()]
     from core.utils import TimeUtils
-    for elt in data_children:
-        claimed += elt['qty_provided'] * elt['price_asked']
-        elt_id = elt.pop('id') if 'id' in elt else None
+    for data_elt in data_children:
+        claimed += data_elt['qty_provided'] * data_elt['price_asked']
+        elt_id = data_elt.pop('id') if 'id' in data_elt else None
         if elt_id:
-            prev_elts.remove(elt_id)
-            # explanation and justification are both TextField (ntext in db) and cannot be compared with str
-            # [42000] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]The data types ntext and nvarchar are incompatible in the equal to operator
-            # need to cast!
-            explanation = elt.pop('explanation', None)
-            justification = elt.pop('justification', None)
-            prev_elt = children.\
-                annotate(strexplanation=Cast('explanation', CharField())). \
-                annotate(strjustification=Cast('justification', CharField())). \
-                filter(id=elt_id, **elt). \
-                filter(strexplanation=explanation). \
-                filter(strjustification=justification). \
-                first()
-            if not prev_elt:
-                # item has been updated, let's bind the old value to prev_claim
-                prev_elt = children.get(id=elt_id)
-                prev_elt.claim_id = prev_claim_id
-                prev_elt.save()
-                # ... and update with the new values
-                new_elt = copy(prev_elt)
-                [setattr(new_elt, key, elt[key]) for key in elt]
-                new_elt.explanation = explanation
-                new_elt.justification = justification
-                new_elt.id = None
-                new_elt.validity_from = TimeUtils.now()
-                new_elt.audit_user_id = user.id_for_audit
-                new_elt.claim_id = claim_id
-                new_elt.save()
+            # elt has been historized along with claim historization
+            elt = children.get(id=elt_id)
+            [setattr(elt, k, v) for k, v in data_elt.items()]
+            elt.validity_from = TimeUtils.now()
+            elt.audit_user_id = user.id_for_audit
+            elt.claim_id = claim_id
+            elt.save()
         else:
-            elt['validity_from'] = TimeUtils.now()
-            elt['audit_user_id'] = user.id_for_audit
-            create_hook(claim_id, elt)
+            data_elt['validity_from'] = TimeUtils.now()
+            data_elt['audit_user_id'] = user.id_for_audit
+            create_hook(claim_id, data_elt)
 
-    if prev_elts:
-        children.filter(id__in=prev_elts).update(
-            claim_id=prev_claim_id,
-            validity_to=TimeUtils.now())
     return claimed
 
 
@@ -345,10 +319,10 @@ def update_or_create_claim(data, user):
     else:
         claim = Claim.objects.create(**data)
     claimed = 0
-    claimed += process_child_relation(user, items, prev_claim_id,
+    claimed += process_child_relation(user, items,
                                       claim.id, claim.items,
                                       item_create_hook)
-    claimed += process_child_relation(user, services, prev_claim_id,
+    claimed += process_child_relation(user, services,
                                       claim.id, claim.services,
                                       service_create_hook)
     claim.claimed = claimed
@@ -586,11 +560,11 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 })
         if len(errors) == 1:
             errors = errors[0]['list']
-        logger.debug("SubmitClaimsMutation: claim %s done, errors: %s", claim_uuid, len(errors))
+        logger.debug("SubmitClaimsMutation: claim done, errors: %s", len(errors))
         return errors
 
 
-def set_claims_status(uuids, field, status):
+def set_claims_status(uuids, field, status, audit_data=None):
     errors = []
     for claim_uuid in uuids:
         claim = Claim.objects \
@@ -604,6 +578,9 @@ def set_claims_status(uuids, field, status):
         try:
             claim.save_history()
             setattr(claim, field, status)
+            if audit_data:
+                for k, v in audit_data.items():
+                    setattr(claim, k, v)
             claim.save()
         except Exception as exc:
             errors += [
@@ -637,7 +614,7 @@ class SelectClaimsForFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_select_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 4)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.STATUS_CHECKED)
 
 
 class BypassClaimsFeedbackMutation(OpenIMISMutation):
@@ -654,7 +631,7 @@ class BypassClaimsFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 16)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.STATUS_VALUATED)
 
 
 class SkipClaimsFeedbackMutation(OpenIMISMutation):
@@ -672,7 +649,7 @@ class SkipClaimsFeedbackMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_skip_claim_feedback_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'feedback_status', 2)
+        return set_claims_status(data['uuids'], 'feedback_status', Claim.STATUS_ENTERED)
 
 
 class DeliverClaimFeedbackMutation(OpenIMISMutation):
@@ -688,6 +665,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        claim = None
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_feedback_perms):
                 raise PermissionDenied(_("unauthorized"))
@@ -715,7 +693,7 @@ class DeliverClaimFeedbackMutation(OpenIMISMutation):
             return None
         except Exception as exc:
             return [{
-                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code},
+                'message': _("claim.mutation.failed_to_update_claim") % {'code': claim.code if claim else None},
                 'detail': str(exc)}]
 
 
@@ -733,7 +711,7 @@ class SelectClaimsForReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_select_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 4)
+        return set_claims_status(data['uuids'], 'review_status', Claim.STATUS_CHECKED)
 
 
 class BypassClaimsReviewMutation(OpenIMISMutation):
@@ -751,7 +729,7 @@ class BypassClaimsReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_bypass_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 16)
+        return set_claims_status(data['uuids'], 'review_status', Claim.STATUS_VALUATED)
 
 
 class DeliverClaimsReviewMutation(OpenIMISMutation):
@@ -766,9 +744,11 @@ class DeliverClaimsReviewMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
+        logger.error("SaveClaimReviewMutation")
         if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        errors = set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_DELIVERED)
+        errors = set_claims_status(data['uuids'], 'review_status', Claim.REVIEW_DELIVERED,
+                                   {'audit_user_id_review': user.id_for_audit})
         # OMT-208 update the dedrem for the reviewed claims
         errors += update_claims_dedrems(data["uuids"], user)
 
@@ -790,7 +770,7 @@ class SkipClaimsReviewMutation(OpenIMISMutation):
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_skip_claim_review_perms):
             raise PermissionDenied(_("unauthorized"))
-        return set_claims_status(data['uuids'], 'review_status', 2)
+        return set_claims_status(data['uuids'], 'review_status', Claim.STATUS_ENTERED)
 
 
 class SaveClaimReviewMutation(OpenIMISMutation):
@@ -832,6 +812,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                 if service['status'] == ClaimService.STATUS_PASSED:
                     all_rejected = False
             claim.approved = approved_amount(claim)
+            claim.audit_user_id_review = user.id_for_audit
             if all_rejected:
                 claim.status = Claim.STATUS_REJECTED
             claim.save()
@@ -873,6 +854,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
                 }
                 continue
             claim.save_history()
+            claim.audit_user_id_process = user.id_for_audit
             logger.debug("ProcessClaimsMutation: validating claim %s", claim_uuid)
             c_errors += validate_and_process_dedrem_claim(claim, user, True)
 
@@ -926,12 +908,12 @@ class DeleteClaimsMutation(OpenIMISMutation):
 
 def set_claim_submitted(claim, errors, user):
     try:
+        claim.audit_user_id_submit = user.id_for_audit
         if errors:
             claim.status = Claim.STATUS_REJECTED
         else:
             claim.approved = approved_amount(claim)
             claim.status = Claim.STATUS_CHECKED
-            claim.audit_user_id_submit = user.id_for_audit
             from core.utils import TimeUtils
             claim.submit_stamp = TimeUtils.now()
             claim.category = get_claim_category(claim)
