@@ -5,3 +5,5 @@
 build
 dist
 *.egg-info
+**/.vscode
+locale/__init__.py
