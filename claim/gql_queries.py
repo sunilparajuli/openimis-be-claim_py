@@ -5,7 +5,15 @@ from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from claim_batch.schema import BatchRunGQLType
-from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
+from .models import ClaimDedRem, Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
+
+class ClaimDedRemGQLType(DjangoObjectType):
+    """
+    Details about Claim demands and remunerated amounts
+    """
+    class Meta:
+        model = ClaimDedRem
+        interfaces = (graphene.relay.Node,)
 
 
 class ClaimAdminGQLType(DjangoObjectType):
