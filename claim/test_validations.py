@@ -928,11 +928,7 @@ class ValidationTest(TestCase):
         service1.refresh_from_db()
 
         set_claims_status([claim1.uuid], "review_status", Claim.REVIEW_DELIVERED)
-<<<<<<< HEAD
         update_claims_dedrems([claim1.uuid], self.user)
-=======
-        update_claims_dedrems([claim1.uuid], User.objects.first())
->>>>>>> hotfix/OMT-225-EnableClaimExtensions
 
         # Then dedrem should have been updated
         dedrem = ClaimDedRem.objects.filter(claim=claim1).first()
@@ -1013,11 +1009,7 @@ class ValidationTest(TestCase):
         service1.refresh_from_db()
 
         set_claims_status([claim1.uuid], "review_status", Claim.REVIEW_DELIVERED)
-<<<<<<< HEAD
         update_claims_dedrems([claim1.uuid], self.user)
-=======
-        update_claims_dedrems([claim1.uuid], User.objects.first())
->>>>>>> hotfix/OMT-225-EnableClaimExtensions
 
         errors = validate_claim(claim1, True)
         if len(errors) == 0:
