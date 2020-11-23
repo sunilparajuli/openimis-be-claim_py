@@ -45,7 +45,6 @@ class ClaimItemInputType(InputObjectType):
     limitation_value = graphene.Decimal(
         max_digits=18, decimal_places=2, required=False)
     limitation = graphene.String(required=False)
-    # policy_id
     remunerated_amount = graphene.Decimal(
         max_digits=18, decimal_places=2, required=False)
     deductable_amount = graphene.Decimal(

@@ -322,7 +322,7 @@ def validate_item_product_family(claimitem, target_date, item, insuree_id, adult
                 else:
                     waiting_period = product_item.waiting_period_child
             if waiting_period and target_date < \
-                    insuree_policy_effective_date.to_datetime + datetimedelta(months=waiting_period):
+                    (insuree_policy_effective_date.to_datetime() + datetimedelta(months=waiting_period)):
                 claimitem.rejection_reason = REJECTION_REASON_WAITING_PERIOD_FAIL
                 errors += [{'code': REJECTION_REASON_WAITING_PERIOD_FAIL,
                             'message': _("claim.validation.product_family.waiting_period") % {
