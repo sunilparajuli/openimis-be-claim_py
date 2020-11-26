@@ -95,11 +95,11 @@ class ClaimSubmit(object):
         if self.icd_code_1:
             ET.SubElement(xmlelt, 'ICDCode1').text = "%s" % self.icd_code_1
         if self.icd_code_2:
-            ET.SubElement(xmlelt, 'ICDCode1').text = "%s" % self.icd_code_2
+            ET.SubElement(xmlelt, 'ICDCode2').text = "%s" % self.icd_code_2
         if self.icd_code_3:
-            ET.SubElement(xmlelt, 'ICDCode1').text = "%s" % self.icd_code_3
+            ET.SubElement(xmlelt, 'ICDCode3').text = "%s" % self.icd_code_3
         if self.icd_code_4:
-            ET.SubElement(xmlelt, 'ICDCode1').text = "%s" % self.icd_code_4
+            ET.SubElement(xmlelt, 'ICDCode4').text = "%s" % self.icd_code_4
         if self.visit_type:
             ET.SubElement(xmlelt, 'VisitType').text = "%s" % self.visit_type
         if self.guarantee_no:
