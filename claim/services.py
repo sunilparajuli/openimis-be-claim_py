@@ -160,7 +160,7 @@ class ClaimSubmitService(object):
             .filter(code=claim_submit.health_facility_code)\
             .filter(location_id__in=[l.location_id for l in dist])\
             .first()
-        if not hf:
+        if not hf and settings.ROW_SECURITY:
             raise ClaimSubmitError("Invalid health facility code or health facility not allowed for user")
 
     def submit(self, claim_submit):

@@ -1,7 +1,7 @@
 import uuid
 
 from claim_batch import models as claim_batch_models
-from core import fields
+from core import fields, TimeUtils
 from core import models as core_models
 from django import dispatch
 from django.conf import settings
@@ -375,7 +375,7 @@ class ClaimAttachment(core_models.UUIDModel, core_models.UUIDVersionedModel):
         Claim, models.DO_NOTHING, related_name='attachments')
     type = models.TextField(blank=True, null=True)
     title = models.TextField(blank=True, null=True)
-    date = fields.DateField(blank=True, null=True)
+    date = fields.DateField(blank=True, default=TimeUtils.now)
     filename = models.TextField(blank=True, null=True)
     mime = models.TextField(blank=True, null=True)
     # frontend contributions may lead to externalized (nas) storage for documents
