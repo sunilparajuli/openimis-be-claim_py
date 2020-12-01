@@ -47,7 +47,7 @@ def attach(request):
     response = HttpResponse(content_type=("application/x-binary" if attachment.mime is None else attachment.mime))
     response['Content-Disposition'] = 'attachment; filename=%s' % attachment.filename
     if ClaimConfig.claim_attachments_root_path:
-        f = open('%s/%s' % (ClaimConfig.claim_attachments_root_path, attachment.url), "r")
+        f = open('%s/%s' % (ClaimConfig.claim_attachments_root_path, attachment.url), "rb")
         response.write(f.read())
         f.close()
     else:
