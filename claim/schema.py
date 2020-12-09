@@ -17,6 +17,8 @@ class Query(graphene.ObjectType):
         diagnosisVariance=graphene.Int(),
         codeIsNot=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
+        items=graphene.List(of_type=graphene.String),
+        services=graphene.List(of_type=graphene.String)
     )
     claim_attachments = DjangoFilterConnectionField(ClaimAttachmentGQLType)
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
@@ -34,6 +36,20 @@ class Query(graphene.ObjectType):
         if code_is_not:
             query = query.exclude(code=code_is_not)
         variance = kwargs.get('diagnosisVariance', None)
+
+        items = kwargs.get('items', None)
+        services = kwargs.get('services', None)
+
+        if items:
+            query = query.filter(
+                items__item__code__in=items
+            )
+
+        if services:
+            query = query.filter(
+                services__service__code__in=services
+            )
+
         if variance:
             from core import datetime, datetimedelta
             last_year = datetime.date.today()+datetimedelta(years=-1)
