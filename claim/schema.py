@@ -1,7 +1,11 @@
+import django
 from core.schema import signal_mutation_module_validate
 from django.db.models import OuterRef, Subquery, Avg, Q
 import graphene_django_optimizer as gql_optimizer
 from core.schema import OrderedDjangoFilterConnectionField, OfficerGQLType
+from django.db.models.functions import Cast
+from jsonfallback.fields import FallbackJSONField
+
 from .models import ClaimMutation
 from django.utils.translation import gettext as _
 from graphene_django.filter import DjangoFilterConnectionField
@@ -18,8 +22,10 @@ class Query(graphene.ObjectType):
         codeIsNot=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
         items=graphene.List(of_type=graphene.String),
-        services=graphene.List(of_type=graphene.String)
+        services=graphene.List(of_type=graphene.String),
+        json_ext=graphene.JSONString()
     )
+
     claim_attachments = DjangoFilterConnectionField(ClaimAttachmentGQLType)
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
     claim_admins_str = DjangoFilterConnectionField(
@@ -29,7 +35,7 @@ class Query(graphene.ObjectType):
     claim_officers = DjangoFilterConnectionField(OfficerGQLType)
 
     def resolve_claims(self, info, **kwargs):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms) and settings.ROW_SECURITY:
             raise PermissionDenied(_("unauthorized"))
         query = Claim.objects
         code_is_not = kwargs.get('codeIsNot', None)
@@ -49,6 +55,11 @@ class Query(graphene.ObjectType):
             query = query.filter(
                 services__service__code__in=services
             )
+
+        json_ext = kwargs.get('json_ext', None)
+
+        if json_ext:
+            query = query.filter(json_ext__jsoncontains=json_ext)
 
         if variance:
             from core import datetime, datetimedelta
