@@ -309,7 +309,7 @@ class ClaimDetail:
         abstract = True
 
 
-class ClaimItem(core_models.VersionedModel, ClaimDetail):
+class ClaimItem(core_models.VersionedModel, ClaimDetail, core_models.ExtendableModel):
     model_prefix = "item"
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
@@ -388,7 +388,7 @@ class ClaimAttachment(core_models.UUIDModel, core_models.UUIDVersionedModel):
         db_table = "claim_ClaimAttachment"
 
 
-class ClaimService(core_models.VersionedModel, ClaimDetail):
+class ClaimService(core_models.VersionedModel, ClaimDetail, core_models.ExtendableModel):
     model_prefix = "service"
     id = models.AutoField(db_column='ClaimServiceID', primary_key=True)
     claim = models.ForeignKey(
@@ -441,6 +441,7 @@ class ClaimService(core_models.VersionedModel, ClaimDetail):
         db_column='PriceOrigin', max_length=1, blank=True, null=True)
     exceed_ceiling_amount_category = models.DecimalField(
         db_column='ExceedCeilingAmountCategory', max_digits=18, decimal_places=2, blank=True, null=True)
+
     objects = ClaimDetailManager()
 
     class Meta:
