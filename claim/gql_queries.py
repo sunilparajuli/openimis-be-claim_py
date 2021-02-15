@@ -1,5 +1,6 @@
 import graphene
 from core import prefix_filterset, ExtendedConnection, filter_validity
+from graphene.utils.deduplicator import deflate
 from graphene_django import DjangoObjectType
 from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType
@@ -88,7 +89,8 @@ class ClaimGQLType(DjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        return Claim.get_queryset(queryset, info)
+        claim_ids = Claim.get_queryset(queryset, info).values('uuid').all()
+        return Claim.objects.filter(uuid__in=claim_ids)
 
 
 class ClaimAttachmentGQLType(DjangoObjectType):
