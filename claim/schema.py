@@ -3,6 +3,7 @@ from core.schema import signal_mutation_module_validate
 from django.db.models import OuterRef, Subquery, Avg, Q
 import graphene_django_optimizer as gql_optimizer
 from core.schema import OrderedDjangoFilterConnectionField, OfficerGQLType
+from core import filter_validity
 from django.db.models.functions import Cast
 from jsonfallback.fields import FallbackJSONField
 
