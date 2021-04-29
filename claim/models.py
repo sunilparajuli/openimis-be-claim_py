@@ -14,6 +14,7 @@ from medical import models as medical_models
 from policy import models as policy_models
 from product import models as product_models
 
+
 class ClaimAdmin(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimAdminId', primary_key=True)
     uuid = models.CharField(db_column='ClaimAdminUUID', max_length=36, default=uuid.uuid4, unique=True)

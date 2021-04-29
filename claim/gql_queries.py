@@ -8,6 +8,7 @@ from medical.schema import DiagnosisGQLType
 from claim_batch.schema import BatchRunGQLType
 from .models import ClaimDedRem, Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
 
+
 class ClaimDedRemGQLType(DjangoObjectType):
     """
     Details about Claim demands and remunerated amounts

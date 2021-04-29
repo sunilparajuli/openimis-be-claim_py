@@ -229,7 +229,6 @@ def reset_claim_before_update(claim):
     claim.json_ext = None
 
 
-
 def process_child_relation(user, data_children,
                            claim_id, children, create_hook):
     claimed = 0
