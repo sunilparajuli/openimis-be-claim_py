@@ -1,19 +1,26 @@
+import json
 import logging
 import uuid
 import pathlib
 import base64
 import graphene
+import graphene_django_optimizer
+from django.db.models import OuterRef, Avg, Subquery, Q
+
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, approved_amount
 from core import filter_validity, assert_string_length
 from core.schema import TinyInt, SmallInt, OpenIMISMutation
+from core.gql.gql_mutations import mutation_on_uuids_from_filter
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
 from location.schema import UserDistrict
+
+from .gql_queries import ClaimGQLType
 from .models import Claim, Feedback, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment, ClaimDedRem
 from product.models import ProductItemOrService
 
@@ -512,18 +519,26 @@ class SubmitClaimsMutation(OpenIMISMutation):
     """
     Submit one or several claims.
     """
+    __filter_handlers = {
+        'services': 'services__service__code__in',
+        'items': 'items__item__code__in'
+    }
     _mutation_module = "claim"
     _mutation_class = "SubmitClaimsMutation"
 
     class Input(OpenIMISMutation.Input):
         uuids = graphene.List(graphene.String)
+        additional_filters = graphene.String()
 
     @classmethod
+    @mutation_on_uuids_from_filter(Claim, ClaimGQLType, 'additional_filters', __filter_handlers)
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_submit_claims_perms):
             raise PermissionDenied(_("unauthorized"))
         errors = []
-        for claim_uuid in data["uuids"]:
+        uuids = data.get("uuids", [])
+
+        for claim_uuid in uuids:
             c_errors = []
             claim = Claim.objects \
                 .filter(uuid=claim_uuid,
@@ -561,6 +576,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
             errors = errors[0]['list']
         logger.debug("SubmitClaimsMutation: claim done, errors: %s", len(errors))
         return errors
+
 
 
 def set_claims_status(uuids, field, status, audit_data=None):
