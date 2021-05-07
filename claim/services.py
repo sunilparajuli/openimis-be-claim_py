@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 from django.core.exceptions import PermissionDenied
 import core
 from django.db import connection
+from gettext import gettext as _
 
 from .apps import ClaimConfig
 from django.conf import settings
@@ -94,11 +95,11 @@ class ClaimSubmit(object):
         if self.icd_code_1:
             ET.SubElement(xmlelt, 'ICDCode1').text = "%s" % self.icd_code_1
         if self.icd_code_2:
-            ET.SubElement(xmlelt, 'ICDCode1').text = "%s" % self.icd_code_2
+            ET.SubElement(xmlelt, 'ICDCode2').text = "%s" % self.icd_code_2
         if self.icd_code_3:
-            ET.SubElement(xmlelt, 'ICDCode1').text = "%s" % self.icd_code_3
+            ET.SubElement(xmlelt, 'ICDCode3').text = "%s" % self.icd_code_3
         if self.icd_code_4:
-            ET.SubElement(xmlelt, 'ICDCode1').text = "%s" % self.icd_code_4
+            ET.SubElement(xmlelt, 'ICDCode4').text = "%s" % self.icd_code_4
         if self.visit_type:
             ET.SubElement(xmlelt, 'VisitType').text = "%s" % self.visit_type
         if self.guarantee_no:
@@ -159,7 +160,7 @@ class ClaimSubmitService(object):
             .filter(code=claim_submit.health_facility_code)\
             .filter(location_id__in=[l.location_id for l in dist])\
             .first()
-        if not hf:
+        if not hf and settings.ROW_SECURITY:
             raise ClaimSubmitError("Invalid health facility code or health facility not allowed for user")
 
     def submit(self, claim_submit):

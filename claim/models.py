@@ -1,7 +1,7 @@
 import uuid
 
 from claim_batch import models as claim_batch_models
-from core import fields
+from core import fields, TimeUtils
 from core import models as core_models
 from django import dispatch
 from django.conf import settings
@@ -13,6 +13,7 @@ from location.models import UserDistrict
 from medical import models as medical_models
 from policy import models as policy_models
 from product import models as product_models
+
 
 class ClaimAdmin(core_models.VersionedModel):
     id = models.AutoField(db_column='ClaimAdminId', primary_key=True)
@@ -309,7 +310,7 @@ class ClaimDetail:
         abstract = True
 
 
-class ClaimItem(core_models.VersionedModel, ClaimDetail):
+class ClaimItem(core_models.VersionedModel, ClaimDetail, core_models.ExtendableModel):
     model_prefix = "item"
     id = models.AutoField(db_column='ClaimItemID', primary_key=True)
     claim = models.ForeignKey(Claim, models.DO_NOTHING,
@@ -375,7 +376,7 @@ class ClaimAttachment(core_models.UUIDModel, core_models.UUIDVersionedModel):
         Claim, models.DO_NOTHING, related_name='attachments')
     type = models.TextField(blank=True, null=True)
     title = models.TextField(blank=True, null=True)
-    date = fields.DateField(blank=True, null=True)
+    date = fields.DateField(blank=True, default=TimeUtils.now)
     filename = models.TextField(blank=True, null=True)
     mime = models.TextField(blank=True, null=True)
     # frontend contributions may lead to externalized (nas) storage for documents
@@ -388,7 +389,7 @@ class ClaimAttachment(core_models.UUIDModel, core_models.UUIDVersionedModel):
         db_table = "claim_ClaimAttachment"
 
 
-class ClaimService(core_models.VersionedModel, ClaimDetail):
+class ClaimService(core_models.VersionedModel, ClaimDetail, core_models.ExtendableModel):
     model_prefix = "service"
     id = models.AutoField(db_column='ClaimServiceID', primary_key=True)
     claim = models.ForeignKey(
@@ -441,6 +442,7 @@ class ClaimService(core_models.VersionedModel, ClaimDetail):
         db_column='PriceOrigin', max_length=1, blank=True, null=True)
     exceed_ceiling_amount_category = models.DecimalField(
         db_column='ExceedCeilingAmountCategory', max_digits=18, decimal_places=2, blank=True, null=True)
+
     objects = ClaimDetailManager()
 
     class Meta:

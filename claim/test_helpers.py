@@ -1,4 +1,4 @@
-from claim.models import Claim, ClaimService, ClaimItem, ClaimDedRem
+from claim.models import Claim, ClaimService, ClaimItem, ClaimDedRem, ClaimAdmin
 from claim.validations import get_claim_category, approved_amount
 from medical.test_helpers import get_item_of_type, get_service_of_category
 
@@ -74,3 +74,21 @@ def delete_claim_with_itemsvc_dedrem_and_history(claim):
     claim.items.all().delete()
     claim.services.all().delete()
     claim.delete()
+
+
+def create_test_claim_admin(custom_props={}):
+    from core import datetime
+    return ClaimAdmin.objects.create(
+        **{
+            "code": "TST00001",
+            "last_name": "LastAdmin",
+            "other_names": "JoeAdmin",
+            "email_id": "joeadmin@lastadmin.com",
+            "phone": "+12027621401",
+            "health_facility_id": 1,
+            "has_login": False,
+            "audit_user_id": 1,
+            "validity_from": datetime.datetime(2019, 6, 1),
+            **custom_props
+        }
+    )

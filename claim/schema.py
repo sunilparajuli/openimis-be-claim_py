@@ -1,17 +1,19 @@
+import django
 from core.schema import signal_mutation_module_validate
 from django.db.models import OuterRef, Subquery, Avg, Q
-from django.db.models.expressions import RawSQL
-from core import filter_validity
-import graphene
 import graphene_django_optimizer as gql_optimizer
-from core.schema import TinyInt, SmallInt, OpenIMISMutation, OrderedDjangoFilterConnectionField
+from core.schema import OrderedDjangoFilterConnectionField, OfficerGQLType
+from core import filter_validity
+from django.db.models.functions import Cast
+from jsonfallback.fields import FallbackJSONField
+
 from .models import ClaimMutation
-from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils.translation import gettext as _
 from graphene_django.filter import DjangoFilterConnectionField
 
-from .gql_queries import *
-from .gql_mutations import *
+# We do need all queries and mutations in the namespace here.
+from .gql_queries import *  # lgtm [py/polluting-import]
+from .gql_mutations import *  # lgtm [py/polluting-import]
 
 
 class Query(graphene.ObjectType):
@@ -20,23 +22,46 @@ class Query(graphene.ObjectType):
         diagnosisVariance=graphene.Int(),
         codeIsNot=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
+        items=graphene.List(of_type=graphene.String),
+        services=graphene.List(of_type=graphene.String),
+        json_ext=graphene.JSONString()
     )
+
     claim_attachments = DjangoFilterConnectionField(ClaimAttachmentGQLType)
     claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
     claim_admins_str = DjangoFilterConnectionField(
         ClaimAdminGQLType,
         str=graphene.String(),
     )
-    claim_officers = DjangoFilterConnectionField(ClaimOfficerGQLType)
+    claim_officers = DjangoFilterConnectionField(OfficerGQLType)
 
     def resolve_claims(self, info, **kwargs):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms) and settings.ROW_SECURITY:
             raise PermissionDenied(_("unauthorized"))
         query = Claim.objects
         code_is_not = kwargs.get('codeIsNot', None)
         if code_is_not:
             query = query.exclude(code=code_is_not)
         variance = kwargs.get('diagnosisVariance', None)
+
+        items = kwargs.get('items', None)
+        services = kwargs.get('services', None)
+
+        if items:
+            query = query.filter(
+                items__item__code__in=items
+            )
+
+        if services:
+            query = query.filter(
+                services__service__code__in=services
+            )
+
+        json_ext = kwargs.get('json_ext', None)
+
+        if json_ext:
+            query = query.filter(json_ext__jsoncontains=json_ext)
+
         if variance:
             from core import datetime, datetimedelta
             last_year = datetime.date.today()+datetimedelta(years=-1)
@@ -58,12 +83,10 @@ class Query(graphene.ObjectType):
     def resolve_claim_attachments(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
             raise PermissionDenied(_("unauthorized"))
-        pass
 
     def resolve_claim_admins(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
             raise PermissionDenied(_("unauthorized"))
-        pass
 
     def resolve_claim_admins_str(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
@@ -77,7 +100,6 @@ class Query(graphene.ObjectType):
     def resolve_claim_officers(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
             raise PermissionDenied(_("unauthorized"))
-        pass
 
 
 class Mutation(graphene.ObjectType):

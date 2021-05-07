@@ -1,12 +1,21 @@
 import graphene
-from core import prefix_filterset, ExtendedConnection, filter_validity, Q, assert_string_length
+from core import prefix_filterset, ExtendedConnection, filter_validity
+from graphene.utils.deduplicator import deflate
 from graphene_django import DjangoObjectType
 from insuree.schema import InsureeGQLType
 from location.schema import HealthFacilityGQLType
 from medical.schema import DiagnosisGQLType
 from claim_batch.schema import BatchRunGQLType
-from .models import Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
-from core.models import Officer
+from .models import ClaimDedRem, Claim, ClaimAdmin, Feedback, ClaimItem, ClaimService, ClaimAttachment
+
+
+class ClaimDedRemGQLType(DjangoObjectType):
+    """
+    Details about Claim demands and remunerated amounts
+    """
+    class Meta:
+        model = ClaimDedRem
+        interfaces = (graphene.relay.Node,)
 
 
 class ClaimAdminGQLType(DjangoObjectType):
@@ -16,7 +25,6 @@ class ClaimAdminGQLType(DjangoObjectType):
 
     class Meta:
         model = ClaimAdmin
-        exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "uuid": ["exact"],
@@ -24,29 +32,6 @@ class ClaimAdminGQLType(DjangoObjectType):
             "last_name": ["exact", "icontains"],
             "other_names": ["exact", "icontains"],
             **prefix_filterset("health_facility__", HealthFacilityGQLType._meta.filter_fields),
-        }
-        connection_class = ExtendedConnection
-
-    @classmethod
-    def get_queryset(cls, queryset, info):
-        queryset = queryset.filter(*filter_validity())
-        return queryset
-
-
-class ClaimOfficerGQLType(DjangoObjectType):
-    """
-    Details about a Claim Officer
-    """
-
-    class Meta:
-        model = Officer
-        exclude_fields = ('row_id',)
-        interfaces = (graphene.relay.Node,)
-        filter_fields = {
-            "uuid": ["exact"],
-            "code": ["exact", "icontains"],
-            "last_name": ["exact", "icontains"],
-            "other_names": ["exact", "icontains"],
         }
         connection_class = ExtendedConnection
 
@@ -67,7 +52,6 @@ class ClaimGQLType(DjangoObjectType):
 
     class Meta:
         model = Claim
-        exclude_fields = ('row_id',)
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "uuid": ["exact"],
@@ -106,7 +90,8 @@ class ClaimGQLType(DjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        return Claim.get_queryset(queryset, info)
+        claim_ids = Claim.get_queryset(queryset, info).values('uuid').all()
+        return Claim.objects.filter(uuid__in=claim_ids)
 
 
 class ClaimAttachmentGQLType(DjangoObjectType):
@@ -136,7 +121,6 @@ class ClaimAttachmentGQLType(DjangoObjectType):
 class FeedbackGQLType(DjangoObjectType):
     class Meta:
         model = Feedback
-        exclude_fields = ('row_id',)
 
 
 class ClaimItemGQLType(DjangoObjectType):
@@ -146,7 +130,6 @@ class ClaimItemGQLType(DjangoObjectType):
 
     class Meta:
         model = ClaimItem
-        exclude_fields = ('row_id',)
 
 
 class ClaimServiceGQLType(DjangoObjectType):
@@ -156,4 +139,3 @@ class ClaimServiceGQLType(DjangoObjectType):
 
     class Meta:
         model = ClaimService
-        exclude_fields = ('row_id',)

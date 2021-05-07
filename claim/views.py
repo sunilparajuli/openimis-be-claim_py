@@ -1,6 +1,6 @@
 import base64
 from django.conf import settings
-from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from report.services import ReportService
 from .services import ClaimReportService
@@ -11,7 +11,6 @@ from django.utils.translation import gettext as _
 import core
 
 
-
 def print(request):
     if not request.user.has_perms(ClaimConfig.claim_print_perms):
         raise PermissionDenied(_("unauthorized"))
@@ -19,6 +18,7 @@ def print(request):
     report_data_service = ClaimReportService(request.user)
     data = report_data_service.fetch(request.GET['uuid'])
     return report_service.process('claim_claim', data, claim.template)
+
 
 def attach(request):
     queryset = ClaimAttachment.objects.filter(*core.filter_validity())
@@ -47,7 +47,7 @@ def attach(request):
     response = HttpResponse(content_type=("application/x-binary" if attachment.mime is None else attachment.mime))
     response['Content-Disposition'] = 'attachment; filename=%s' % attachment.filename
     if ClaimConfig.claim_attachments_root_path:
-        f = open('%s/%s' % (ClaimConfig.claim_attachments_root_path, attachment.url), "r")
+        f = open('%s/%s' % (ClaimConfig.claim_attachments_root_path, attachment.url), "rb")
         response.write(f.read())
         f.close()
     else:
