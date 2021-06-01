@@ -281,7 +281,7 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
             else:
                 dist = UserDistrict.get_user_districts(user._u)
                 return queryset.filter(
-                    health_facility__location_id__in=[l.location_id for l in dist]
+                    health_facility__location_id__in=dist.values_list("id", flat=True)
                 )
         return queryset
 
