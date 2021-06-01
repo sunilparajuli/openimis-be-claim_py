@@ -1,4 +1,5 @@
 import uuid
+from functools import cached_property
 
 from claim_batch import models as claim_batch_models
 from core import fields, TimeUtils
@@ -50,6 +51,30 @@ class ClaimAdmin(core_models.VersionedModel):
             )
         return queryset
 
+    @property
+    def id_for_audit(self):
+        return self.audit_user_id
+
+    @property
+    def username(self):
+        return self.code
+
+    def get_username(self):
+        return self.code
+
+    @property
+    def is_staff(self):
+        return False
+
+    @property
+    def is_superuser(self):
+        return False
+
+    def set_password(self, raw_password):
+        raise NotImplementedError("Shouldn't set a password on an Officer")
+
+    def check_password(self, raw_password):
+        return False
 
     class Meta:
         managed = False
