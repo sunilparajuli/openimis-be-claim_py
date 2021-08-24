@@ -2,7 +2,7 @@ name: Automated CI testing
 # This workflow run automatically for every commit on github it checks the syntax and launch the tests.
 # | grep . | uniq -c filters out empty lines and then groups consecutive lines together with the number of occurrences
 on:
-  push:
+  pull_request:
   workflow_dispatch:
     inputs:
       comment:
@@ -10,7 +10,7 @@ on:
         required: false
 
 jobs:
-  build:
+  run_test:
     runs-on: ubuntu-latest
 
     services:
@@ -28,16 +28,18 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Set up Python 3.8
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v2
         with:
           python-version: 3.8
-
-      - name: Install Python dependencies
+      - name: install build essentials
+        run: |
+          apt update
+          apt install build-essential unixodbc-dev -y
+      - name: Install openIMIS Python dependencies
         run: |
           python -m pip install --upgrade pip
-          git clone --depth 1 https://github.com/openimis/openimis-be_py.git
+          git clone --depth 1 --branch develop https://github.com/openimis/openimis-be_py.git
           cd openimis-be_py
-          git checkout develop
           pip install -r requirements.txt
           python modules-requirements.py openimis.json > modules-requirements.txt
           pip install -r modules-requirements.txt
