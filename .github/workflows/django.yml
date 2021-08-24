@@ -69,7 +69,7 @@ jobs:
         run: |
           python -V
           ls -l
-          cd openIMIS
+          cd openimis-be_py/openIMIS
           ls -l
           python manage.py migrate
           python init_test_db.py | grep . | uniq -c
