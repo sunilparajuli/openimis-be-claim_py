@@ -12,7 +12,6 @@ on:
 jobs:
   run_test:
     runs-on: ubuntu-latest
-
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2017-latest
@@ -25,47 +24,60 @@ jobs:
         options: --health-interval=10s --health-timeout=3s --health-start-period=10s --health-retries=10 --health-cmd="/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD} -Q 'SELECT 1' || exit 1"
 
     steps:
-      - uses: actions/checkout@v2
-
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
-      - name: install build essentials
-        run: |
-          sudo apt-get update
-          sudo apt-get install build-essential unixodbc-dev -y
-      - name: Install openIMIS Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          git clone --depth 1 --branch develop https://github.com/openimis/openimis-be_py.git
-          cd openimis-be_py
-          pip install -r requirements.txt
-          python modules-requirements.py openimis.json > modules-requirements.txt
-          pip install -r modules-requirements.txt
-      - name: Environment info
-        run: |
-          pip list
-      - name: Initialize DB
+      - name: install linux packages
         run: |
           wget https://raw.githubusercontent.com/openimis/database_ms_sqlserver/main/Empty%20databases/openIMIS_ONLINE.sql -O openIMIS_ONLINE.sql
           wget https://raw.githubusercontent.com/openimis/database_ms_sqlserver/main/Demo%20database/openIMIS_demo_ONLINE.sql -O openIMIS_demo_ONLINE.sql
           curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
           curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
           sudo apt-get update
-          sudo apt-get install mssql-tools unixodbc-dev
-          /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P $SA_PASSWORD -Q 'DROP DATABASE IF EXISTS imis'
-          /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P $SA_PASSWORD -Q 'CREATE DATABASE imis'
-          /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P $SA_PASSWORD -d imis -i openIMIS_ONLINE.sql | grep . | uniq -c
-          /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P $SA_PASSWORD -d imis -i openIMIS_demo_ONLINE.sql | grep . | uniq -c
+          sudo ACCEPT_EULA=Y apt-get install -y  mssql-tools build-essential dialog apt-utils unixodbc-dev -y
+          python -m pip install --upgrade pip
+      - name: pull openimis backend
+        run: |
+          rm ./openimis -rf
+          git clone --depth 1 --branch develop https://github.com/openimis/openimis-be_py.git ./openimis
+      - name: copy current branch
+        uses: actions/checkout@v2
+        with:
+          path: './openimis/current-module'
+      - name: Update the configuration
+        working-directory: ./openimis
+        run: |
+          OPENIMIS_CONF_JSON="$(jq -c '(.modules[]  | select(.name == "claim") | .pip)|="./current-module"' openimis.json)"
+          OPENIMIS_CONF_JSON="${OPENIMIS_CONF_JSON//'%'/'%25'}"
+          OPENIMIS_CONF_JSON="${OPENIMIS_CONF_JSON//$'\n'/'%0A'}"
+          OPENIMIS_CONF_JSON="${OPENIMIS_CONF_JSON//$'\r'/'%0D'}"
+      - name: Install openIMIS Python dependencies
+        working-directory: ./openimis
+        run: |
+          pip install -r requirements.txt
+          python modules-requirements.py openimis.json > modules-requirements.txt
+          pip install -r modules-requirements.txt
+      - name: Environment info
+        working-directory: ./openimis
+        run: |
+          pip list
+      - name: Initialize DB
+        run: |
+          /opt/mssql-tools/bin/sqlcmd -S localhost,1433 -U SA -P $SA_PASSWORD -Q 'DROP DATABASE IF EXISTS imis'
+          /opt/mssql-tools/bin/sqlcmd -S localhost,1433 -U SA -P $SA_PASSWORD -Q 'CREATE DATABASE imis'
+          /opt/mssql-tools/bin/sqlcmd -S localhost,1433 -U SA -P $SA_PASSWORD -d imis -i openIMIS_ONLINE.sql | grep . | uniq -c
+          /opt/mssql-tools/bin/sqlcmd -S localhost,1433 -U SA -P $SA_PASSWORD -d imis -i openIMIS_demo_ONLINE.sql | grep . | uniq -c
         env:
           SA_PASSWORD: GitHub999
+          ACCEPT_EULA: Y
 
 #      - name: Check formatting with black
 #        run: |
 #          black --check .
 
       - name: Django tests
+        working-directory: ./openimis
         run: |
           python -V
           ls -l
