@@ -49,9 +49,6 @@ jobs:
         working-directory: ./openimis
         run: |
           OPENIMIS_CONF_JSON="$(jq -c '(.modules[]  | select(.name == "claim") | .pip)|="./current-module"' openimis.json)"
-          OPENIMIS_CONF_JSON="${OPENIMIS_CONF_JSON//'%'/'%25'}"
-          OPENIMIS_CONF_JSON="${OPENIMIS_CONF_JSON//$'\n'/'%0A'}"
-          OPENIMIS_CONF_JSON="${OPENIMIS_CONF_JSON//$'\r'/'%0D'}"
       - name: Install openIMIS Python dependencies
         working-directory: ./openimis
         run: |
@@ -77,11 +74,9 @@ jobs:
 #          black --check .
 
       - name: Django tests
-        working-directory: ./openimis
+        working-directory: ./openimis/openIMIS
         run: |
           python -V
-          ls -l
-          cd openimis-be_py/openIMIS
           ls -l
           python manage.py migrate
           python init_test_db.py | grep . | uniq -c
