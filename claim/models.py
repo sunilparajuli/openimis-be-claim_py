@@ -279,10 +279,11 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
                     health_facility_id=user._u.health_facility_id
                 )
             else:
-                dist = UserDistrict.get_user_districts(user._u)
-                return queryset.filter(
-                    health_facility__location_id__in=dist.values_list("location_id", flat=True)
-                )
+                if not isinstance(user._u, core_models.TechnicalUser):
+                    dist = UserDistrict.get_user_districts(user._u)
+                    return queryset.filter(
+                        health_facility__location_id__in=dist.values_list("location_id", flat=True)
+                    )
         return queryset
 
 
