@@ -901,7 +901,6 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
 
         deductible = None
         ceiling = None
-        hospitalization = None
         # In previous stored procedure, some commented code fetched the amounts from sum(RemDelivery) from
         # tblClaimDedRem where policy_id, insuree_id & claim_id <> this one
         remunerated_consultation = 0
@@ -912,7 +911,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             prev_remunerated_surgery = 0
         remunerated_hospitalization = 0
         if product.max_amount_hospitalization:
-            if hospitalization == 1:
+            if hospitalization:
                 prev_remunerated_hospitalization = 0
         remunerated_delivery = 0
         if product.max_amount_delivery:
@@ -950,7 +949,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
 
         # Then check IP deductibles
         if not deductible:
-            if (product.ceiling_interpretation == 'I' and hospitalization == 1) or\
+            if (product.ceiling_interpretation == 'I' and hospitalization) or\
                (product.ceiling_interpretation == 'H' and hf_level == 'H'):
                 # Hospital IP
                 ded_ip = _get_dedrem("ded_ip", "I", "ded_ip", product, claim, policy_product["policy_id"])
@@ -965,7 +964,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     prev_deductible = ded_op.prev
 
         if not ceiling:
-            if (product.ceiling_interpretation == 'I' and hospitalization == 1) or \
+            if (product.ceiling_interpretation == 'I' and hospitalization) or \
                     (product.ceiling_interpretation == 'H' and hf_level == 'H'):
                 max_ip = _get_dedrem("max_ip", "I", "rem_ip", product, claim, policy_product["policy_id"])
                 if max_ip:
