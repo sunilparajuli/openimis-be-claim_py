@@ -1,5 +1,4 @@
 import uuid
-from functools import cached_property
 
 from claim_batch import models as claim_batch_models
 from core import fields, TimeUtils
