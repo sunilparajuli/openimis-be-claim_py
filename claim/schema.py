@@ -1,3 +1,4 @@
+from core.models import Officer
 import django
 from core.schema import signal_mutation_module_validate
 from django.db.models import OuterRef, Subquery, Avg, Q
@@ -20,63 +21,82 @@ class Query(graphene.ObjectType):
     claims = OrderedDjangoFilterConnectionField(
         ClaimGQLType,
         diagnosisVariance=graphene.Int(),
-        codeIsNot=graphene.String(),
+        code_is_not=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
         items=graphene.List(of_type=graphene.String),
         services=graphene.List(of_type=graphene.String),
-        json_ext=graphene.JSONString()
+        json_ext=graphene.JSONString(),
     )
+
+    claim = graphene.Field(ClaimGQLType, id=graphene.Int(), uuid=graphene.UUID())
 
     claim_attachments = DjangoFilterConnectionField(ClaimAttachmentGQLType)
-    claim_admins = DjangoFilterConnectionField(ClaimAdminGQLType)
-    claim_admins_str = DjangoFilterConnectionField(
-        ClaimAdminGQLType,
-        str=graphene.String(),
+    claim_admins = DjangoFilterConnectionField(
+        ClaimAdminGQLType, search=graphene.String()
     )
-    claim_officers = DjangoFilterConnectionField(OfficerGQLType)
+    claim_officers = DjangoFilterConnectionField(
+        OfficerGQLType, search=graphene.String()
+    )
+
+    def resolve_claim(self, info, id=None, uuid=None, **kwargs):
+        if (
+            not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms)
+            and settings.ROW_SECURITY
+        ):
+            raise PermissionDenied(_("unauthorized"))
+
+        if id is not None:
+            return Claim.objects.get(id=id)
+        if uuid is not None:
+            return Claim.objects.get(uuid=uuid)
 
     def resolve_claims(self, info, **kwargs):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms) and settings.ROW_SECURITY:
+        if (
+            not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms)
+            and settings.ROW_SECURITY
+        ):
             raise PermissionDenied(_("unauthorized"))
         query = Claim.objects
-        code_is_not = kwargs.get('codeIsNot', None)
+        code_is_not = kwargs.get("code_is_not", None)
         if code_is_not:
             query = query.exclude(code=code_is_not)
-        variance = kwargs.get('diagnosisVariance', None)
+        variance = kwargs.get("diagnosisVariance", None)
 
-        items = kwargs.get('items', None)
-        services = kwargs.get('services', None)
+        items = kwargs.get("items", None)
+        services = kwargs.get("services", None)
 
         if items:
-            query = query.filter(
-                items__item__code__in=items
-            )
+            query = query.filter(items__item__code__in=items)
 
         if services:
-            query = query.filter(
-                services__service__code__in=services
-            )
+            query = query.filter(services__service__code__in=services)
 
-        json_ext = kwargs.get('json_ext', None)
+        json_ext = kwargs.get("json_ext", None)
 
         if json_ext:
             query = query.filter(json_ext__jsoncontains=json_ext)
 
         if variance:
             from core import datetime, datetimedelta
-            last_year = datetime.date.today()+datetimedelta(years=-1)
-            diag_avg = Claim.objects \
-                            .filter(*filter_validity(**kwargs)) \
-                            .filter(date_claimed__gt=last_year) \
-                            .values('icd__code') \
-                            .filter(icd__code=OuterRef('icd__code')) \
-                            .annotate(diag_avg=Avg('approved')).values('diag_avg')
-            variance_filter = Q(claimed__gt=(1 + variance/100) * Subquery(diag_avg))
+
+            last_year = datetime.date.today() + datetimedelta(years=-1)
+            diag_avg = (
+                Claim.objects.filter(*filter_validity(**kwargs))
+                .filter(date_claimed__gt=last_year)
+                .values("icd__code")
+                .filter(icd__code=OuterRef("icd__code"))
+                .annotate(diag_avg=Avg("approved"))
+                .values("diag_avg")
+            )
+            variance_filter = Q(claimed__gt=(1 + variance / 100) * Subquery(diag_avg))
             if not ClaimConfig.gql_query_claim_diagnosis_variance_only_on_existing:
-                diags = Claim.objects \
-                    .filter(*filter_validity(**kwargs)) \
-                    .filter(date_claimed__gt=last_year).values('icd__code').distinct()
-                variance_filter = (variance_filter | ~Q(icd__code__in=diags))
+                diags = (
+                    Claim.objects.filter(*filter_validity(**kwargs))
+                    .filter(date_claimed__gt=last_year)
+                    .values("icd__code")
+                    .distinct()
+                )
+                variance_filter = variance_filter | ~Q(icd__code__in=diags)
             query = query.filter(variance_filter)
         return gql_optimizer.query(query.all(), info)
 
@@ -84,22 +104,30 @@ class Query(graphene.ObjectType):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
             raise PermissionDenied(_("unauthorized"))
 
-    def resolve_claim_admins(self, info, **kwargs):
+    def resolve_claim_admins(self, info, search=None, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
             raise PermissionDenied(_("unauthorized"))
 
-    def resolve_claim_admins_str(self, info, **kwargs):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
-            raise PermissionDenied(_("unauthorized"))
-        filters = [*filter_validity(**kwargs)]
-        str = kwargs.get('str')
-        if str is not None:
-            filters += [Q(code__icontains=str) | Q(last_name__icontains=str) | Q(other_names__icontains=str)]
-        return ClaimAdmin.filter_queryset().filter(*filters)
+        if search is not None:
+            return ClaimAdmin.objects.filter(
+                Q(code__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(other_names__icontains=search)
+            )
 
-    def resolve_claim_officers(self, info, **kwargs):
+    def resolve_claim_officers(self, info, search=None, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
             raise PermissionDenied(_("unauthorized"))
+
+        qs = Officer.objects
+
+        if search is not None:
+            qs = qs.filter(
+                Q(code__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(other_names__icontains=search)
+            )
+        return qs
 
 
 class Mutation(graphene.ObjectType):
@@ -123,16 +151,15 @@ class Mutation(graphene.ObjectType):
 
 
 def on_claim_mutation(sender, **kwargs):
-    uuids = kwargs['data'].get('uuids', [])
+    uuids = kwargs["data"].get("uuids", [])
     if not uuids:
-        uuid = kwargs['data'].get('claim_uuid', None)
+        uuid = kwargs["data"].get("claim_uuid", None)
         uuids = [uuid] if uuid else []
     if not uuids:
         return []
     impacted_claims = Claim.objects.filter(uuid__in=uuids).all()
     for claim in impacted_claims:
-        ClaimMutation.objects.create(
-            claim=claim, mutation_id=kwargs['mutation_log_id'])
+        ClaimMutation.objects.create(claim=claim, mutation_id=kwargs["mutation_log_id"])
     return []
 
 
