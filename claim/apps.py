@@ -10,6 +10,7 @@ DEFAULT_CFG = {
     "gql_query_claim_diagnosis_variance_only_on_existing": True,
     "gql_mutation_create_claims_perms": ["111002"],
     "gql_mutation_update_claims_perms": ["111010"],
+    "gql_mutation_load_claims_perms": ["111005"],
     "gql_mutation_submit_claims_perms": ["111007"],
     "gql_mutation_select_claim_feedback_perms": ["111010"],
     "gql_mutation_bypass_claim_feedback_perms": ["111010"],
@@ -18,7 +19,7 @@ DEFAULT_CFG = {
     "gql_mutation_select_claim_review_perms": ["111010"],
     "gql_mutation_bypass_claim_review_perms": ["111010"],
     "gql_mutation_skip_claim_review_perms": ["111010"],
-    "gql_mutation_deliver_claim_review_perms": ["111010"],
+    "gql_mutation_deliver_claim_review_perms": ["111008"],
     "gql_mutation_process_claims_perms": ["111011"],
     "gql_mutation_delete_claims_perms": ["111004"],
     "claim_print_perms": ["111006"],
@@ -37,6 +38,7 @@ class ClaimConfig(AppConfig):
     gql_query_claim_diagnosis_variance_only_on_existing: True
     gql_mutation_create_claims_perms = []
     gql_mutation_update_claims_perms = []
+    gql_mutation_load_claims_perms = []
     gql_mutation_submit_claims_perms = []
     gql_mutation_select_claim_feedback_perms = []
     gql_mutation_bypass_claim_feedback_perms = []
@@ -60,6 +62,7 @@ class ClaimConfig(AppConfig):
             "gql_query_claim_diagnosis_variance_only_on_existing"]
         ClaimConfig.gql_mutation_create_claims_perms = cfg["gql_mutation_create_claims_perms"]
         ClaimConfig.gql_mutation_update_claims_perms = cfg["gql_mutation_update_claims_perms"]
+        ClaimConfig.gql_mutation_load_claims_perms = cfg["gql_mutation_load_claims_perms"]
         ClaimConfig.gql_mutation_submit_claims_perms = cfg["gql_mutation_submit_claims_perms"]
         ClaimConfig.gql_mutation_select_claim_feedback_perms = cfg["gql_mutation_select_claim_feedback_perms"]
         ClaimConfig.gql_mutation_bypass_claim_feedback_perms = cfg["gql_mutation_bypass_claim_feedback_perms"]

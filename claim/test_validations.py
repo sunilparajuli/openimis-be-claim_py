@@ -1,5 +1,5 @@
 from claim.gql_mutations import set_claims_status, update_claims_dedrems
-from claim.models import Claim, ClaimDedRem, ClaimItem, ClaimDetail
+from claim.models import Claim, ClaimDedRem, ClaimItem, ClaimDetail, ClaimService
 from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem, \
     mark_test_claim_as_processed, delete_claim_with_itemsvc_dedrem_and_history
 from claim.validations import get_claim_category, validate_claim, validate_assign_prod_to_claimitems_and_services, \
@@ -998,7 +998,7 @@ class ValidationTest(TestCase):
 
         service1.qty_approved = 0
         service1.price_approved = 0
-        service1.status = ClaimItem.STATUS_REJECTED
+        service1.status = ClaimService.STATUS_REJECTED
         service1.rejection_reason = -1
         service1.audit_user_id_review = -1
         service1.justification = "Review comment svc"

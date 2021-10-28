@@ -50,6 +50,30 @@ class ClaimAdmin(core_models.VersionedModel):
             )
         return queryset
 
+    @property
+    def id_for_audit(self):
+        return self.audit_user_id
+
+    @property
+    def username(self):
+        return self.code
+
+    def get_username(self):
+        return self.code
+
+    @property
+    def is_staff(self):
+        return False
+
+    @property
+    def is_superuser(self):
+        return False
+
+    def set_password(self, raw_password):
+        raise NotImplementedError("Shouldn't set a password on an Officer")
+
+    def check_password(self, raw_password):
+        return False
 
     class Meta:
         managed = False
@@ -254,10 +278,11 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
                     health_facility_id=user._u.health_facility_id
                 )
             else:
-                dist = UserDistrict.get_user_districts(user._u)
-                return queryset.filter(
-                    health_facility__location_id__in=[l.location_id for l in dist]
-                )
+                if not isinstance(user._u, core_models.TechnicalUser):
+                    dist = UserDistrict.get_user_districts(user._u)
+                    return queryset.filter(
+                        health_facility__location_id__in=dist.values_list("location_id", flat=True)
+                    )
         return queryset
 
 

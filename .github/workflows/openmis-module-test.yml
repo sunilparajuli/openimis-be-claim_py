@@ -44,16 +44,20 @@ jobs:
       - name: copy current branch
         uses: actions/checkout@v2
         with:
-          path: './openimis/current-module'
+          path: './current-module'
       - name: Update the configuration
         working-directory: ./openimis
         run: |
-          OPENIMIS_CONF_JSON="$(jq -c '(.modules[]  | select(.name == "claim") | .pip)|="./current-module"' openimis.json)"
+          export MODULE_NAME="$(echo $GITHUB_REPOSITORY | sed 's#^openimis/openimis-be-\(.*\)_py$#\1#')"
+          echo "the local module called $MODULE_NAME will be injected in openIMIS .json"
+          jq --arg name "$MODULE_NAME" 'if [.modules[].name  ==  ($name)]| max then (.modules[]  | select(.name == ($name)) | .pip)|="../current-module" else .modules |= .+ [{name:($name), pip:"../current-module"}] end' openimis.json
+          echo $(jq --arg name "$MODULE_NAME" 'if [.modules[].name  ==  ($name)]| max then (.modules[]  | select(.name == ($name)) | .pip)|="../current-module" else .modules |= .+ [{name:($name), pip:"../current-module"}] end' openimis.json)  > openimis.json
       - name: Install openIMIS Python dependencies
         working-directory: ./openimis
         run: |
           pip install -r requirements.txt
           python modules-requirements.py openimis.json > modules-requirements.txt
+          cat modules-requirements.txt
           pip install -r modules-requirements.txt
       - name: Environment info
         working-directory: ./openimis
@@ -76,11 +80,12 @@ jobs:
       - name: Django tests
         working-directory: ./openimis/openIMIS
         run: |
+          export MODULE_NAME="$(echo $GITHUB_REPOSITORY | sed 's#^openimis/openimis-be-\(.*\)_py$#\1#')"
           python -V
           ls -l
           python manage.py migrate
           python init_test_db.py | grep . | uniq -c
-          python manage.py test --keep claim
+          python manage.py test --keepdb $MODULE_NAME
         env:
           SECRET_KEY: secret
           DEBUG: true

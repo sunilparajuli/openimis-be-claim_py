@@ -313,10 +313,9 @@ def update_or_create_claim(data, user):
     claim_uuid = data.pop('uuid') if 'uuid' in data else None
     # update_or_create(uuid=claim_uuid, ...)
     # doesn't work because of explicit attempt to set null to uuid!
-    prev_claim_id = None
     if claim_uuid:
         claim = Claim.objects.get(uuid=claim_uuid)
-        prev_claim_id = claim.save_history()
+        claim.save_history()
         # reset the non required fields
         # (each update is 'complete', necessary to be able to set 'null')
         reset_claim_before_update(claim)
