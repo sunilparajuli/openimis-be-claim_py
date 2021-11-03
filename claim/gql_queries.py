@@ -47,8 +47,24 @@ class ClaimGQLType(DjangoObjectType):
     The filters are possible on BatchRun, Insuree, HealthFacility, Admin and ICD in addition to the Claim fields
     themselves.
     """
+
     attachments_count = graphene.Int()
     client_mutation_id = graphene.String()
+
+    def resolve_insuree(self, info):
+        if "insuree_loader" in info.context.dataloaders and self.insuree_id:
+            return info.context.dataloaders["insuree_loader"].load(self.insuree_id)
+        return self.insuree
+
+    def resolve_health_facility(self, info):
+        if (
+            "health_facility_loader" in info.context.dataloaders
+            and self.health_facility_id
+        ):
+            return info.context.dataloaders["health_facility_loader"].load(
+                self.health_facility_id
+            )
+        return self.health_facility
 
     class Meta:
         model = Claim
