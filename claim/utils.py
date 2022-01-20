@@ -1,4 +1,4 @@
-from claim.models import ClaimItem, ClaimService
+from claim.models import ClaimItem, ClaimService, ClaimDetail
 
 
 def process_child_relation(user, data_children, claim_id, children, create_hook):
@@ -18,6 +18,11 @@ def process_child_relation(user, data_children, claim_id, children, create_hook)
         else:
             data_elt['validity_from'] = TimeUtils.now()
             data_elt['audit_user_id'] = user.id_for_audit
+            # Ensure claim id from func argument will be assigned
+            data_elt.pop('claim_id', None)
+            # Should entered claim items/services have status passed assigned?
+            # Status is mandatory field, and it doesn't have default value in model
+            data_elt['status'] = ClaimDetail.STATUS_PASSED
             create_hook(claim_id, data_elt)
 
     return claimed
