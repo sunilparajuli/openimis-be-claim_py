@@ -1,5 +1,7 @@
 from django.test import TestCase
 from unittest import mock
+
+import datetime
 from .services import *
 import core
 
@@ -134,7 +136,7 @@ class ClaimSubmitServiceTestCase(TestCase):
                     service.submit(claim)
                 self.assertEquals(cm.exception.code, 2)
 
-    def test_claim_submit_allgood(self):
+    def test_claim_submit_allgood_xml(self):
         with mock.patch("claim.services.ClaimSubmitService.hf_scope_check") as mock_security:
             mock_security.return_value = None
             with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
@@ -154,3 +156,39 @@ class ClaimSubmitServiceTestCase(TestCase):
                 service = ClaimSubmitService(user=mock_user)
                 service.submit(claim)  # doesn't raise an error
 
+    @mock.patch("claim.services.ClaimSubmitService._validate_user_hf")
+    @mock.patch("claim.services.ClaimCreateService._validate_user_hf")
+    def test_claim_enter_and_submit(self, check_hf_submit, check_hf_enter):
+        check_hf_submit.return_value, check_hf_enter.return_value = True, True
+        mock_user = mock.Mock(is_anonymous=False)
+        mock_user.has_perm = mock.MagicMock(return_value=True)
+        mock_user.id_for_audit = -1
+
+        claim = self._get_test_dict()
+        service = ClaimSubmitService(user=mock_user)
+        submitted_claim = service.enter_and_submit(claim, False)
+        expected_claimed = 2 * 7 * 11  # 2 provisions, both qty = 7, price asked == 11
+
+        self.assertEqual(submitted_claim.status, Claim.STATUS_CHECKED)
+        self.assertEqual(submitted_claim.approved, expected_claimed)
+        self.assertEqual(submitted_claim.claimed, expected_claimed)
+        self.assertEqual(submitted_claim.health_facility.id, 18)
+        self.assertEqual(len(submitted_claim.items.all()), 1)
+        self.assertEqual(len(submitted_claim.services.all()), 1)
+        self.assertEqual(submitted_claim.audit_user_id, -1)
+        self.assertTrue(submitted_claim.id is not None)
+
+    def _get_test_dict(self):
+        return {
+            "health_facility_id": 18, "icd_id": 116, "date_from": datetime.datetime(2019, 6, 1),
+            "date_claimed": datetime.datetime(2019, 6, 1), "date_to": datetime.datetime(2019, 6, 1),
+            "audit_user_id": 1, "insuree_id": 2, "status": 2, "validity_from": datetime.datetime(2019, 6, 1),
+            "items": [{
+                "qty_provided": 7, "price_asked": 11, "item_id": 23, "status": 1, "availability": True,
+                "validity_from": "2019-06-01", "validity_to": None, "audit_user_id": -1
+            }],
+            "services": [{
+                "qty_provided": 7, "price_asked": 11, "service_id": 23,  # Skin graft, no cat
+                "status": 1, "validity_from": "2019-06-01", "validity_to": None, "audit_user_id": -1
+            }]
+        }
