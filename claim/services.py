@@ -334,6 +334,7 @@ class ClaimCreateService:
         Implementation based on the GQL CreateClaimMutation.async_mutate
         """
         self._validate_permissions()
+        self._validate_claim_fields(claim)
         self._validate_user_hf(claim.get('health_facility_id', None))
         self._ensure_entered_claim_fields(claim)
         claim = self._create_claim_from_dict(claim)
@@ -345,6 +346,13 @@ class ClaimCreateService:
                 _("mutation.authentication_required"))
         if not self.user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
             raise PermissionDenied(_("unauthorized"))
+
+    def _validate_claim_fields(self, claim):
+        if not claim.get('code'):
+            raise ValidationError("Provided claim without code.")
+
+        if Claim.objects.filter(code=claim['code'], validity_to__isnull=True).exists():
+            raise ValidationError(F"Claim with code '{claim['code']}' already exists.")
 
     def _ensure_entered_claim_fields(self, claim_submit_data):
         claim_submit_data['audit_user_id'] = self.user.id_for_audit
