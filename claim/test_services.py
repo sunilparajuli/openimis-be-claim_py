@@ -178,9 +178,25 @@ class ClaimSubmitServiceTestCase(TestCase):
         self.assertEqual(submitted_claim.audit_user_id, -1)
         self.assertTrue(submitted_claim.id is not None)
 
+    @mock.patch("claim.services.ClaimSubmitService._validate_user_hf")
+    @mock.patch("claim.services.ClaimCreateService._validate_user_hf")
+    def test_claim_enter_duplicate_exception(self, check_hf_submit, check_hf_enter):
+        check_hf_submit.return_value, check_hf_enter.return_value = True, True
+        mock_user = mock.Mock(is_anonymous=False)
+        mock_user.has_perm = mock.MagicMock(return_value=True)
+        mock_user.id_for_audit = -1
+
+        claim = self._get_test_dict()
+        service = ClaimSubmitService(user=mock_user)
+
+        service.enter_and_submit(claim, False)
+
+        with self.assertRaises(ValidationError):
+            service.enter_and_submit(claim, False)
+
     def _get_test_dict(self):
         return {
-            "health_facility_id": 18, "icd_id": 116, "date_from": datetime.datetime(2019, 6, 1),
+            "health_facility_id": 18, "icd_id": 116, "date_from": datetime.datetime(2019, 6, 1), "code": "CLCODE1",
             "date_claimed": datetime.datetime(2019, 6, 1), "date_to": datetime.datetime(2019, 6, 1),
             "audit_user_id": 1, "insuree_id": 2, "status": 2, "validity_from": datetime.datetime(2019, 6, 1),
             "items": [{
