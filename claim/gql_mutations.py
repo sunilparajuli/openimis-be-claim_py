@@ -290,8 +290,11 @@ def update_or_create_claim(data, user):
         [setattr(claim, key, data[key]) for key in data]
     else:
         claim = Claim.objects.create(**data)
+    from core.utils import TimeUtils
     claimed = 0
+    claim.items.update(validity_to=TimeUtils.now())
     claimed += process_items_relations(user, claim, items)
+    claim.services.update(validity_to=TimeUtils.now())
     claimed += process_services_relations(user, claim, services)
 
     claim.claimed = claimed

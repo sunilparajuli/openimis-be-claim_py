@@ -94,10 +94,10 @@ class ClaimGQLType(DjangoObjectType):
         return self.attachments.filter(legacy_id__isnull=True).count()
 
     def resolve_items(self, info):
-        return self.items.filter(legacy_id__isnull=True)
+        return self.items.filter(legacy_id__isnull=True).filter(validity_to__isnull=True)
 
     def resolve_services(self, info):
-        return self.services.filter(legacy_id__isnull=True)
+        return self.services.filter(legacy_id__isnull=True).filter(validity_to__isnull=True)
 
     def resolve_client_mutation_id(self, info):
         claim_mutation = self.mutations.select_related(
