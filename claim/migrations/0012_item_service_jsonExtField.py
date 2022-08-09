@@ -12,6 +12,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL('ALTER TABLE tblClaimServices ADD JsonExt TEXT'),
-        migrations.RunSQL('ALTER TABLE tblClaimItems ADD JsonExt TEXT')
+        migrations.RunSQL('ALTER TABLE "tblClaimServices" ADD "JsonExt" TEXT'),
+        migrations.RunSQL('ALTER TABLE "tblClaimItems" ADD "JsonExt" TEXT')
     ]

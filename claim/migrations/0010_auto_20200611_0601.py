@@ -19,5 +19,5 @@ class Migration(migrations.Migration):
         migrations.DeleteModel(
             name='Officer',
         ),
-        migrations.RunSQL('ALTER TABLE tblClaim ADD JsonExt TEXT')
+        migrations.RunSQL('ALTER TABLE "tblClaim" ADD "JsonExt" TEXT')
     ]
