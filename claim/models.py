@@ -1,5 +1,7 @@
 import uuid
 
+from jsonfallback.fields import FallbackJSONField
+
 from claim_batch import models as claim_batch_models
 from core import fields, TimeUtils
 from core import models as core_models
@@ -216,6 +218,8 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
         db_column='AuditUserIDSubmit', blank=True, null=True)
     audit_user_id_process = models.IntegerField(
         db_column='AuditUserIDProcess', blank=True, null=True)
+    json_ext = FallbackJSONField(db_column="JsonExt", blank=True, null=True)
+
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     class Meta:
