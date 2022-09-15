@@ -20,6 +20,6 @@ class Migration(migrations.Migration):
             name='Officer',
         ),
         migrations.RunSQL('ALTER TABLE [tblClaim] ADD [JsonExt] TEXT'
-                          if "sql_server" in settings.DB_ENGINE else
+                          if settings.MSSQL else
                           'ALTER TABLE "tblClaim" ADD "JsonExt" jsonb')
     ]
