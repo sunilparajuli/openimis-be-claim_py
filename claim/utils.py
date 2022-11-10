@@ -14,6 +14,7 @@ def process_child_relation(user, data_children, claim_id, children, create_hook)
             elt.validity_from = TimeUtils.now()
             elt.audit_user_id = user.id_for_audit
             elt.claim_id = claim_id
+            elt.validity_to = None
             elt.save()
         else:
             data_elt['validity_from'] = TimeUtils.now()
