@@ -1,3 +1,5 @@
+import graphene
+
 from core.models import Officer
 import django
 from core.schema import signal_mutation_module_validate
@@ -37,7 +39,8 @@ class Query(graphene.ObjectType):
     claim_admins = DjangoFilterConnectionField(
         ClaimAdminGQLType,
         search=graphene.String(),
-        user_health_facility=graphene.String()
+        user_health_facility=graphene.String(),
+        health_facility=graphene.String(),
     )
     claim_officers = DjangoFilterConnectionField(
         OfficerGQLType, search=graphene.String()
@@ -128,8 +131,7 @@ class Query(graphene.ObjectType):
             raise PermissionDenied(_("unauthorized"))
 
         queryset = ClaimAdmin.objects.all()
-        if user_health_facility:
-            queryset = queryset.filter(health_facility__uuid=user_health_facility)
+        queryset = queryset.filter(health_facility__uuid=user_health_facility)
         if search:
             queryset = queryset.filter(
                 Q(code__icontains=search)
