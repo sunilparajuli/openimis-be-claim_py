@@ -10,6 +10,7 @@ from django.db.models.functions import Cast
 from .models import ClaimMutation
 from django.utils.translation import gettext as _
 from graphene_django.filter import DjangoFilterConnectionField
+import ast
 
 # We do need all queries and mutations in the namespace here.
 from .gql_queries import *  # lgtm [py/polluting-import]
@@ -121,15 +122,19 @@ class Query(graphene.ObjectType):
             self,
             info,
             search=None,
-            user_health_facility=None,
             **kwargs
     ):
-        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_admins_perms):
+        if not info.context.user.has_perms(
+                ClaimConfig.gql_query_claim_admins_perms
+        ):
             raise PermissionDenied(_("unauthorized"))
-
         queryset = ClaimAdmin.objects.all()
-        if user_health_facility:
-            queryset = queryset.filter(health_facility__uuid=user_health_facility)
+        user_health_facility = kwargs.get("user_health_facility", None)
+        user_health_facility = ast.literal_eval(user_health_facility)
+        if len(user_health_facility) > 0:
+            queryset = queryset.filter(
+                health_facility__uuid__in=user_health_facility
+            )
         if search:
             queryset = queryset.filter(
                 Q(code__icontains=search)
