@@ -75,6 +75,22 @@ class ClaimAdmin(core_models.VersionedModel):
     def check_password(self, raw_password):
         return False
 
+    @property
+    def officer_allowed_locations(self):
+        """
+        Returns uuid of all locations allowed for given officer
+        """
+        district = self.health_facility.location
+        all_allowed_uuids = [district.parent.uuid, district.uuid]
+        child_locations = location_models.Location.objects.filter(parent=district).values_list('uuid', flat=True)
+        while child_locations:
+            all_allowed_uuids.extend(child_locations)
+            child_locations = location_models.Location.objects\
+                .filter(parent__uuid__in=child_locations)\
+                .values_list('uuid', flat=True)
+
+        return location_models.Location.objects.filter(uuid__in=all_allowed_uuids)
+
     class Meta:
         managed = False
         db_table = 'tblClaimAdmin'
