@@ -130,8 +130,8 @@ class Query(graphene.ObjectType):
             raise PermissionDenied(_("unauthorized"))
         queryset = ClaimAdmin.objects.all()
         user_health_facility = kwargs.get("user_health_facility", None)
-        user_health_facility = ast.literal_eval(user_health_facility)
-        if len(user_health_facility) > 0:
+        if user_health_facility:
+            user_health_facility = ast.literal_eval(user_health_facility)
             queryset = queryset.filter(
                 health_facility__uuid__in=user_health_facility
             )
