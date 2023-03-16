@@ -266,11 +266,14 @@ def validate_claimdetail_care_type(claim, claimdetail):
 
 
 def validate_claimdetail_limitation_fail(claim, claimdetail):
+    # if the mask is empty, it should be valid for everyone
+    if claimdetail.itemsvc.patient_category == 0:
+        return []
     errors = []
     target_date = claim.date_to if claim.date_to else claim.date_from
     patient_category_mask = utils.patient_category_mask(
         claim.insuree, target_date)
-
+    
     if claimdetail.itemsvc.patient_category & patient_category_mask != patient_category_mask:
         claimdetail.rejection_reason = REJECTION_REASON_CATEGORY_LIMITATION
         errors += [{'code': REJECTION_REASON_CATEGORY_LIMITATION,
