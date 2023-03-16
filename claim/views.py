@@ -14,6 +14,7 @@ from django.utils.translation import gettext as _
 import core
 
 
+@api_view(['GET'])
 def print(request):
     if not request.user.has_perms(ClaimConfig.claim_print_perms):
         raise PermissionDenied(_("unauthorized"))
