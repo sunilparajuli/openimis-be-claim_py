@@ -422,10 +422,11 @@ def validate_service_product_family(claimservice, target_date, service, insuree_
             # Each violation is meant to interrupt the validation
             error_len = len(errors)
             product = Product.objects.filter(pk=product_id).first()
-            errors += check_claim_max_no_category(base_category, product, expiry_date, insuree_id,
-                                                            insuree_policy_effective_date, claim, claimservice)
-            if error_len != len(errors):
-                break
+            if base_category != 'O':
+                errors += check_claim_max_no_category(base_category, product, expiry_date, insuree_id,
+                                                      insuree_policy_effective_date, claim, claimservice)
+                if error_len != len(errors):
+                    break
 
         if not found:
             claimservice.rejection_reason = REJECTION_REASON_NO_PRODUCT_FOUND
