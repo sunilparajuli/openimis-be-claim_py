@@ -50,7 +50,9 @@ class Query(graphene.ObjectType):
         OfficerGQLType, search=graphene.String()
     )
 
-    insuree_name_by_chfid = graphene.String(chfId=graphene.String(required=True))
+    insuree_name_by_chfid = graphene.String(
+        chfId=graphene.String(required=True)
+    )
 
     validate_claim_code = graphene.Field(
         graphene.Boolean,
