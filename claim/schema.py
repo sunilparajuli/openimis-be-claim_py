@@ -1,5 +1,8 @@
+import graphene
+
 from core.models import Officer
-from location.models import HealthFacility
+from insuree.models import Insuree
+from location.models import HealthFacility, Location
 from .services import check_unique_claim_code
 import django
 from core.schema import signal_mutation_module_validate
@@ -47,11 +50,30 @@ class Query(graphene.ObjectType):
         OfficerGQLType, search=graphene.String()
     )
 
+    insuree_name_by_chfid = graphene.String(
+        chfId=graphene.String(required=True)
+    )
+
     validate_claim_code = graphene.Field(
         graphene.Boolean,
         claim_code=graphene.String(required=True),
         description="Checks that the specified claim code is unique."
     )
+
+    def resolve_insuree_name_by_chfid(self, info, **kwargs):
+        if not info.context.user.has_perms(ClaimConfig.gql_mutation_create_claims_perms)\
+                and not info.context.user.has_perms(ClaimConfig.gql_mutation_update_claims_perms):
+            raise PermissionDenied(_("unauthorized"))
+        chf_id = kwargs.get('chfId')
+        insuree = Insuree.objects\
+            .filter(validity_to__isnull=True, chf_id=chf_id)\
+            .values('last_name', 'other_names')\
+            .first()
+        if insuree:
+            insuree_name = f"{insuree['other_names']} {insuree['last_name']}"
+        else:
+            insuree_name = ""
+        return insuree_name
 
     def resolve_validate_claim_code(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
