@@ -27,6 +27,7 @@ from product.models import ProductItemOrService
 
 from claim.utils import process_items_relations, process_services_relations
 from .services import check_unique_claim_code
+from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
@@ -194,6 +195,7 @@ class ClaimInputType(OpenIMISMutation.Input):
     id = graphene.Int(required=False, read_only=True)
     uuid = graphene.String(required=False)
     code = ClaimCodeInputType(required=True)
+    autogenerate_code = graphene.Boolean(required=False)
     insuree_id = graphene.Int(required=True)
     date_from = graphene.Date(required=True)
     date_to = graphene.Date(required=False)
@@ -274,16 +276,23 @@ def create_attachments(claim_id, attachments):
         create_attachment(claim_id, attachment)
 
 
+@transaction.atomic
 def update_or_create_claim(data, user):
     items = data.pop('items') if 'items' in data else []
     services = data.pop('services') if 'services' in data else []
     incoming_code = data.get('code')
     claim_uuid = data.pop("uuid", None)
-    current_claim = Claim.objects.filter(uuid=claim_uuid).first()
-    current_code = current_claim.code if current_claim else None
-    if current_code != incoming_code \
-            and check_unique_claim_code(incoming_code):
-        raise ValidationError(_("mutation.code_name_duplicated"))
+    autogenerate_code = data.pop('autogenerate_code', None)
+    if autogenerate_code:
+        data['code'] = __autogenerate_claim_code()
+    else:
+        current_claim = Claim.objects.filter(uuid=claim_uuid).first()
+        current_code = current_claim.code if current_claim else None
+        if len(incoming_code) > ClaimConfig.max_claim_length:
+            raise ValidationError(_("mutation.code_name_too_long"))
+        if current_code != incoming_code \
+                and check_unique_claim_code(incoming_code):
+            raise ValidationError(_("mutation.code_name_duplicated"))
     if "client_mutation_id" in data:
         data.pop('client_mutation_id')
     if "client_mutation_label" in data:
@@ -309,6 +318,11 @@ def update_or_create_claim(data, user):
     claim.claimed = claimed
     claim.save()
     return claim
+
+
+def __autogenerate_claim_code():
+    from .utils import __autogenerate_nepali_claim_code
+    return __autogenerate_nepali_claim_code()
 
 
 class CreateClaimMutation(OpenIMISMutation):

@@ -52,6 +52,9 @@ class ClaimConfig(AppConfig):
     gql_mutation_delete_claims_perms = []
     claim_print_perms = []
     claim_attachments_root_path = None
+    claim_autogenerate_code_length = 8
+    # cannot be set in the model, since migration has to be able to handle all implementations
+    max_claim_length = 20
 
     def _configure_perms(self, cfg):
         ClaimConfig.default_validations_disabled = cfg["default_validations_disabled"]
