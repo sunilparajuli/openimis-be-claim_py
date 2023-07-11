@@ -52,19 +52,21 @@ def process_services_relations(user, claim, services):
 def __autogenerate_nepali_claim_code():
     code_length = ClaimConfig.claim_autogenerate_code_length
     prefix = __get_current_nepali_fiscal_year_code()
-    last_claim = Claim.objects.filter(validity_to__isnull=True, code__icontains=prefix).latest('code')
-    code = int(last_claim.code[-code_length:]) if last_claim else 1
+    last_claim = Claim.objects.filter(validity_to__isnull=True, code__icontains=prefix)
+    code = 0
+    if last_claim:
+        code = int(last_claim.latest('code').code[-code_length:])
     return prefix + str(code+1).zfill(code_length)
 
 
 def __get_current_nepali_fiscal_year_code():
-    import datetime
-    current_date = datetime.date.today()
+    import nepali_datetime
+    current_date = nepali_datetime.date.today()
 
     if current_date.month < 4:
-        current_year = datetime.date.today().year - 1
+        current_year = nepali_datetime.date.today().year - 1
     else:
-        current_year = datetime.date.today().year
+        current_year = nepali_datetime.date.today().year
 
     year_code = str(current_year) + "-" + str(current_year+1)[-3:] + "-"
     return year_code
