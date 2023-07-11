@@ -161,9 +161,9 @@ class Query(graphene.ObjectType):
             filters += [Q(health_facility__in=user_health_facility)]
 
         if search:
-            filters += filters[Q(code__icontains=search) |
-                               Q(last_name__icontains=search) |
-                               Q(other_names__icontains=search)]
+            filters += [Q(code__icontains=search) |
+                        Q(last_name__icontains=search) |
+                        Q(other_names__icontains=search)]
 
         return ClaimAdmin.objects.filter(*filters)
 
