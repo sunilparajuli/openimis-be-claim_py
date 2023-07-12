@@ -52,6 +52,7 @@ class ClaimConfig(AppConfig):
     gql_mutation_delete_claims_perms = []
     claim_print_perms = []
     claim_attachments_root_path = None
+    claim_validation_multiple_services_explanation_required = True
 
     def _configure_perms(self, cfg):
         ClaimConfig.default_validations_disabled = cfg["default_validations_disabled"]
