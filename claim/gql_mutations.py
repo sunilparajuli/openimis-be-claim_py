@@ -285,14 +285,13 @@ def update_or_create_claim(data, user):
     autogenerate_code = data.pop('autogenerate_code', None)
     if autogenerate_code:
         data['code'] = __autogenerate_claim_code()
-    else:
-        current_claim = Claim.objects.filter(uuid=claim_uuid).first()
-        current_code = current_claim.code if current_claim else None
-        if len(incoming_code) > ClaimConfig.max_claim_length:
-            raise ValidationError(_("mutation.code_name_too_long"))
-        if current_code != incoming_code \
-                and check_unique_claim_code(incoming_code):
-            raise ValidationError(_("mutation.code_name_duplicated"))
+    current_claim = Claim.objects.filter(uuid=claim_uuid).first()
+    current_code = current_claim.code if current_claim else None
+    if len(incoming_code) > ClaimConfig.max_claim_length:
+        raise ValidationError(_("mutation.code_name_too_long"))
+    if current_code != incoming_code \
+            and check_unique_claim_code(incoming_code):
+        raise ValidationError(_("mutation.code_name_duplicated"))
     if "client_mutation_id" in data:
         data.pop('client_mutation_id')
     if "client_mutation_label" in data:
@@ -321,8 +320,8 @@ def update_or_create_claim(data, user):
 
 
 def __autogenerate_claim_code():
-    from .utils import __autogenerate_nepali_claim_code
-    return __autogenerate_nepali_claim_code()
+    from .utils import autogenerate_nepali_claim_code
+    return autogenerate_nepali_claim_code()
 
 
 class CreateClaimMutation(OpenIMISMutation):
