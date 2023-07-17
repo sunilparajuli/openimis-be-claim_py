@@ -280,6 +280,10 @@ def create_attachments(claim_id, attachments):
 def update_or_create_claim(data, user):
     items = data.pop('items') if 'items' in data else []
     services = data.pop('services') if 'services' in data else []
+    if ClaimConfig.claim_validation_multiple_services_explanation_required:
+        for service in services:
+            if service["qty_provided"] > 1 and not service.get("explanation"):
+                raise ValidationError(_("mutation.service_explanation_required"))
     incoming_code = data.get('code')
     claim_uuid = data.pop("uuid", None)
     autogenerate_code = data.pop('autogenerate_code', None)
