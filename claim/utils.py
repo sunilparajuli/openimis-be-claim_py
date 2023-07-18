@@ -1,4 +1,5 @@
-from claim.models import ClaimItem, ClaimService, ClaimDetail
+from claim.models import Claim, ClaimItem, ClaimService, ClaimDetail
+from .apps import ClaimConfig
 
 
 def process_child_relation(user, data_children, claim_id, children, create_hook):
@@ -46,3 +47,28 @@ def process_items_relations(user, claim, items):
 
 def process_services_relations(user, claim, services):
     return process_child_relation(user, services, claim.id, claim.services, service_create_hook)
+
+
+def autogenerate_nepali_claim_code(config):
+    code_length = config.get('code_length')
+    if not code_length and type(code_length) is not int:
+        raise ValueError("Invalid config for `autogenerate_nepali_claim_code`, expected `code_length` value")
+    prefix = __get_current_nepali_fiscal_year_code()
+    last_claim = Claim.objects.filter(validity_to__isnull=True, code__icontains=prefix)
+    code = 0
+    if last_claim:
+        code = int(last_claim.latest('code').code[-code_length:])
+    return prefix + str(code+1).zfill(code_length)
+
+
+def __get_current_nepali_fiscal_year_code():
+    import nepali_datetime
+    current_date = nepali_datetime.date.today()
+
+    if current_date.month < 4:
+        current_year = nepali_datetime.date.today().year - 1
+    else:
+        current_year = nepali_datetime.date.today().year
+
+    year_code = str(current_year) + "-" + str(current_year+1)[-3:] + "-"
+    return year_code
