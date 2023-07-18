@@ -56,6 +56,8 @@ class ClaimConfig(AppConfig):
     # cannot be set in the model, since migration has to be able to handle all implementations
     max_claim_length = 20
     claim_validation_multiple_services_explanation_required = True
+    # Provide absolute path to autogenerating function for claim code
+    autogenerate_func = 'claim.utils.autogenerate_nepali_claim_code'
 
     def _configure_perms(self, cfg):
         ClaimConfig.default_validations_disabled = cfg["default_validations_disabled"]
