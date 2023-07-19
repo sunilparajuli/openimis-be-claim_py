@@ -1,5 +1,7 @@
 from claim.models import Claim, ClaimItem, ClaimService, ClaimDetail
-from .apps import ClaimConfig
+from medical.models import Item, Service
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext as _
 
 
 def process_child_relation(user, data_children, claim_id, children, create_hook):
@@ -8,6 +10,8 @@ def process_child_relation(user, data_children, claim_id, children, create_hook)
     for data_elt in data_children:
         claimed += data_elt['qty_provided'] * data_elt['price_asked']
         elt_id = data_elt.pop('id') if 'id' in data_elt else None
+        if __check_if_maximum_amount_overshoot(data_children, children):
+            raise ValidationError(_("mutation.claim_item_service_maximum_amount_overshoot"))
         if elt_id:
             # elt has been historized along with claim historization
             elt = children.get(id=elt_id)
@@ -28,6 +32,26 @@ def process_child_relation(user, data_children, claim_id, children, create_hook)
             create_hook(claim_id, data_elt)
 
     return claimed
+
+
+def __check_if_maximum_amount_overshoot(data_children, children):
+    is_overshoot = False
+    for entity in data_children:
+        quantity = entity.get('qty_provided')
+        maximum_amount = None
+
+        if children.model == ClaimItem:
+            current_item = Item.objects.get(id=entity['item_id'], validity_to__isnull=True)
+            maximum_amount = int(current_item.maximum_amount) if current_item.maximum_amount else None
+        elif children.model == ClaimService:
+            current_service = Service.objects.get(id=entity['service_id'], validity_to__isnull=True)
+            maximum_amount = int(current_service.maximum_amount) if current_service.maximum_amount else None
+
+        if maximum_amount is not None and (quantity > maximum_amount):
+            is_overshoot = True
+            break
+
+    return is_overshoot
 
 
 def item_create_hook(claim_id, item):
