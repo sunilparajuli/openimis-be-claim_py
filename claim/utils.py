@@ -7,11 +7,11 @@ from django.utils.translation import gettext as _
 def process_child_relation(user, data_children, claim_id, children, create_hook):
     claimed = 0
     from core.utils import TimeUtils
+    if __check_if_maximum_amount_overshoot(data_children, children):
+        raise ValidationError(_("mutation.claim_item_service_maximum_amount_overshoot"))
     for data_elt in data_children:
         claimed += data_elt['qty_provided'] * data_elt['price_asked']
         elt_id = data_elt.pop('id') if 'id' in data_elt else None
-        if __check_if_maximum_amount_overshoot(data_children, children):
-            raise ValidationError(_("mutation.claim_item_service_maximum_amount_overshoot"))
         if elt_id:
             # elt has been historized along with claim historization
             elt = children.get(id=elt_id)
