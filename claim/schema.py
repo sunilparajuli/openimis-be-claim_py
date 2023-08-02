@@ -1,4 +1,5 @@
 import graphene
+from enum import Enum
 
 from core.models import Officer
 from insuree.models import Insuree
@@ -31,6 +32,7 @@ class Query(graphene.ObjectType):
         items=graphene.List(of_type=graphene.String),
         services=graphene.List(of_type=graphene.String),
         json_ext=graphene.JSONString(),
+        attachment_status=graphene.Int(required=False)
     )
 
     claim = graphene.Field(
@@ -113,6 +115,18 @@ class Query(graphene.ObjectType):
 
         if services:
             query = query.filter(services__service__code__in=services)
+
+        attachment_status = kwargs.get("attachment_status", 0)
+
+        class AttachmentStatusEnum(Enum):
+            NONE = 0
+            WITH = 1
+            WITHOUT = 2
+
+        if attachment_status == AttachmentStatusEnum.WITH.value:
+            query = query.filter(attachments__isnull=False)
+        elif attachment_status == AttachmentStatusEnum.WITHOUT.value:
+            query = query.filter(attachments__isnull=True)
 
         json_ext = kwargs.get("json_ext", None)
 
