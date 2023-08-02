@@ -61,6 +61,12 @@ class Query(graphene.ObjectType):
         claim_code=graphene.String(required=True),
         description="Checks that the specified claim code is unique."
     )
+    fsp_from_claim = graphene.Field(
+        graphene.Boolean,
+        claim_code=graphene.String(required=False),
+        insure_code=graphene.String(required=False),
+        description="Return FSP of insuree during creation of the claim."
+    )
 
     def resolve_insuree_name_by_chfid(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_mutation_create_claims_perms)\
@@ -216,6 +222,15 @@ class Query(graphene.ObjectType):
                 | Q(other_names__icontains=search)
             )
         return qs
+
+    def fsp_from_claim(self, info, **kwargs):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
+            raise PermissionDenied(_("unauthorized"))
+
+        claim = Claim.objects.get(id=kwargs['claim_id'], validity_to_isnull=True)
+        insuree = Insuree.objects.filter(id=claim.insuree_id, validity_to_isnull=True)
+        HF = HealthFacility.objects.get(id=insuree.health_facility, validity_to_isnull=True)
+        return HF
 
 
 class Mutation(graphene.ObjectType):
