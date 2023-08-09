@@ -287,6 +287,8 @@ def update_or_create_claim(data, user):
         for service in services:
             if service["qty_provided"] > 1 and not service.get("explanation"):
                 raise ValidationError(_("mutation.service_explanation_required"))
+    if not validate_number_of_additional_diagnoses(data):
+        raise ValidationError(_("mutation.claim_too_many_additional_diagnoses"))
     incoming_code = data.get('code')
     claim_uuid = data.pop("uuid", None)
     autogenerate_code = data.pop('autogenerate_code', None)
@@ -324,6 +326,18 @@ def update_or_create_claim(data, user):
     claim.claimed = claimed
     claim.save()
     return claim
+
+
+def validate_number_of_additional_diagnoses(incoming_data):
+    additional_diagnoses_count = 0
+    for key in incoming_data.keys():
+        if key.startswith("icd_") and key.endswith("_id") and key != "icd_id":
+            additional_diagnoses_count += 1
+
+    if additional_diagnoses_count <= ClaimConfig.additional_diagnosis_number_allowed:
+        return True
+    else:
+        return False
 
 
 def __autogenerate_claim_code():

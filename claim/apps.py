@@ -58,6 +58,7 @@ class ClaimConfig(AppConfig):
     claim_validation_multiple_services_explanation_required = True
     # Provide absolute path to autogenerating function for claim code
     autogenerate_func = 'claim.utils.autogenerate_nepali_claim_code'
+    additional_diagnosis_number_allowed = 4  # Currently code supports 4 diagnoses maximum, going above will not work
 
     def _configure_perms(self, cfg):
         ClaimConfig.default_validations_disabled = cfg["default_validations_disabled"]
