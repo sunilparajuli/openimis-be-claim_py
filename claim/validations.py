@@ -16,6 +16,7 @@ from policy.models import Policy
 from product.models import Product, ProductItem, ProductService, ProductItemOrService
 
 from .apps import ClaimConfig
+from .utils import get_instance_valid_at_date
 
 logger = logging.getLogger(__name__)
 
@@ -207,13 +208,14 @@ def validate_claimservice_validity(claim, claimservice):
 
 def validate_claimitem_in_price_list(claim, claimitem):
     errors = []
-    pricelist_detail = ItemsPricelistDetail.objects \
+    claim_date = claim.date_to if claim.date_to else claim.date_from
+    pricelist_detail_qs = ItemsPricelistDetail.objects \
         .filter(item_id=claimitem.item_id,
                 validity_to__isnull=True,
                 items_pricelist=claim.health_facility.items_pricelist,
                 items_pricelist__validity_to__isnull=True
-                ) \
-        .first()
+                )
+    pricelist_detail = get_instance_valid_at_date(pricelist_detail_qs, claim_date)
     if not pricelist_detail:
         claimitem.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
         errors += [{'code': REJECTION_REASON_NOT_IN_PRICE_LIST,
@@ -226,13 +228,13 @@ def validate_claimitem_in_price_list(claim, claimitem):
 
 def validate_claimservice_in_price_list(claim, claimservice):
     errors = []
-    pricelist_detail = ServicesPricelistDetail.objects \
+    claim_date = claim.date_to if claim.date_to else claim.date_from
+    pricelist_detail_qs = ServicesPricelistDetail.objects \
         .filter(service_id=claimservice.service_id,
-                validity_to__isnull=True,
                 services_pricelist=claim.health_facility.services_pricelist,
                 services_pricelist__validity_to__isnull=True
-                ) \
-        .first()
+                )
+    pricelist_detail = get_instance_valid_at_date(pricelist_detail_qs, claim_date)
     if not pricelist_detail:
         claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
         errors += [{'code': REJECTION_REASON_NOT_IN_PRICE_LIST,
@@ -1094,13 +1096,13 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
             exceed_ceiling_amount = 0
             exceed_ceiling_amount_category = 0
             # TODO make sure that this does not return more than one row ?
-            itemsvc_pricelist_detail = (ItemsPricelistDetail if detail_is_item else ServicesPricelistDetail).objects \
+            itemsvc_pricelist_detail_qs = (ItemsPricelistDetail if detail_is_item else ServicesPricelistDetail).objects \
                 .filter(itemsvcs_pricelist=claim.health_facility.items_pricelist
             if detail_is_item else claim.health_facility.services_pricelist,
                         itemsvc=claim_detail.itemsvc,
                         itemsvcs_pricelist__validity_to__isnull=True,
-                        validity_to__isnull=True) \
-                .first()
+                        )
+            itemsvc_pricelist_detail = get_instance_valid_at_date(itemsvc_pricelist_detail_qs, target_date)
             product_itemsvc = None
 
             if detail_is_item:
