@@ -180,10 +180,11 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
     insuree = models.ForeignKey(
         insuree_models.Insuree, models.DO_NOTHING, db_column='InsureeID')
     # do not change max_length value - use setting from apps.py
-    code = models.CharField(db_column='ClaimCode', max_length=50, unique=True)
+    code = models.CharField(db_column='ClaimCode', max_length=50)
     date_from = fields.DateField(db_column='DateFrom')
     date_to = fields.DateField(db_column='DateTo', blank=True, null=True)
     status = models.SmallIntegerField(db_column='ClaimStatus')
+    restore = models.ForeignKey('self', db_column='RestoredClaim', on_delete=models.DO_NOTHING, blank=True, null=True)
     adjuster = models.ForeignKey(
         core_models.InteractiveUser, models.DO_NOTHING,
         db_column='Adjuster', blank=True, null=True)
