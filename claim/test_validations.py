@@ -1042,7 +1042,8 @@ class ValidationTest(TestCase):
         This test replicates the functionality of test_submit_claim_dedrem,
         with the additional step of updating items and services prior to dedrem calculation.
         Despite the updates, the results should remain unaffected as the prices
-        for these services/items are sourced from the pricelist detail's state at the time of claim submission.
+        for these services/items are sourced from the pricelist detail's state at the time of
+        coalse(claim.dateto, claim.datefrom).
         '''
         insuree = create_test_insuree()
         self.assertIsNotNone(insuree)
