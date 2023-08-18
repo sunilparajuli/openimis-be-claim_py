@@ -33,7 +33,7 @@ class Query(graphene.ObjectType):
         services=graphene.List(of_type=graphene.String),
         json_ext=graphene.JSONString(),
         attachment_status=graphene.Int(required=False),
-        visit_type_out_in_patient=graphene.String(required=False)
+        care_type=graphene.String(required=False)
     )
 
     claim = graphene.Field(
@@ -129,10 +129,10 @@ class Query(graphene.ObjectType):
         elif attachment_status == AttachmentStatusEnum.WITHOUT.value:
             query = query.filter(attachments__isnull=True)
 
-        visit_type_out_in_patient = kwargs.get("visit_type_out_in_patient", None)
+        care_type = kwargs.get("care_type", None)
 
-        if visit_type_out_in_patient:
-            query = query.filter(visit_type_out_in_patient=visit_type_out_in_patient)
+        if care_type:
+            query = query.filter(care_type=care_type)
 
         json_ext = kwargs.get("json_ext", None)
 
