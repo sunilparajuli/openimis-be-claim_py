@@ -334,10 +334,7 @@ def validate_number_of_additional_diagnoses(incoming_data):
         if key.startswith("icd_") and key.endswith("_id") and key != "icd_id":
             additional_diagnoses_count += 1
 
-    if additional_diagnoses_count <= ClaimConfig.additional_diagnosis_number_allowed:
-        return True
-    else:
-        return False
+    return additional_diagnoses_count <= ClaimConfig.additional_diagnosis_number_allowed
 
 
 def __autogenerate_claim_code():
