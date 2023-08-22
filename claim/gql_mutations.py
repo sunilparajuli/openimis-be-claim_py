@@ -221,10 +221,10 @@ class ClaimInputType(OpenIMISMutation.Input):
     explanation = graphene.String(required=False)
     adjustment = graphene.String(required=False)
     json_ext = graphene.types.json.JSONString(required=False)
-
     feedback_available = graphene.Boolean(default=False)
     feedback_status = TinyInt(required=False)
     feedback = graphene.Field(FeedbackInputType, required=False)
+    care_type = graphene.String(required=False)
 
     items = graphene.List(ClaimItemInputType, required=False)
     services = graphene.List(ClaimServiceInputType, required=False)

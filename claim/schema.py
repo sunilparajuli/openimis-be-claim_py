@@ -32,7 +32,8 @@ class Query(graphene.ObjectType):
         items=graphene.List(of_type=graphene.String),
         services=graphene.List(of_type=graphene.String),
         json_ext=graphene.JSONString(),
-        attachment_status=graphene.Int(required=False)
+        attachment_status=graphene.Int(required=False),
+        care_type=graphene.String(required=False)
     )
 
     claim = graphene.Field(
@@ -127,6 +128,11 @@ class Query(graphene.ObjectType):
             query = query.filter(attachments__isnull=False)
         elif attachment_status == AttachmentStatusEnum.WITHOUT.value:
             query = query.filter(attachments__isnull=True)
+
+        care_type = kwargs.get("care_type", None)
+
+        if care_type:
+            query = query.filter(care_type=care_type)
 
         json_ext = kwargs.get("json_ext", None)
 
