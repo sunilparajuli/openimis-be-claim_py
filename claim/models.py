@@ -141,7 +141,7 @@ class FeedbackPrompt(core_models.VersionedModel):
     claim_id = models.OneToOneField(
         "Claim", models.DO_NOTHING, db_column='ClaimID', blank=True, null=True, related_name="+")
     officer_id = models.IntegerField(db_column='OfficerID', blank=True, null=True)
-    phone_number = models.CharField(db_column='PhoneNumber', max_length=36)
+    phone_number = models.CharField(db_column='PhoneNumber', max_length=50)
     sms_status = models.IntegerField(db_column='SMSStatus', blank=True, null=True)
     validity_from = fields.DateTimeField(db_column='ValidityFrom', blank=True, null=True)
     validity_to = fields.DateTimeField(db_column='ValidityTo', blank=True, null=True)
