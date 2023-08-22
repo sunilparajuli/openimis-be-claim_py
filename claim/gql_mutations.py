@@ -295,6 +295,8 @@ def update_or_create_claim(data, user):
     if autogenerate_code:
         data['code'] = __autogenerate_claim_code()
     current_claim = Claim.objects.filter(uuid=claim_uuid).first()
+    if current_claim is not None and current_claim.status not in (Claim.STATUS_CHECKED, Claim.STATUS_ENTERED):
+        raise ValidationError(_("mutation.claim_not_editable"))    
     current_code = current_claim.code if current_claim else None
     if len(incoming_code) > ClaimConfig.max_claim_length:
         raise ValidationError(_("mutation.code_name_too_long"))
