@@ -129,7 +129,7 @@ class ClaimCodeInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(value, 8)
+        assert_string_length(value, ClaimConfig.max_claim_length)
         return value
 
     serialize = coerce_string
@@ -138,7 +138,7 @@ class ClaimCodeInputType(graphene.String):
     @staticmethod
     def parse_literal(ast):
         result = graphene.String.parse_literal(ast)
-        assert_string_length(result, 8)
+        assert_string_length(result, ClaimConfig.max_claim_length)
         return result
 
 
@@ -221,10 +221,10 @@ class ClaimInputType(OpenIMISMutation.Input):
     explanation = graphene.String(required=False)
     adjustment = graphene.String(required=False)
     json_ext = graphene.types.json.JSONString(required=False)
-
     feedback_available = graphene.Boolean(default=False)
     feedback_status = TinyInt(required=False)
     feedback = graphene.Field(FeedbackInputType, required=False)
+    care_type = graphene.String(required=False)
 
     items = graphene.List(ClaimItemInputType, required=False)
     services = graphene.List(ClaimServiceInputType, required=False)
@@ -287,6 +287,8 @@ def update_or_create_claim(data, user):
         for service in services:
             if service["qty_provided"] > 1 and not service.get("explanation"):
                 raise ValidationError(_("mutation.service_explanation_required"))
+    if not validate_number_of_additional_diagnoses(data):
+        raise ValidationError(_("mutation.claim_too_many_additional_diagnoses"))
     incoming_code = data.get('code')
     claim_uuid = data.pop("uuid", None)
     autogenerate_code = data.pop('autogenerate', None)
@@ -324,6 +326,15 @@ def update_or_create_claim(data, user):
     claim.claimed = claimed
     claim.save()
     return claim
+
+
+def validate_number_of_additional_diagnoses(incoming_data):
+    additional_diagnoses_count = 0
+    for key in incoming_data.keys():
+        if key.startswith("icd_") and key.endswith("_id") and key != "icd_id":
+            additional_diagnoses_count += 1
+
+    return additional_diagnoses_count <= ClaimConfig.additional_diagnosis_number_allowed
 
 
 def __autogenerate_claim_code():
