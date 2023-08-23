@@ -11,7 +11,7 @@ from insuree.test_helpers import create_test_insuree
 from location.models import HealthFacility
 from medical.test_helpers import create_test_service, create_test_item
 from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist, \
-    update_service_in_hf_pricelist, update_item_in_hf_pricelist
+    update_pricelist_service_detail_in_hf_pricelist, update_pricelist_item_detail_in_hf_pricelist
 from policy.test_helpers import create_test_policy
 
 # default arguments should not pass a list or a dict because they're mutable but we don't risk mutating them here:
@@ -1063,8 +1063,8 @@ class ValidationTest(TestCase):
             claim1, "D", custom_props={"item_id": item.id})
         errors = validate_claim(claim1, True)
         errors += validate_assign_prod_to_claimitems_and_services(claim1)
-        update_service_in_hf_pricelist(service.id, custom_props={"price_overrule": 21})
-        update_item_in_hf_pricelist(item.id, custom_props={"price_overrule": 37})
+        update_pricelist_service_detail_in_hf_pricelist(pricelist_detail1, custom_props={"price_overrule": 21})
+        update_pricelist_item_detail_in_hf_pricelist(pricelist_detail1, custom_props={"price_overrule": 37})
         errors += process_dedrem(claim1, -1, True)
         self.assertEqual(len(errors), 0)
 
