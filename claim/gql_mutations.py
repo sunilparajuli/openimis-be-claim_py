@@ -221,6 +221,7 @@ class ClaimInputType(OpenIMISMutation.Input):
     explanation = graphene.String(required=False)
     adjustment = graphene.String(required=False)
     json_ext = graphene.types.json.JSONString(required=False)
+    restore = graphene.UUID(required=False)
 
     feedback_available = graphene.Boolean(default=False)
     feedback_status = TinyInt(required=False)
@@ -279,26 +280,55 @@ def create_attachments(claim_id, attachments):
         create_attachment(claim_id, attachment)
 
 
-@transaction.atomic
-def update_or_create_claim(data, user):
-    items = data.pop('items') if 'items' in data else []
-    services = data.pop('services') if 'services' in data else []
+def validate_claim_data(data, user):
+    services = data.get('services') if 'services' in data else []
+    incoming_code = data.get('code')
+    claim_uuid = data.get("uuid", None)
+    restore = data.get('restore', None)
+    current_claim = Claim.objects.filter(uuid=claim_uuid).first()
+    current_code = current_claim.code if current_claim else None
+
+    if restore:
+        restored_qs = Claim.objects.filter(uuid=restore)
+        restored_from_claim = restored_qs.first()
+        restored_count = Claim.objects.filter(restore=restored_from_claim).count()
+        if not restored_qs.exists():
+            raise ValidationError(_("mutation.restored_from_does_not_exist"))
+        if not restored_from_claim.status == Claim.STATUS_REJECTED:
+            raise ValidationError(_("mutation.cannot_restore_not_rejected_claim"))
+        if not user.has_perms(ClaimConfig.gql_mutation_restore_claims_perms):
+            raise ValidationError(_("mutation.no_restore_rights"))
+        if ClaimConfig.claim_max_restore and restored_count >= ClaimConfig.claim_max_restore:
+            raise ValidationError(_("mutation.max_restored_claim") % {
+                "max_restore": ClaimConfig.claim_max_restore
+            })
+
     if ClaimConfig.claim_validation_multiple_services_explanation_required:
         for service in services:
             if service["qty_provided"] > 1 and not service.get("explanation"):
                 raise ValidationError(_("mutation.service_explanation_required"))
-    incoming_code = data.get('code')
-    claim_uuid = data.pop("uuid", None)
-    autogenerate_code = data.pop('autogenerate_code', None)
-    if autogenerate_code:
-        data['code'] = __autogenerate_claim_code()
-    current_claim = Claim.objects.filter(uuid=claim_uuid).first()
-    current_code = current_claim.code if current_claim else None
+
     if len(incoming_code) > ClaimConfig.max_claim_length:
         raise ValidationError(_("mutation.code_name_too_long"))
-    if current_code != incoming_code \
-            and check_unique_claim_code(incoming_code):
+
+    if not restore and current_code != incoming_code and check_unique_claim_code(incoming_code):
         raise ValidationError(_("mutation.code_name_duplicated"))
+
+
+@transaction.atomic
+def update_or_create_claim(data, user):
+    validate_claim_data(data, user)
+    items = data.pop('items') if 'items' in data else []
+    services = data.pop('services') if 'services' in data else []
+    claim_uuid = data.pop("uuid", None)
+    autogenerate_code = data.pop('autogenerate_code', None)
+    restore = data.pop('restore', None)
+    if restore:
+        restored_qs = Claim.objects.filter(uuid=restore)
+        restored_from_claim = restored_qs.first()
+        data["restore"] = restored_from_claim
+    if autogenerate_code:
+        data['code'] = __autogenerate_claim_code()
     if "client_mutation_id" in data:
         data.pop('client_mutation_id')
     if "client_mutation_label" in data:
@@ -364,11 +394,6 @@ class CreateClaimMutation(OpenIMISMutation):
                     _("mutation.authentication_required"))
             if not user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
-            # Claim code unicity should be enforced at DB Scheme level...
-            if Claim.objects.filter(code=data['code']).exists():
-                return [{
-                    'message': _("claim.mutation.duplicated_claim_code") % {'code': data['code']},
-                }]
             data['audit_user_id'] = user.id_for_audit
             data['status'] = Claim.STATUS_ENTERED
             from core.utils import TimeUtils
