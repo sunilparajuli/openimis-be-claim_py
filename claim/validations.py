@@ -206,16 +206,20 @@ def validate_claimservice_validity(claim, claimservice):
     return errors
 
 
+def __get_claim_target_date(claim):
+    return claim.date_to if claim.date_to else claim.date_from
+
+
 def validate_claimitem_in_price_list(claim, claimitem):
     errors = []
-    claim_date = claim.date_to if claim.date_to else claim.date_from
+    target_date = __get_claim_target_date(claim)
     pricelist_detail_qs = ItemsPricelistDetail.objects \
         .filter(item_id=claimitem.item_id,
                 validity_to__isnull=True,
                 items_pricelist=claim.health_facility.items_pricelist,
                 items_pricelist__validity_to__isnull=True
                 )
-    pricelist_detail = get_instance_valid_at_date(pricelist_detail_qs, claim_date)
+    pricelist_detail = get_instance_valid_at_date(pricelist_detail_qs, target_date)
     if not pricelist_detail:
         claimitem.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
         errors += [{'code': REJECTION_REASON_NOT_IN_PRICE_LIST,
@@ -228,13 +232,13 @@ def validate_claimitem_in_price_list(claim, claimitem):
 
 def validate_claimservice_in_price_list(claim, claimservice):
     errors = []
-    claim_date = claim.date_to if claim.date_to else claim.date_from
+    target_date = __get_claim_target_date(claim)
     pricelist_detail_qs = ServicesPricelistDetail.objects \
         .filter(service_id=claimservice.service_id,
                 services_pricelist=claim.health_facility.services_pricelist,
                 services_pricelist__validity_to__isnull=True
                 )
-    pricelist_detail = get_instance_valid_at_date(pricelist_detail_qs, claim_date)
+    pricelist_detail = get_instance_valid_at_date(pricelist_detail_qs, target_date)
     if not pricelist_detail:
         claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
         errors += [{'code': REJECTION_REASON_NOT_IN_PRICE_LIST,
@@ -249,7 +253,7 @@ def validate_claimdetail_care_type(claim, claimdetail):
     errors = []
     care_type = claimdetail.itemsvc.care_type
     hf_care_type = claim.health_facility.care_type if claim.health_facility.care_type else 'B'
-    target_date = claim.date_to if claim.date_to else claim.date_from
+    target_date = __get_claim_target_date(claim)
 
     if (
             care_type == 'I' and (
@@ -274,7 +278,7 @@ def validate_claimdetail_limitation_fail(claim, claimdetail):
     if claimdetail.itemsvc.patient_category == 0:
         return []
     errors = []
-    target_date = claim.date_to if claim.date_to else claim.date_from
+    target_date = __get_claim_target_date(claim)
     patient_category_mask = utils.patient_category_mask(
         claim.insuree, target_date)
     
@@ -669,7 +673,7 @@ def get_claim_category(claim):
         Service.CATEGORY_OTHER,
         Service.CATEGORY_VISIT,
     ]
-    target_date = claim.date_to if claim.date_to else claim.date_from
+    target_date = __get_claim_target_date(claim)
     services = claim.services \
         .filter(validity_to__isnull=True, service__validity_to__isnull=True) \
         .values("service__category").distinct()
@@ -702,7 +706,7 @@ def validate_assign_prod_elt(claim, elt, elt_ref, elt_qs):
         "R": ("limitation_type_r", "limit_adult_r", "limit_child_r"),
     }
     logger.debug("[claim: %s] Assigning product for %s %s", claim.uuid, type(elt), elt.id)
-    target_date = claim.date_to if claim.date_to else claim.date_from
+    target_date = __get_claim_target_date(claim)
     visit_type = claim.visit_type if claim.visit_type and claim.visit_type in visit_type_field else "O"
     adult = claim.insuree.is_adult(target_date)
     (limitation_type_field, limit_adult, limit_child) = visit_type_field[visit_type]
@@ -899,7 +903,7 @@ def _get_dedrem(prefix, dedrem_type, field, product, claim, policy_id):
 # - Go through each service and deduce
 def process_dedrem(claim, audit_user_id=-1, is_process=False):
     logger.debug(f"processing dedrem for claim {claim.uuid}")
-    target_date = claim.date_to if claim.date_to else claim.date_from
+    target_date = __get_claim_target_date(claim)
     category = get_claim_category(claim)
     if claim.date_from != target_date:
         hospitalization = True
