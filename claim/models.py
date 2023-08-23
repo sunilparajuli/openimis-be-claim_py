@@ -141,7 +141,7 @@ class FeedbackPrompt(core_models.VersionedModel):
     claim_id = models.OneToOneField(
         "Claim", models.DO_NOTHING, db_column='ClaimID', blank=True, null=True, related_name="+")
     officer_id = models.IntegerField(db_column='OfficerID', blank=True, null=True)
-    phone_number = models.CharField(db_column='PhoneNumber', max_length=36, unique=True)
+    phone_number = models.CharField(db_column='PhoneNumber', max_length=50)
     sms_status = models.IntegerField(db_column='SMSStatus', blank=True, null=True)
     validity_from = fields.DateTimeField(db_column='ValidityFrom', blank=True, null=True)
     validity_to = fields.DateTimeField(db_column='ValidityTo', blank=True, null=True)
@@ -277,6 +277,7 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
         db_column='AuditUserIDSubmit', blank=True, null=True)
     audit_user_id_process = models.IntegerField(
         db_column='AuditUserIDProcess', blank=True, null=True)
+    care_type = models.CharField(db_column='CareType', max_length=4, blank=True, null=True)
 
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
