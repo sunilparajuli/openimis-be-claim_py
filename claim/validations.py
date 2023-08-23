@@ -16,7 +16,7 @@ from policy.models import Policy
 from product.models import Product, ProductItem, ProductService, ProductItemOrService
 
 from .apps import ClaimConfig
-from .utils import get_instance_valid_at_date
+from .utils import get_queryset_valid_at_date
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,7 @@ def validate_claimitem_in_price_list(claim, claimitem):
                 items_pricelist=claim.health_facility.items_pricelist,
                 items_pricelist__validity_to__isnull=True
                 )
-    pricelist_detail = get_instance_valid_at_date(pricelist_detail_qs, target_date)
+    pricelist_detail = get_queryset_valid_at_date(pricelist_detail_qs, target_date).first()
     if not pricelist_detail:
         claimitem.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
         errors += [{'code': REJECTION_REASON_NOT_IN_PRICE_LIST,
@@ -238,7 +238,7 @@ def validate_claimservice_in_price_list(claim, claimservice):
                 services_pricelist=claim.health_facility.services_pricelist,
                 services_pricelist__validity_to__isnull=True
                 )
-    pricelist_detail = get_instance_valid_at_date(pricelist_detail_qs, target_date)
+    pricelist_detail = get_queryset_valid_at_date(pricelist_detail_qs, target_date).first()
     if not pricelist_detail:
         claimservice.rejection_reason = REJECTION_REASON_NOT_IN_PRICE_LIST
         errors += [{'code': REJECTION_REASON_NOT_IN_PRICE_LIST,
@@ -1106,7 +1106,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                         itemsvc=claim_detail.itemsvc,
                         itemsvcs_pricelist__validity_to__isnull=True,
                         )
-            itemsvc_pricelist_detail = get_instance_valid_at_date(itemsvc_pricelist_detail_qs, target_date)
+            itemsvc_pricelist_detail = get_queryset_valid_at_date(itemsvc_pricelist_detail_qs, target_date).first()
             product_itemsvc = None
 
             if detail_is_item:
