@@ -288,6 +288,8 @@ def validate_claim_data(data, user):
     restore = data.get('restore', None)
     current_claim = Claim.objects.filter(uuid=claim_uuid).first()
     current_code = current_claim.code if current_claim else None
+    
+ 
 
     if restore:
         restored_qs = Claim.objects.filter(uuid=restore)
@@ -303,6 +305,9 @@ def validate_claim_data(data, user):
             raise ValidationError(_("mutation.max_restored_claim") % {
                 "max_restore": ClaimConfig.claim_max_restore
             })
+           
+    elif current_claim is not None and current_claim.status not in (Claim.STATUS_CHECKED, Claim.STATUS_ENTERED):
+        raise ValidationError(_("mutation.claim_not_editable")) 
 
     if not validate_number_of_additional_diagnoses(data):
         raise ValidationError(_("mutation.claim_too_many_additional_diagnoses"))
