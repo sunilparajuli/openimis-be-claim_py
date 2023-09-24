@@ -1,12 +1,45 @@
 from django.test import TestCase
 from unittest import mock
-
+from location.test_helpers import create_test_location, create_test_health_facility
+from insuree.test_helpers import create_test_insuree
+from claim.test_helpers import create_test_claim_admin
+from medical.models import  Diagnosis
+from core.services import create_or_update_interactive_user, create_or_update_core_user
 import datetime
 from .services import *
 import core
 
 
 class ClaimSubmitServiceTestCase(TestCase):
+    test_hf = None
+    test_region = None
+    test_district = None
+    test_ward = None
+    test_village = None
+    test_insuree =None
+    test_claim_admin = None
+    test_icd = None
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_region = create_test_location('R')
+        cls.test_district = create_test_location('D', custom_props={"parent_id": cls.test_region.id})
+        cls.test_ward = create_test_location('W', custom_props={"parent_id": cls.test_district.id})
+        cls.test_village = create_test_location('V', custom_props={"parent_id": cls.test_ward.id})
+
+        cls.test_hf=create_test_health_facility("1", cls.test_district.id, valid=True)
+        props = dict(
+            last_name="name",
+            other_names="surname",
+            dob=core.datetime.date(2000, 1, 13),
+            chf_id="884930485",
+        )
+        family_props = dict(
+            location_id=cls.test_village.id,
+        )
+        cls.test_insuree= create_test_insuree(is_head=True, custom_props=props, family_custom_props=family_props)
+        cls.test_claim_admin= create_test_claim_admin()
+        cls.test_icd = Diagnosis(code='ICD00I', name='diag test', audit_user_id=-1)
+        cls.test_icd.save()
 
     def test_minimal_item_claim_submit_xml(self):
         items = [
@@ -17,22 +50,22 @@ class ClaimSubmitServiceTestCase(TestCase):
         claim = ClaimSubmit(
             date=core.datetime.date(2020, 1, 9),
             code="code_ABVC",
-            icd_code="ICD_CODE_WWQ",
+            icd_code=self.test_icd.code,
             total=334,
             start_date=core.datetime.date(2020, 1, 13),
-            claim_admin_code='ADM_CODE_ADKJ',
-            insuree_chf_id='CHFID_UUZIS',
-            health_facility_code="HFCode_JQL",
+            claim_admin_code=self.test_claim_admin.code,
+            insuree_chf_id=self.test_insuree.chf_id,
+            health_facility_code=self.test_hf.code,
             item_submits=items,
         )
         details = "<Details>"
         details = details + "<ClaimDate>09/01/2020</ClaimDate>"
-        details = details + "<HFCode>HFCode_JQL</HFCode>"
-        details = details + "<ClaimAdmin>ADM_CODE_ADKJ</ClaimAdmin>"
+        details = details + f"<HFCode>{self.test_hf.code}</HFCode>"
+        details = details + f"<ClaimAdmin>{self.test_claim_admin.code}</ClaimAdmin>"
         details = details + "<ClaimCode>code_ABVC</ClaimCode>"
-        details = details + "<CHFID>CHFID_UUZIS</CHFID>"
+        details = details + f"<CHFID>{self.test_insuree.chf_id}</CHFID>"
         details = details + "<StartDate>13/01/2020</StartDate>"
-        details = details + "<ICDCode>ICD_CODE_WWQ</ICDCode>"
+        details = details + f"<ICDCode>{self.test_icd.code}</ICDCode>"
         details = details + "<Total>334</Total>"
         details = details + "</Details>"
         expected = "<Claim>%s<Items>%s</Items></Claim>" % (details, item)
@@ -47,22 +80,22 @@ class ClaimSubmitServiceTestCase(TestCase):
         claim = ClaimSubmit(
             date=core.datetime.date(2020, 1, 9),
             code="code_ABVC",
-            icd_code="ICD_CODE_WWQ",
+            icd_code=self.test_icd.code,
             total=334,
             start_date=core.datetime.date(2020, 1, 13),
-            claim_admin_code='ADM_CODE_ADKJ',
-            insuree_chf_id='CHFID_UUZIS',
-            health_facility_code="HFCode_JQL",
+            claim_admin_code=self.test_claim_admin.code,
+            insuree_chf_id=self.test_insuree.chf_id,
+            health_facility_code=self.test_hf.code,
             service_submits=services,
         )
         details = "<Details>"
         details = details + "<ClaimDate>09/01/2020</ClaimDate>"
-        details = details + "<HFCode>HFCode_JQL</HFCode>"
-        details = details + "<ClaimAdmin>ADM_CODE_ADKJ</ClaimAdmin>"
+        details = details + f"<HFCode>{self.test_hf.code}</HFCode>"
+        details = details + f"<ClaimAdmin>{self.test_claim_admin.code}</ClaimAdmin>"
         details = details + "<ClaimCode>code_ABVC</ClaimCode>"
-        details = details + "<CHFID>CHFID_UUZIS</CHFID>"
+        details = details + f"<CHFID>{self.test_insuree.chf_id}</CHFID>"
         details = details + "<StartDate>13/01/2020</StartDate>"
-        details = details + "<ICDCode>ICD_CODE_WWQ</ICDCode>"
+        details = details + f"<ICDCode>{self.test_icd.code}</ICDCode>"
         details = details + "<Total>334</Total>"
         details = details + "</Details>"
         expected = "<Claim>%s<Services>%s</Services></Claim>" % (
@@ -87,23 +120,24 @@ class ClaimSubmitServiceTestCase(TestCase):
         claim = ClaimSubmit(
             date=core.datetime.date(2020, 1, 9),
             code="code_ABVC",
-            icd_code="ICD_CODE_WWQ",
+            icd_code=self.test_icd.code,
             total=334,
             start_date=core.datetime.date(2020, 1, 13),
-            claim_admin_code='ADM_CODE_ADKJ',
-            insuree_chf_id='CHFID_UUZIS',
-            health_facility_code="HFCode_JQL",
+            claim_admin_code=self.test_claim_admin.code,
+            insuree_chf_id=self.test_insuree.chf_id,
+            health_facility_code=self.test_hf.code,
             item_submits=items,
             service_submits=services
         )
+          
         details = "<Details>"
         details = details + "<ClaimDate>09/01/2020</ClaimDate>"
-        details = details + "<HFCode>HFCode_JQL</HFCode>"
-        details = details + "<ClaimAdmin>ADM_CODE_ADKJ</ClaimAdmin>"
+        details = details + f"<HFCode>{self.test_hf.code}</HFCode>"
+        details = details + f"<ClaimAdmin>{self.test_claim_admin.code}</ClaimAdmin>"
         details = details + "<ClaimCode>code_ABVC</ClaimCode>"
-        details = details + "<CHFID>CHFID_UUZIS</CHFID>"
+        details = details + f"<CHFID>{self.test_insuree.chf_id}</CHFID>"        
         details = details + "<StartDate>13/01/2020</StartDate>"
-        details = details + "<ICDCode>ICD_CODE_WWQ</ICDCode>"
+        details = details + f"<ICDCode>{self.test_icd.code}</ICDCode>"
         details = details + "<Total>334</Total>"
         details = details + "</Details>"
         expected = "<Claim>%s" % details
@@ -127,12 +161,12 @@ class ClaimSubmitServiceTestCase(TestCase):
             claim = ClaimSubmit(
                 date=core.datetime.date(2020, 1, 9),
                 code="code_ABVC",
-                icd_code="ICD_CODE_WWQ",
+                icd_code=self.test_icd.code,
                 total=334,
                 start_date=core.datetime.date(2020, 1, 13),
-                claim_admin_code='ADM_CODE_ADKJ',
-                insuree_chf_id='CHFID_UUZIS',
-                health_facility_code="HFCode_JQL"
+                claim_admin_code=self.test_claim_admin.code,
+                insuree_chf_id=self.test_insuree.chf_id,
+                health_facility_code=self.test_hf.code,
             )
             service = ClaimSubmitService(user=mock_user)
             with self.assertRaises(ClaimSubmitError) as cm:
@@ -152,12 +186,12 @@ class ClaimSubmitServiceTestCase(TestCase):
                 claim = ClaimSubmit(
                     date=core.datetime.date(2020, 1, 9),
                     code="code_ABVC",
-                    icd_code="ICD_CODE_WWQ",
+                    icd_code=self.test_icd.code,
                     total=334,
                     start_date=core.datetime.date(2020, 1, 13),
-                    claim_admin_code='ADM_CODE_ADKJ',
-                    insuree_chf_id='CHFID_UUZIS',
-                    health_facility_code="HFCode_JQL"
+                    claim_admin_code=self.test_claim_admin.code,
+                    insuree_chf_id=self.test_insuree.chf_id,
+                    health_facility_code=self.test_hf.code,
                 )
                 service = ClaimSubmitService(user=mock_user)
                 service.submit(claim)  # doesn't raise an error
