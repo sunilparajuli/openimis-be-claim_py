@@ -174,7 +174,7 @@ class Query(graphene.ObjectType):
                 )
                 variance_filter = variance_filter | ~Q(icd__code__in=diags)
             query = query.filter(variance_filter)
-        query = queryset.filter(
+        query = query.filter(
                     LocationManager.build_user_location_filter_query( user, prefix='health_facility__location') 
                 )
         return gql_optimizer.query(query.all(), info)
