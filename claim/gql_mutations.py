@@ -21,7 +21,6 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
-from location.schema import UserDistrict
 
 from claim.gql_queries import ClaimGQLType
 from claim.models import Claim, Feedback, FeedbackPrompt, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment, \
@@ -478,11 +477,8 @@ class CreateAttachmentMutation(OpenIMISMutation):
             claim_uuid = data.pop("claim_uuid")
             queryset = Claim.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                dist = UserDistrict.get_user_districts(user._u)
-                queryset = queryset.filter(
-                    health_facility__location__id__in=[
-                        l.location_id for l in dist]
-                )
+                from location.schema import LocationManager
+                queryset = LocationManager().build_user_location_filter_query( user._u, prefix='health_facility__location', queryset=queryset)           
             claim = queryset.filter(uuid=claim_uuid).first()
             if not claim:
                 raise PermissionDenied(_("unauthorized"))
@@ -508,13 +504,9 @@ class UpdateAttachmentMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                from location.models import UserDistrict
-                dist = UserDistrict.get_user_districts(user._u)
-                queryset = queryset.select_related("claim") \
-                    .filter(
-                    claim__health_facility__location__id__in=[
-                        l.location_id for l in dist]
-                )
+                from location.schema import  LocationManager
+                queryset = LocationManager().build_user_location_filter_query( user._u, prefix='claim__health_facility__location', queryset = queryset.select_related("claim"))
+
             attachment = queryset \
                 .filter(id=data['id']) \
                 .first()
@@ -548,13 +540,8 @@ class DeleteAttachmentMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                from location.models import UserDistrict
-                dist = UserDistrict.get_user_districts(user._u)
-                queryset = queryset.select_related("claim") \
-                    .filter(
-                    claim__health_facility__location__id__in=[
-                        l.location_id for l in dist]
-                )
+                from location.schema import LocationManager
+                queryset = LocationManager().build_user_location_filter_query( user._u, prefix='health_facility__location', queryset = queryset)     
             attachment = queryset \
                 .filter(id=data['id']) \
                 .first()

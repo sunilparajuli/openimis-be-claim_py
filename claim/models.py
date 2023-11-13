@@ -9,7 +9,7 @@ from django.db import models
 from graphql import ResolveInfo
 from insuree import models as insuree_models
 from location import models as location_models
-from location.models import UserDistrict
+from location.models import UserDistrict, LocationManager
 from medical import models as medical_models
 from policy import models as policy_models
 from product import models as product_models
@@ -48,10 +48,8 @@ class ClaimAdmin(core_models.VersionedModel):
         if settings.ROW_SECURITY and user.is_anonymous:
             return queryset.filter(id=-1)
         if settings.ROW_SECURITY:
-            dist = UserDistrict.get_user_districts(user._u)
-            return queryset.filter(
-                health_facility__location_id__in=[l.location_id for l in dist]
-            )
+            from location.schema import  LocationManager
+            queryset =  LocationManager().build_user_location_filter_query( user._u, prefix='health_facility__location', queryset=queryset)    
         return queryset
 
     @property
@@ -82,7 +80,7 @@ class ClaimAdmin(core_models.VersionedModel):
     @property
     def officer_allowed_locations(self):
         """
-        Returns uuid of all locations allowed for given officer
+        Returns uuid of all locations allowed for given officerLocationManager
         """
         district = self.health_facility.location
         all_allowed_uuids = [district.parent.uuid, district.uuid]
@@ -128,10 +126,7 @@ class Feedback(core_models.VersionedModel):
         if settings.ROW_SECURITY and user.is_anonymous:
             return queryset.filter(id=-1)
         if settings.ROW_SECURITY:
-            dist = UserDistrict.get_user_districts(user._u)
-            return queryset.filter(
-                claim__health_facility__location_id__in=[l.location_id for l in dist]
-            )
+            queryset =  LocationManager().build_user_location_filter_query( user._u, prefix='health_facility__location', queryset=queryset)    
         return queryset
 
 
@@ -161,10 +156,8 @@ class FeedbackPrompt(core_models.VersionedModel):
         if settings.ROW_SECURITY and user.is_anonymous:
             return queryset.filter(id=-1)
         if settings.ROW_SECURITY:
-            dist = UserDistrict.get_user_districts(user._u)
-            return queryset.filter(
-                claim__health_facility__location_id__in=[l.location_id for l in dist]
-            )
+            queryset =  LocationManager().build_user_location_filter_query( user._u, prefix='health_facility__location', queryset=queryset)    
+
         return queryset
 
 
@@ -337,15 +330,12 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
         if settings.ROW_SECURITY:
             # TechnicalUsers don't have health_facility_id attribute
             if hasattr(user._u, 'health_facility_id') and user._u.health_facility_id:
-                return queryset.filter(
+                queryset =  queryset.filter(
                     health_facility_id=user._u.health_facility_id
                 )
             else:
                 if not isinstance(user._u, core_models.TechnicalUser):
-                    dist = UserDistrict.get_user_districts(user._u)
-                    return queryset.filter(
-                        health_facility__location_id__in=dist.values_list("location_id", flat=True)
-                    )
+                    queryset = LocationManager().build_user_location_filter_query( user._u, prefix='health_facility__location', queryset = queryset)
         return queryset
 
 
