@@ -231,7 +231,7 @@ class ClaimSubmitServiceTestCase(TestCase):
                 mock_user.has_perm = mock.MagicMock(return_value=True)
                 claim = ClaimSubmit(
                     date=core.datetime.date(2020, 1, 9),
-                    code="code_ABVC",
+                    code="code_ABVCD",
                     icd_code=self.test_icd.code,
                     total=334,
                     start_date=core.datetime.date(2020, 1, 13),
