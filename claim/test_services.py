@@ -219,7 +219,10 @@ class ClaimSubmitServiceTestCase(TestCase):
                 service.submit(claim)
             self.assertNotEqual(cm.exception.code, 0)
 
-    def test_claim_submit_allgood_xml(self):
+    @mock.patch('django.db.connections')
+    def test_claim_submit_allgood_xml(self, mock_connections):
+        if connection.vendor != 'mssql':
+            self.skipTest("This test can only be executed for MSSQL database")
         with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
             # required for all modules tests
             mock_cursor.return_value.description = None
