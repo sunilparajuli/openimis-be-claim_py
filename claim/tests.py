@@ -198,7 +198,7 @@ class ClaimGraphQLTestCase(GraphQLTestCase):
             mutation {{
             submitClaims(
                 input: {{
-                clientMutationId: "d02fpricelistsff0a-dd95-4413-a2f6-4cf2189dc0d6"
+                clientMutationId: "d02fff0a-dd95-4413-a2f6-4cf2189dc0d6"
                 clientMutationLabel: "Submit claim erterwtw"
                 
                 uuids: ["{claim.uuid}"]
@@ -231,8 +231,26 @@ class ClaimGraphQLTestCase(GraphQLTestCase):
             }}
         ''' ,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        self.assertResponseNoErrors(response)
+
         ## check the mutation answer
-        
+        response = self.query('''
+        {
+        mutationLogs(clientMutationId: "f0585e2b-d72d-4001-905a-1cf10e9f1722")
+        {
+            
+        pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+        edges
+        {
+        node
+        {
+            id,status,error,clientMutationId,clientMutationLabel,clientMutationDetails,requestDateTime,jsonExt
+        }
+        }
+        }
+        }
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
         self.assertResponseNoErrors(response)
         claim = Claim.objects.filter(code = 'm-c-claim').first()
         self.assertEqual(claim.feedback_status, Claim.FEEDBACK_SELECTED)
