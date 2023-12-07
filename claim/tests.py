@@ -2,6 +2,7 @@ import base64
 import json
 from dataclasses import dataclass
 from core.models import User
+from core.utils import filter_validity
 from core.test_helpers import create_test_interactive_user
 from django.conf import settings
 from graphene_django.utils.testing import GraphQLTestCase
@@ -11,7 +12,18 @@ from claim import schema as claim_schema
 from graphene.test import Client
 from graphene import Schema
 
-from claim.models import Claim
+from claim.models import Claim, ClaimAdmin
+
+
+from policy.models import Policy
+from policy.test_helpers import create_test_policy2
+from product.test_helpers import create_test_product, create_test_product_service
+from core.test_helpers import create_test_officer
+from insuree.test_helpers import create_test_insuree
+from location.models import Location
+from medical.test_helpers import create_test_service
+from medical_pricelist.test_helpers import add_service_to_hf_pricelist
+
 @dataclass
 class DummyContext:
     """ Just because we need a context to generate. """
@@ -24,7 +36,13 @@ class ClaimGraphQLTestCase(GraphQLTestCase):
     GRAPHQL_SCHEMA = True
     admin_user = None
     graph_client = None
-    schema = None        
+    schema = None      
+    officer= None
+    insuree= None
+    product= None
+    service= None
+    product_service= None
+    claim_admin = None
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -35,7 +53,17 @@ class ClaimGraphQLTestCase(GraphQLTestCase):
             mutation=claim_schema.Mutation
         )
         cls.graph_client = Client(cls.schema)
-
+        
+        cls.officer = create_test_officer(custom_props={"code": "TSTSIMP1"})
+        cls.insuree = create_test_insuree(custom_props={"chf_id": "paysimp"})
+        cls.product = create_test_product("ELI1")
+        (policy, insuree_policy) = create_test_policy2(cls.product, cls.insuree, custom_props={
+            "value": 1000, "status": Policy.STATUS_ACTIVE})
+        cls.service = create_test_service("A")
+        cls.claim_admin = ClaimAdmin.objects.filter(*filter_validity()).first()
+        cls.svc_pl_detail = add_service_to_hf_pricelist(cls.service, hf_id = cls.claim_admin.health_facility.id )
+        cls.product_service = create_test_product_service(cls.product, cls.service, custom_props={"limit_no_adult": 20})
+        
     def test_claims_query(self):
         
         response = self.query(
@@ -97,54 +125,114 @@ class ClaimGraphQLTestCase(GraphQLTestCase):
         mutation_result = self.graph_client.execute(mutation, context=DummyContext(user=self.admin_user))
         return mutation_result
         
-    def test_mutation_create_claim(self):   
+    def test_mutation_create_claim(self):
+
         response = self.query(
-            '''
-            mutation {
+            f'''
+            mutation {{
                 createClaim(
-                    input: {
+                    input: {{
                     clientMutationId: "3a90436a-d5ea-48e7-bde4-0bcff0240260"
                     clientMutationLabel: "Create Claim - m-c-claim" 
                     code: "m-c-claim"
                 autogenerate: false
-                insureeId: 1
-                adminId: 15
+                insureeId: {self.insuree.id}
+                adminId: {self.claim_admin.id}
                 dateFrom: "2023-12-06"  
                 icdId: 2 
-                jsonExt: "{}"
+                jsonExt: "{{}}"
                 feedbackStatus: 1
                 reviewStatus: 1
                 dateClaimed: "2023-12-06"
-                healthFacilityId: 4
+                healthFacilityId: {self.claim_admin.health_facility.id}
                 visitType: "O"
                 services: [
-                {
+                {{
                 
-                serviceId: 90
+                serviceId: {self.service.id}
                 priceAsked: "10.00"
                 qtyProvided: "1.00"
                 status: 1
-            }
+            }}
                 ]
                 items: [
-                {
-                
-                itemId: 7
-                priceAsked: "160.00"
-                qtyProvided: "1.00"
-                status: 1
-            }
                 ]
-                    }
-                ) {
+                    }}
+                ) {{
                     clientMutationId
                     internalId
-                }
-            }
+                }}
+            }}
                 ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        
+        #wait 
+        
+        response = self.query('''
+        
+        {
+        mutationLogs(clientMutationId: "3a90436a-d5ea-48e7-bde4-0bcff0240260")
+        {
+            
+        pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+        edges
+        {
+        node
+        {
+            id,status,error,clientMutationId,clientMutationLabel,clientMutationDetails,requestDateTime,jsonExt
+        }
+        }
+        }
+        }
+        
+        ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        
         
         claim = Claim.objects.filter(code = 'm-c-claim').first()
         self.assertIsNotNone(claim)
         self.assertEqual(claim.status, Claim.STATUS_ENTERED)
-            
+        
+        #submit claim 
+        response = self.query(f'''
+            mutation {{
+            submitClaims(
+                input: {{
+                clientMutationId: "d02fpricelistsff0a-dd95-4413-a2f6-4cf2189dc0d6"
+                clientMutationLabel: "Submit claim erterwtw"
+                
+                uuids: ["{claim.uuid}"]
+                }}
+            ) {{
+                clientMutationId
+                internalId
+            }}
+            }}
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        self.assertResponseNoErrors(response)
+
+        # select for feeback
+        claim = Claim.objects.filter(code = 'm-c-claim').first()
+        self.assertEqual(claim.status, Claim.STATUS_CHECKED)
+        response = self.query(f'''
+            mutation {{
+            selectClaimsForFeedback(
+                input: {{
+                clientMutationId: "f0585e2b-d72d-4001-905a-1cf10e9f1722"
+                clientMutationLabel: "Select claim sadddfas for feedback"
+                
+                uuids: ["{claim.uuid}"]
+                }}
+            ) {{
+                clientMutationId
+                internalId
+            }}
+            }}
+        ''' ,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        ## check the mutation answer
+        
+        self.assertResponseNoErrors(response)
+        claim = Claim.objects.filter(code = 'm-c-claim').first()
+        self.assertEqual(claim.feedback_status, Claim.FEEDBACK_SELECTED)

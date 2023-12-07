@@ -7,9 +7,9 @@ from typing import Callable, Dict
 import graphene
 import importlib
 import graphene_django_optimizer
-from django.db.models import Count, Case, When, IntegerField
+from django.db.models import Count, Case, When, IntegerField, Q
 
-from core.models import MutationLog
+from core.models import MutationLog, Officer
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, approved_amount
@@ -716,11 +716,21 @@ def create_feedback_prompt(claim_uuid, user):
     feedback_prompt['feedback_prompt_date'] = TimeUtils.date()
     feedback_prompt['validity_from'] = TimeUtils.now()
     feedback_prompt['claim'] = current_claim
-    feedback_prompt['officer_id'] = current_claim.admin_id
+    officer = Officer.objects.filter(
+        *filter_validity(),
+        Q(
+            Q(officer_villages__location=current_claim.insuree.current_village)|
+            Q(officer_villages__location=current_claim.insuree.family.location)
+        )
+    ).first()
+    if not officer:
+        raise RuntimeError("No officer found for the insuree village")
+    feedback_prompt['officer_id'] = officer.id
     feedback_prompt['audit_user_id'] = user.id_for_audit
     FeedbackPrompt.objects.create(
         **feedback_prompt
     )
+
 
 
 def set_feedback_prompt_validity_to_to_current_date(claim_uuid):
