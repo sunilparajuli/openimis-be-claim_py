@@ -716,15 +716,17 @@ def create_feedback_prompt(claim_uuid, user):
     feedback_prompt['feedback_prompt_date'] = TimeUtils.date()
     feedback_prompt['validity_from'] = TimeUtils.now()
     feedback_prompt['claim'] = current_claim
+    villages = []
+    if current_claim.insuree.current_village:
+        villages.append(current_claim.insuree.current_village)
+    if current_claim.insuree.family.location:
+        villages.append(current_claim.insuree.family.location)
     officer = Officer.objects.filter(
         *filter_validity(),
-        Q(
-            Q(officer_villages__location=current_claim.insuree.current_village)|
-            Q(officer_villages__location=current_claim.insuree.family.location)
-        )
+        officer_villages__location__in=villages
     ).first()
     if not officer:
-        raise RuntimeError("No officer found for the insuree village")
+        raise RuntimeError(f"No officer found for the insuree village code {', '.join([str(v.code) for v in villages ])}")
     feedback_prompt['officer_id'] = officer.id
     feedback_prompt['audit_user_id'] = user.id_for_audit
     FeedbackPrompt.objects.create(
