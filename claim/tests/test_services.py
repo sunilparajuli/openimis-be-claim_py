@@ -52,7 +52,7 @@ class ClaimSubmitServiceTestCase(TestCase):
         cls.test_icd.save()
         cls.test_claim = Claim.objects.create(
             date_claimed=core.datetime.date(2020, 1, 9),
-            code="code_ABVC",
+            code="code_ABVCD",
             icd=cls.test_icd,
             claimed=2000,
             date_from=core.datetime.date(2020, 1, 13),
