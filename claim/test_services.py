@@ -2,7 +2,7 @@ from django.test import TestCase
 from unittest import mock
 from location.test_helpers import create_test_location, create_test_health_facility,create_test_village
 from insuree.test_helpers import create_test_insuree
-from claim.test_helpers import create_test_claim_admin
+from claim.test_helpers import create_test_claim_admin, create_test_claim
 from claim.models import Claim, ClaimItem, ClaimService,ClaimDetail
 from medical.models import  Diagnosis, Item, Service
 from medical.test_helpers import create_test_item, create_test_service
@@ -219,7 +219,10 @@ class ClaimSubmitServiceTestCase(TestCase):
                 service.submit(claim)
             self.assertNotEqual(cm.exception.code, 0)
 
-    def test_claim_submit_allgood_xml(self):
+    @mock.patch('django.db.connections')
+    def test_claim_submit_allgood_xml(self, mock_connections):
+        if connection.vendor != 'mssql':
+            self.skipTest("This test can only be executed for MSSQL database")
         with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
             # required for all modules tests
             mock_cursor.return_value.description = None
@@ -231,7 +234,7 @@ class ClaimSubmitServiceTestCase(TestCase):
                 mock_user.has_perm = mock.MagicMock(return_value=True)
                 claim = ClaimSubmit(
                     date=core.datetime.date(2020, 1, 9),
-                    code="code_ABVC",
+                    code="code_ABVCD",
                     icd_code=self.test_icd.code,
                     total=334,
                     start_date=core.datetime.date(2020, 1, 13),
