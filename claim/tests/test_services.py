@@ -2,7 +2,7 @@ from django.test import TestCase
 from unittest import mock
 from location.test_helpers import create_test_location, create_test_health_facility, create_test_village
 from insuree.test_helpers import create_test_insuree
-from claim.tests.test_helpers import create_test_claim_admin
+from test_helpers import create_test_claim_admin
 from claim.models import Claim, ClaimItem, ClaimService, ClaimDetail
 from medical.models import Diagnosis, Item, Service
 from medical.test_helpers import create_test_item, create_test_service
