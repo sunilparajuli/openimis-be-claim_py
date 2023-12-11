@@ -1,22 +1,22 @@
 from django.test import TestCase
 from unittest import mock
-from location.test_helpers import create_test_location, create_test_health_facility,create_test_village
+from location.test_helpers import create_test_location, create_test_health_facility, create_test_village
 from insuree.test_helpers import create_test_insuree
-from claim.test_helpers import create_test_claim_admin
-from claim.models import Claim, ClaimItem, ClaimService,ClaimDetail
-from medical.models import  Diagnosis, Item, Service
+from claim.tests.test_helpers import create_test_claim_admin
+from claim.models import Claim, ClaimItem, ClaimService, ClaimDetail
+from medical.models import Diagnosis, Item, Service
 from medical.test_helpers import create_test_item, create_test_service
 
 from core.services import create_or_update_interactive_user, create_or_update_core_user
 import datetime
-from .services import *
+from claim.services import *
 import core
 
 
 class ClaimSubmitServiceTestCase(TestCase):
     test_hf = None
 
-    test_insuree =None
+    test_insuree = None
     test_claim_admin = None
     test_icd = None
     test_claim = None
@@ -26,17 +26,17 @@ class ClaimSubmitServiceTestCase(TestCase):
     test_district = None
     test_village = None
     test_ward = None
-    
+
 
     @classmethod
     def setUpTestData(cls):
         if cls.test_region is None:
-            cls.test_village  =create_test_village( )
-            cls.test_ward =cls.test_village.parent
-            cls.test_region =cls.test_village.parent.parent.parent
+            cls.test_village = create_test_village()
+            cls.test_ward = cls.test_village.parent
+            cls.test_region = cls.test_village.parent.parent.parent
             cls.test_district = cls.test_village.parent.parent
 
-        cls.test_hf=create_test_health_facility("1", cls.test_district.id, valid=True)
+        cls.test_hf = create_test_health_facility("1", cls.test_district.id, valid=True)
         props = dict(
             last_name="name",
             other_names="surname",
@@ -46,8 +46,8 @@ class ClaimSubmitServiceTestCase(TestCase):
         family_props = dict(
             location=cls.test_village,
         )
-        cls.test_insuree= create_test_insuree(is_head=True, custom_props=props, family_custom_props=family_props)
-        cls.test_claim_admin= create_test_claim_admin()
+        cls.test_insuree = create_test_insuree(is_head=True, custom_props=props, family_custom_props=family_props)
+        cls.test_claim_admin = create_test_claim_admin()
         cls.test_icd = Diagnosis(code='ICD00I', name='diag test', audit_user_id=-1)
         cls.test_icd.save()
         cls.test_claim = Claim.objects.create(
@@ -62,26 +62,26 @@ class ClaimSubmitServiceTestCase(TestCase):
             status=Claim.STATUS_ENTERED,
             audit_user_id=-1
         )
-        
+
         cls.test_claim_item = ClaimItem.objects.create(
-            claim = cls.test_claim,
-            item =create_test_item(
+            claim=cls.test_claim,
+            item=create_test_item(
                 'D',
-                custom_props={"code": "cCode", "price" :1000}
+                custom_props={"code": "cCode", "price": 1000}
             ),
-            price_asked = 1000,
+            price_asked=1000,
             qty_provided=1,
             audit_user_id=-1,
             status=ClaimDetail.STATUS_PASSED,
             availability=True
         )
         cls.test_claim_service = ClaimService.objects.create(
-            claim = cls.test_claim,
-            service = create_test_service(
+            claim=cls.test_claim,
+            service=create_test_service(
                 'D',
-                custom_props={"code": "sCode", "price" :1000}
+                custom_props={"code": "sCode", "price": 1000}
             ),
-            price_asked = 1000,
+            price_asked=1000,
             qty_provided=1,
             audit_user_id=-1,
             status=ClaimDetail.STATUS_PASSED
@@ -175,13 +175,13 @@ class ClaimSubmitServiceTestCase(TestCase):
             item_submits=items,
             service_submits=services
         )
-          
+
         details = "<Details>"
         details = details + "<ClaimDate>09/01/2020</ClaimDate>"
         details = details + f"<HFCode>{self.test_hf.code}</HFCode>"
         details = details + f"<ClaimAdmin>{self.test_claim_admin.code}</ClaimAdmin>"
         details = details + "<ClaimCode>code_ABVC</ClaimCode>"
-        details = details + f"<CHFID>{self.test_insuree.chf_id}</CHFID>"        
+        details = details + f"<CHFID>{self.test_insuree.chf_id}</CHFID>"
         details = details + "<StartDate>13/01/2020</StartDate>"
         details = details + f"<ICDCode>{self.test_icd.code}</ICDCode>"
         details = details + "<Total>334</Total>"
@@ -189,7 +189,7 @@ class ClaimSubmitServiceTestCase(TestCase):
         expected = "<Claim>%s" % details
         expected = expected + "<Items>%s%s</Items>" % (item_a, item_b)
         expected = expected + \
-                   "<Services>%s%s</Services>" % (service_a, service_b)
+            "<Services>%s%s</Services>" % (service_a, service_b)
         expected = expected + "</Claim>"
         self.assertEquals(expected, claim.to_xml())
 
@@ -282,33 +282,33 @@ class ClaimSubmitServiceTestCase(TestCase):
 
     def _get_test_dict(self, code=None):
         return {
-            "health_facility_id": self.test_claim.health_facility_id, 
-            "icd_id": self.test_icd.id, 
-            "date_from": self.test_claim.date_from, 
+            "health_facility_id": self.test_claim.health_facility_id,
+            "icd_id": self.test_icd.id,
+            "date_from": self.test_claim.date_from,
             "code": self.test_claim.code if code is None else code,
-            "date_claimed": self.test_claim.date_claimed, 
+            "date_claimed": self.test_claim.date_claimed,
             "date_to": self.test_claim.date_to,
-            "audit_user_id": self.test_claim.audit_user_id, 
-            "insuree_id": self.test_claim.insuree_id, 
-            "status": self.test_claim.status, 
+            "audit_user_id": self.test_claim.audit_user_id,
+            "insuree_id": self.test_claim.insuree_id,
+            "status": self.test_claim.status,
             "validity_from": self.test_claim.validity_from,
             "items": [{
-                "qty_provided": self.test_claim_item.qty_provided, 
-                "price_asked": self.test_claim_item.price_asked, 
-                "item_id": self.test_claim_item.item_id, 
-                "status": self.test_claim_item.status, 
+                "qty_provided": self.test_claim_item.qty_provided,
+                "price_asked": self.test_claim_item.price_asked,
+                "item_id": self.test_claim_item.item_id,
+                "status": self.test_claim_item.status,
                 "availability": self.test_claim_item.availability,
-                "validity_from": self.test_claim_item.validity_from, 
-                "validity_to": self.test_claim_item.validity_to, 
+                "validity_from": self.test_claim_item.validity_from,
+                "validity_to": self.test_claim_item.validity_to,
                 "audit_user_id": self.test_claim_item.audit_user_id
             }],
             "services": [{
-                "qty_provided": self.test_claim_service.qty_provided, 
-                "price_asked": self.test_claim_service.price_asked, 
-                "service_id": self.test_claim_service.service_id, 
-                "status": self.test_claim_service.status, 
-                "validity_from": self.test_claim_service.validity_from, 
-                "validity_to": self.test_claim_service.validity_to, 
+                "qty_provided": self.test_claim_service.qty_provided,
+                "price_asked": self.test_claim_service.price_asked,
+                "service_id": self.test_claim_service.service_id,
+                "status": self.test_claim_service.status,
+                "validity_from": self.test_claim_service.validity_from,
+                "validity_to": self.test_claim_service.validity_to,
                 "audit_user_id": self.test_claim_service.audit_user_id
             }]
         }
