@@ -1,12 +1,15 @@
-import json
 import logging
 import uuid
 import pathlib
 import base64
-import graphene
-import graphene_django_optimizer
-from django.db.models import OuterRef, Avg, Subquery, Q
+from typing import Callable, Dict
 
+import graphene
+import importlib
+import graphene_django_optimizer
+from django.db.models import Count, Case, When, IntegerField, Q
+
+from core.models import MutationLog, Officer
 from .apps import ClaimConfig
 from claim.validations import validate_claim, get_claim_category, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, approved_amount
@@ -18,7 +21,6 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
-from location.schema import UserDistrict
 
 from claim.gql_queries import ClaimGQLType
 from claim.models import Claim, Feedback, FeedbackPrompt, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment, \
@@ -27,6 +29,8 @@ from product.models import ProductItemOrService
 
 from claim.utils import process_items_relations, process_services_relations
 from .services import check_unique_claim_code
+from django.db import transaction
+
 logger = logging.getLogger(__name__)
 
 
@@ -125,7 +129,7 @@ class ClaimCodeInputType(graphene.String):
 
     @staticmethod
     def coerce_string(value):
-        assert_string_length(value, 8)
+        assert_string_length(value, ClaimConfig.max_claim_length)
         return value
 
     serialize = coerce_string
@@ -134,7 +138,7 @@ class ClaimCodeInputType(graphene.String):
     @staticmethod
     def parse_literal(ast):
         result = graphene.String.parse_literal(ast)
-        assert_string_length(result, 8)
+        assert_string_length(result, ClaimConfig.max_claim_length)
         return result
 
 
@@ -194,6 +198,7 @@ class ClaimInputType(OpenIMISMutation.Input):
     id = graphene.Int(required=False, read_only=True)
     uuid = graphene.String(required=False)
     code = ClaimCodeInputType(required=True)
+    autogenerate = graphene.Boolean(required=False)
     insuree_id = graphene.Int(required=True)
     date_from = graphene.Date(required=True)
     date_to = graphene.Date(required=False)
@@ -206,6 +211,8 @@ class ClaimInputType(OpenIMISMutation.Input):
     date_claimed = graphene.Date(required=True)
     date_processed = graphene.Date(required=False)
     health_facility_id = graphene.Int(required=True)
+    refer_from_id = graphene.Int(required=False)
+    refer_to_id = graphene.Int(required=False)
     batch_run_id = graphene.Int(required=False)
     category = graphene.String(max_length=1, required=False)
     visit_type = graphene.String(max_length=1, required=False)
@@ -214,10 +221,11 @@ class ClaimInputType(OpenIMISMutation.Input):
     explanation = graphene.String(required=False)
     adjustment = graphene.String(required=False)
     json_ext = graphene.types.json.JSONString(required=False)
-
+    restore = graphene.UUID(required=False)
     feedback_available = graphene.Boolean(default=False)
     feedback_status = TinyInt(required=False)
     feedback = graphene.Field(FeedbackInputType, required=False)
+    care_type = graphene.String(required=False)
 
     items = graphene.List(ClaimItemInputType, required=False)
     services = graphene.List(ClaimServiceInputType, required=False)
@@ -272,16 +280,63 @@ def create_attachments(claim_id, attachments):
         create_attachment(claim_id, attachment)
 
 
-def update_or_create_claim(data, user):
-    items = data.pop('items') if 'items' in data else []
-    services = data.pop('services') if 'services' in data else []
+def validate_claim_data(data, user):
+    services = data.get('services') if 'services' in data else []
     incoming_code = data.get('code')
-    claim_uuid = data.pop("uuid", None)
+    claim_uuid = data.get("uuid", None)
+    restore = data.get('restore', None)
     current_claim = Claim.objects.filter(uuid=claim_uuid).first()
     current_code = current_claim.code if current_claim else None
-    if current_code != incoming_code \
-            and check_unique_claim_code(incoming_code):
+    
+ 
+
+    if restore:
+        restored_qs = Claim.objects.filter(uuid=restore)
+        restored_from_claim = restored_qs.first()
+        restored_count = Claim.objects.filter(restore=restored_from_claim).count()
+        if not restored_qs.exists():
+            raise ValidationError(_("mutation.restored_from_does_not_exist"))
+        if not restored_from_claim.status == Claim.STATUS_REJECTED:
+            raise ValidationError(_("mutation.cannot_restore_not_rejected_claim"))
+        if not user.has_perms(ClaimConfig.gql_mutation_restore_claims_perms):
+            raise ValidationError(_("mutation.no_restore_rights"))
+        if ClaimConfig.claim_max_restore and restored_count >= ClaimConfig.claim_max_restore:
+            raise ValidationError(_("mutation.max_restored_claim") % {
+                "max_restore": ClaimConfig.claim_max_restore
+            })
+           
+    elif current_claim is not None and current_claim.status not in (Claim.STATUS_CHECKED, Claim.STATUS_ENTERED):
+        raise ValidationError(_("mutation.claim_not_editable")) 
+
+    if not validate_number_of_additional_diagnoses(data):
+        raise ValidationError(_("mutation.claim_too_many_additional_diagnoses"))
+
+    if ClaimConfig.claim_validation_multiple_services_explanation_required:
+        for service in services:
+            if service["qty_provided"] > 1 and not service.get("explanation"):
+                raise ValidationError(_("mutation.service_explanation_required"))
+
+    if len(incoming_code) > ClaimConfig.max_claim_length:
+        raise ValidationError(_("mutation.code_name_too_long"))
+
+    if not restore and current_code != incoming_code and check_unique_claim_code(incoming_code):
         raise ValidationError(_("mutation.code_name_duplicated"))
+
+
+@transaction.atomic
+def update_or_create_claim(data, user):
+    validate_claim_data(data, user)
+    items = data.pop('items') if 'items' in data else []
+    services = data.pop('services') if 'services' in data else []
+    claim_uuid = data.pop("uuid", None)
+    autogenerate_code = data.pop('autogenerate', None)
+    restore = data.pop('restore', None)
+    if restore:
+        restored_qs = Claim.objects.filter(uuid=restore)
+        restored_from_claim = restored_qs.first()
+        data["restore"] = restored_from_claim
+    if autogenerate_code:
+        data['code'] = __autogenerate_claim_code()
     if "client_mutation_id" in data:
         data.pop('client_mutation_id')
     if "client_mutation_label" in data:
@@ -309,6 +364,34 @@ def update_or_create_claim(data, user):
     return claim
 
 
+def validate_number_of_additional_diagnoses(incoming_data):
+    additional_diagnoses_count = 0
+    for key in incoming_data.keys():
+        if key.startswith("icd_") and key.endswith("_id") and key != "icd_id":
+            additional_diagnoses_count += 1
+
+    return additional_diagnoses_count <= ClaimConfig.additional_diagnosis_number_allowed
+
+
+def __autogenerate_claim_code():
+    module_name, function_name = '[undefined]', '[undefined]'
+    try:
+        claim_code_function = _get_autogenerating_func()
+        return claim_code_function(ClaimConfig.autogenerated_claim_code_config)
+    except ImportError as e:
+        logger.error(f"Error: Could not import module '{module_name}' for claim code autogeneration")
+        raise e
+    except AttributeError as e:
+        logger.error(f"Error: Could not find function '{function_name}' in module '{module_name}' for claim code autogeneration")
+        raise e
+
+
+def _get_autogenerating_func() -> Callable[[Dict], Callable]:
+    module_name, function_name = ClaimConfig.autogenerate_func.rsplit('.', 1)
+    module = importlib.import_module(module_name)
+    return getattr(module, function_name)
+
+
 class CreateClaimMutation(OpenIMISMutation):
     """
     Create a new claim. The claim items and services can all be entered with this call
@@ -328,11 +411,7 @@ class CreateClaimMutation(OpenIMISMutation):
                     _("mutation.authentication_required"))
             if not user.has_perms(ClaimConfig.gql_mutation_create_claims_perms):
                 raise PermissionDenied(_("unauthorized"))
-            # Claim code unicity should be enforced at DB Scheme level...
-            if Claim.objects.filter(code=data['code']).exists():
-                return [{
-                    'message': _("claim.mutation.duplicated_claim_code") % {'code': data['code']},
-                }]
+            is_claim_code_autogenerated = data.get("autogenerate", False)
             data['audit_user_id'] = user.id_for_audit
             data['status'] = Claim.STATUS_ENTERED
             from core.utils import TimeUtils
@@ -341,6 +420,8 @@ class CreateClaimMutation(OpenIMISMutation):
             claim = update_or_create_claim(data, user)
             if attachments:
                 create_attachments(claim.id, attachments)
+            if is_claim_code_autogenerated:
+                return {"client_mutation_label": f"Create Claim - {claim.code}", "code": f"{claim.code}"}
             return None
         except Exception as exc:
             return [{
@@ -396,11 +477,8 @@ class CreateAttachmentMutation(OpenIMISMutation):
             claim_uuid = data.pop("claim_uuid")
             queryset = Claim.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                dist = UserDistrict.get_user_districts(user._u)
-                queryset = queryset.filter(
-                    health_facility__location__id__in=[
-                        l.location_id for l in dist]
-                )
+                from location.schema import LocationManager
+                queryset = LocationManager().build_user_location_filter_query( user._u, prefix='health_facility__location', queryset=queryset, loc_types=['D'])           
             claim = queryset.filter(uuid=claim_uuid).first()
             if not claim:
                 raise PermissionDenied(_("unauthorized"))
@@ -426,13 +504,9 @@ class UpdateAttachmentMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                from location.models import UserDistrict
-                dist = UserDistrict.get_user_districts(user._u)
-                queryset = queryset.select_related("claim") \
-                    .filter(
-                    claim__health_facility__location__id__in=[
-                        l.location_id for l in dist]
-                )
+                from location.schema import  LocationManager
+                queryset = LocationManager().build_user_location_filter_query( user._u, prefix='claim__health_facility__location', queryset = queryset.select_related("claim"), loc_types=['D'])
+
             attachment = queryset \
                 .filter(id=data['id']) \
                 .first()
@@ -466,13 +540,8 @@ class DeleteAttachmentMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                from location.models import UserDistrict
-                dist = UserDistrict.get_user_districts(user._u)
-                queryset = queryset.select_related("claim") \
-                    .filter(
-                    claim__health_facility__location__id__in=[
-                        l.location_id for l in dist]
-                )
+                from location.schema import LocationManager
+                queryset = LocationManager().build_user_location_filter_query( user._u, prefix='health_facility__location', queryset = queryset, loc_types=['D'])     
             attachment = queryset \
                 .filter(id=data['id']) \
                 .first()
@@ -489,7 +558,47 @@ class DeleteAttachmentMutation(OpenIMISMutation):
                 'detail': str(exc)}]
 
 
-class SubmitClaimsMutation(OpenIMISMutation):
+class ClaimSubmissionStatsMixin:
+    @classmethod
+    def _generate_claim_submission_stats(cls, uuids):
+        claims_query = Claim.objects.filter(uuid__in=list(uuids))
+        claim_item_query = ClaimItem.objects.filter(claim__in=claims_query)
+        claim_service_query = ClaimService.objects.filter(claim__in=claims_query)
+        claim_stats = claims_query.aggregate(
+            submitted=Count('uuid', output_field=IntegerField()),
+            checked=Count(Case(When(status=4, then=1), output_field=IntegerField())),
+            processed=Count(Case(When(status=8, then=1), output_field=IntegerField())),
+            valuated=Count(Case(When(status=16, then=1), output_field=IntegerField())),
+            rejected=Count(Case(When(status=1, then=1), output_field=IntegerField())),
+        )
+        item_stats = claim_item_query.aggregate(
+            items_passed=Count(Case(When(status=1, then=1), output_field=IntegerField())),
+            items_rejected=Count(Case(When(status=2, then=1), output_field=IntegerField())),
+        )
+        service_stats = claim_service_query.aggregate(
+            services_passed=Count(Case(When(status=1, then=1), output_field=IntegerField())),
+            services_rejected=Count(Case(When(status=2, then=1), output_field=IntegerField())),
+        )
+
+        return {**claim_stats, **item_stats, **service_stats}
+
+    @classmethod
+    def _parse_submission_stats(cls, claim_submission_stats):
+        return claim_submission_stats
+
+    @classmethod
+    def add_submission_stats_to_mutation_log(cls, client_mutation_id, uuids):
+        mutation_log = MutationLog.objects.filter(client_mutation_id=client_mutation_id).first()
+        claim_submission_stats = cls._generate_claim_submission_stats(uuids)
+        parsed_stats = cls._parse_submission_stats(claim_submission_stats)
+        if isinstance(mutation_log.json_ext, dict):
+            mutation_log.json_ext["claim_stats"] = parsed_stats
+        else:
+            mutation_log.json_ext = {"claim_stats": parsed_stats}
+        mutation_log.save()
+
+
+class SubmitClaimsMutation(OpenIMISMutation, ClaimSubmissionStatsMixin):
     """
     Submit one or several claims.
     """
@@ -505,12 +614,27 @@ class SubmitClaimsMutation(OpenIMISMutation):
         additional_filters = graphene.String()
 
     @classmethod
+    def _parse_submission_stats(cls, claim_submission_stats):
+        return {
+            "submitted": claim_submission_stats["submitted"],
+            "checked": claim_submission_stats["checked"],
+            "rejected": claim_submission_stats["rejected"],
+            "items_passed": claim_submission_stats["items_passed"],
+            "items_rejected": claim_submission_stats["items_rejected"],
+            "services_passed": claim_submission_stats["services_passed"],
+            "services_rejected": claim_submission_stats["services_rejected"],
+            "header": "Claims submitted",
+            # failed
+        }
+
+    @classmethod
     @mutation_on_uuids_from_filter(Claim, ClaimGQLType, 'additional_filters', __filter_handlers)
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_submit_claims_perms):
             raise PermissionDenied(_("unauthorized"))
         errors = []
         uuids = data.get("uuids", [])
+        client_mutation_id = data.get("client_mutation_id", None)
 
         for claim_uuid in uuids:
             c_errors = []
@@ -548,6 +672,7 @@ class SubmitClaimsMutation(OpenIMISMutation):
                 })
         if len(errors) == 1:
             errors = errors[0]['list']
+        cls.add_submission_stats_to_mutation_log(client_mutation_id, uuids)
         logger.debug("SubmitClaimsMutation: claim done, errors: %s", len(errors))
         return errors
 
@@ -590,18 +715,30 @@ def create_feedback_prompt(claim_uuid, user):
     from core.utils import TimeUtils
     feedback_prompt['feedback_prompt_date'] = TimeUtils.date()
     feedback_prompt['validity_from'] = TimeUtils.now()
-    feedback_prompt['claim_id'] = current_claim
-    feedback_prompt['officer_id'] = current_claim.admin_id
+    feedback_prompt['claim'] = current_claim
+    villages = []
+    if current_claim.insuree.current_village:
+        villages.append(current_claim.insuree.current_village)
+    if current_claim.insuree.family.location:
+        villages.append(current_claim.insuree.family.location)
+    officer = Officer.objects.filter(
+        *filter_validity(),
+        officer_villages__location__in=villages
+    ).first()
+    if not officer:
+        raise RuntimeError(f"No officer found for the insuree village code {', '.join([str(v.code) for v in villages ])}")
+    feedback_prompt['officer_id'] = officer.id
     feedback_prompt['audit_user_id'] = user.id_for_audit
     FeedbackPrompt.objects.create(
         **feedback_prompt
     )
 
 
+
 def set_feedback_prompt_validity_to_to_current_date(claim_uuid):
     try:
-        claim_id = Claim.objects.get(uuid=claim_uuid).id
-        feedback_prompt_id = FeedbackPrompt.objects.get(claim_id=claim_id, validity_to=None).id
+        claim = Claim.objects.get(uuid=claim_uuid).id
+        feedback_prompt_id = FeedbackPrompt.objects.get(claim=claim, validity_to=None).id
         from core.utils import TimeUtils
         current_feedback_prompt = FeedbackPrompt.objects.get(id=feedback_prompt_id)
         current_feedback_prompt.validity_to = TimeUtils.now()
@@ -845,7 +982,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                 'detail': str(exc)}]
 
 
-class ProcessClaimsMutation(OpenIMISMutation):
+class ProcessClaimsMutation(OpenIMISMutation, ClaimSubmissionStatsMixin):
     """
     Process one or several claims.
     """
@@ -856,11 +993,24 @@ class ProcessClaimsMutation(OpenIMISMutation):
         uuids = graphene.List(graphene.String)
 
     @classmethod
+    def _parse_submission_stats(cls, claim_submission_stats):
+        return {
+            "submitted": claim_submission_stats["submitted"],
+            "processed": claim_submission_stats["processed"],
+            "valuated": claim_submission_stats["valuated"],
+            "rejected": claim_submission_stats["rejected"],
+            "header": "Submitted to process",
+            # failed
+        }
+
+    @classmethod
     def async_mutate(cls, user, **data):
         if not user.has_perms(ClaimConfig.gql_mutation_process_claims_perms):
             raise PermissionDenied(_("unauthorized"))
         errors = []
-        for claim_uuid in data["uuids"]:
+        uuids = data.get("uuids", None)
+        client_mutation_id = data.get("client_mutation_id", None)
+        for claim_uuid in uuids:
             logger.debug("ProcessClaimsMutation: processing %s", claim_uuid)
             c_errors = []
             claim = Claim.objects \
@@ -889,6 +1039,7 @@ class ProcessClaimsMutation(OpenIMISMutation):
 
         if len(errors) == 1:
             errors = errors[0]['list']
+        cls.add_submission_stats_to_mutation_log(client_mutation_id, uuids)
         logger.debug("ProcessClaimsMutation: claims %s done, errors: %s", data["uuids"], len(errors))
         return errors
 
