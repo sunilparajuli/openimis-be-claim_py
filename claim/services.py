@@ -226,11 +226,8 @@ class ClaimSubmitService(object):
             raise PermissionDenied(_("unauthorized"))
 
     def _validate_user_hf(self, hf_code):
-        from location.models import UserDistrict, HealthFacility
-        dist = UserDistrict.get_user_districts(self.user._u)
-        hf = HealthFacility.filter_queryset().filter(code=hf_code)\
-            .filter(location_id__in=[l.location_id for l in dist])\
-            .exists()
+        from location.models import LocationManager, HealthFacility
+        hf = LocationManager().build_user_location_filter_query(self.user._u, queryset = HealthFacility.filter_queryset().filter(code=hf_code))
         if not hf and settings.ROW_SECURITY:
             raise ClaimSubmitError("Invalid health facility code or health facility not allowed for user")
 
@@ -282,11 +279,8 @@ class ClaimReportService(object):
         from .models import Claim
         queryset = Claim.objects.filter(*core.filter_validity())
         if settings.ROW_SECURITY:
-            from location.models import UserDistrict
-            dist = UserDistrict.get_user_districts(self.user._u)
-            queryset = queryset.filter(
-                health_facility__location__id__in=[l.location_id for l in dist]
-            )
+            from location.models import LocationManager
+            queryset = LocationManager().build_user_location_filter_query( self.user._u, prefix='health_facility__location', queyset=queryset, loc_types=['D'])
         claim = queryset\
             .select_related('health_facility') \
             .select_related('insuree') \
@@ -320,11 +314,8 @@ class ClaimCreateService:
         self.user = user
 
     def _validate_user_hf(self, hf_id):
-        from location.models import UserDistrict, HealthFacility
-        dist = UserDistrict.get_user_districts(self.user._u)
-        hf = HealthFacility.filter_queryset().filter(id=hf_id)\
-            .filter(location_id__in=[l.location_id for l in dist])\
-            .exists()
+        from location.models import LocationManager, HealthFacility
+        hf = LocationManager().build_user_location_filter_query(self.user._u, queryset = HealthFacility.filter_queryset().filter(id=hf_id))
         if not hf and settings.ROW_SECURITY:
             raise ValidationError("Invalid health facility code or health facility not allowed for user")
 
