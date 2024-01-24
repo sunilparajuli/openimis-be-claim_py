@@ -7,7 +7,7 @@ from location.models import HealthFacility, Location, LocationManager
 from .services import check_unique_claim_code
 import django
 from core.schema import signal_mutation_module_validate, signal_mutation_module_after_mutating
-from django.db.models import OuterRef, Subquery, Avg, Q
+from django.db.models import OuterRef, Subquery, Avg, Q, F
 import graphene_django_optimizer as gql_optimizer
 from core.schema import OrderedDjangoFilterConnectionField, OfficerGQLType
 from core import filter_validity
@@ -64,9 +64,9 @@ class Query(graphene.ObjectType):
         description="Checks that the specified claim code is unique."
     )
     fsp_from_claim = graphene.Field(
-        graphene.Boolean,
-        claim_code=graphene.String(required=False),
-        insure_code=graphene.String(required=False),
+        HealthFacilityGQLType,
+        insuree_code=graphene.String(required=True),
+        date_claimed=graphene.Date(required=True),
         description="Return FSP of insuree during creation of the claim."
     )
 
@@ -241,14 +241,14 @@ class Query(graphene.ObjectType):
             )
         return qs
 
-    def fsp_from_claim(self, info, **kwargs):
+    def resolve_fsp_from_claim(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
             raise PermissionDenied(_("unauthorized"))
-
-        claim = Claim.objects.get(id=kwargs['claim_id'], validity_to_isnull=True)
-        insuree = Insuree.objects.filter(id=claim.insuree_id, validity_to_isnull=True)
-        HF = HealthFacility.objects.get(id=insuree.health_facility, validity_to_isnull=True)
-        return HF
+        result = Insuree.objects.filter(
+            chf_id=kwargs['insuree_code'],
+            validity_from__lte=kwargs['date_claimed'],
+        ).order_by(F('validity_to').asc(nulls_last=True)).first().health_facility
+        return result
 
     def resolve_claim_with_same_diagnosis(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
