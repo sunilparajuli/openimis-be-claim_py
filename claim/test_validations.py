@@ -1118,7 +1118,8 @@ class ValidationTest(TestCase):
     def test_set_status(self):
         class DummyUser:
             id_for_audit=-1
-        claim = create_test_claim(custom_props={'status':Claim.STATUS_CHECKED})
+        claim = create_test_claim(custom_props={'status':Claim.STATUS_CHECKED, 
+                                                'insuree':insuree})
         set_claims_status([claim.uuid], 'feedback_status', Claim.FEEDBACK_SELECTED, user = DummyUser())
         claim.refresh_from_db()
         self.assertEqual(claim.feedback_status, Claim.FEEDBACK_SELECTED)

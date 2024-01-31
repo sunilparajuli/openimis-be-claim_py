@@ -16,6 +16,7 @@ def create_test_claim(custom_props={}):
             "insuree_id": 2,
             "status": 2,
             "validity_from": datetime.datetime(2019, 6, 1),
+            "code":  str(uuid4()),
             **custom_props
         }
     )
