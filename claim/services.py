@@ -280,7 +280,7 @@ class ClaimReportService(object):
         queryset = Claim.objects.filter(*core.filter_validity())
         if settings.ROW_SECURITY:
             from location.models import LocationManager
-            queryset = LocationManager().build_user_location_filter_query( self.user._u, prefix='health_facility__location', queyset=queryset, loc_types=['D'])
+            queryset = LocationManager().build_user_location_filter_query( self.user._u, prefix='health_facility__location', queryset=queryset, loc_types=['D'])
         claim = queryset\
             .select_related('health_facility') \
             .select_related('insuree') \

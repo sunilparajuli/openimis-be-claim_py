@@ -268,6 +268,10 @@ def create_attachment(claim_id, data):
     data["claim_id"] = claim_id
     from core import datetime
     now = datetime.datetime.now()
+    if 'url' in data:
+        # TODO optimally this should check domain specifically, not substring
+        if not any(domain in data['url'] for domain in ClaimConfig.allowed_domains_attachments):
+            raise ValidationError(_("mutation.attachment_url_domain_not_allowed"))
     if ClaimConfig.claim_attachments_root_path:
         # don't use data date as it may be updated by user afterwards!
         data['url'] = create_file(now, claim_id, data.pop('document'))
