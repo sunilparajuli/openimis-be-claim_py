@@ -214,6 +214,7 @@ class ClaimGraphQLTestCase(GraphQLTestCase):
 
         # select for feeback
         claim = Claim.objects.filter(code = 'm-c-claim').first()
+        create_test_officer(villages=[claim.insuree.family.location])
         self.assertEqual(claim.status, Claim.STATUS_CHECKED)
         response = self.query(f'''
             mutation {{
