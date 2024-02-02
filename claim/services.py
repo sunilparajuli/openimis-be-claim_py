@@ -4,6 +4,8 @@ import logging
 from medical.models import Item, Service
 
 import core
+from core.models import Officer
+from core.utils import filter_validity
 from django.db import connection, transaction
 from gettext import gettext as _
 
@@ -11,7 +13,7 @@ from core.signals import register_service_signal
 from .apps import ClaimConfig
 from django.conf import settings
 
-from claim.models import Claim, ClaimItem, ClaimService, ClaimDetail, ClaimDedRem
+from claim.models import Claim, ClaimItem, ClaimService, ClaimDetail, ClaimDedRem, FeedbackPrompt
 from product.models import ProductItemOrService
 
 from claim.utils import process_items_relations, process_services_relations
@@ -584,3 +586,99 @@ def details_with_relative_prices(details):
 def with_relative_prices(claim):
     return details_with_relative_prices(claim.items) or details_with_relative_prices(claim.services)
 
+def set_claims_status(uuids, field, status, audit_data=None, user=None):
+    errors = []
+    for claim_uuid in uuids:
+        claim = Claim.objects \
+            .filter(uuid=claim_uuid,
+                    validity_to__isnull=True) \
+            .first()
+        if claim is None:
+            errors += [{'message': _(
+                "claim.validation.id_does_not_exist") % {'id': claim_uuid}}]
+            continue
+        try:
+            claim.save_history()
+            setattr(claim, field, status)
+            # creating/cancelling feedback prompts
+            if field == 'feedback_status':
+                if status == Claim.FEEDBACK_SELECTED:
+                    create_feedback_prompt(claim, user)
+                elif status in [Claim.FEEDBACK_NOT_SELECTED, Claim.FEEDBACK_BYPASSED]:
+                    set_feedback_prompt_validity_to_to_current_date(claim_uuid)
+            if audit_data:
+                for k, v in audit_data.items():
+                    setattr(claim, k, v)
+            claim.save()
+        except Exception as exc:
+            errors += [
+                {'message': _("claim.mutation.failed_to_change_status_of_claim") %
+                            {'code': claim.code} }
+            ]
+            if hasattr(exc, 'messages') and len(exc.messages):
+                for m in exc.messages:
+                    errors.append({'message': m })
+            elif hasattr(exc, 'args') and len(exc.args):
+                for m in exc.args:
+                    errors.append({'message': m })
+    return errors
+
+
+def create_feedback_prompt(current_claim, user):
+    
+    feedback_prompt = {}
+    from core.utils import TimeUtils
+    feedback_prompt['feedback_prompt_date'] = TimeUtils.date()
+    feedback_prompt['validity_from'] = TimeUtils.now()
+    feedback_prompt['claim'] = current_claim
+    villages = []
+    if current_claim.insuree.current_village:
+        villages.append(current_claim.insuree.current_village)
+    if current_claim.insuree.family.location:
+        villages.append(current_claim.insuree.family.location)
+    officer = Officer.objects.filter(
+        *filter_validity(),
+        officer_villages__location__in=villages,
+        phone__isnull = False
+    ).exclude(phone__exact= '').first()
+    if not officer:
+        bad_officer = Officer.objects.filter(
+        *filter_validity(),
+        officer_villages__location__in=villages,
+        ).first()
+        if bad_officer:
+            msg = [' officer '+bad_officer.code+ 'has not phone setup']
+        else:
+            msg = []
+        raise RuntimeError(f"No officer with a phone number found for the insuree village code, \
+            {', '.join([str(v.code) for v in villages ])}", *msg)
+            
+    feedback_prompt['officer_id'] = officer.id
+    feedback_prompt['phone_number'] = officer.phone
+    feedback_prompt['audit_user_id'] = user.id_for_audit
+    FeedbackPrompt.objects.create(
+        **feedback_prompt
+    )
+
+
+
+def set_feedback_prompt_validity_to_to_current_date(claim_uuid):
+    try:
+        claim = Claim.objects.get(uuid=claim_uuid).id
+        feedback_prompt_id = FeedbackPrompt.objects.get(claim=claim, validity_to=None).id
+        from core.utils import TimeUtils
+        current_feedback_prompt = FeedbackPrompt.objects.get(id=feedback_prompt_id)
+        current_feedback_prompt.validity_to = TimeUtils.now()
+        current_feedback_prompt.save()
+    except ObjectDoesNotExist:
+        return "No such feedback prompt exist."
+
+
+def update_claims_dedrems(uuids, user):
+    # We could do it in one query with filter(claim__uuid__in=uuids) but we'd loose the logging
+    errors = []
+    for uuid in uuids:
+        logger.debug(f"delivering review on {uuid}, reprocessing dedrem ({user})")
+        claim = Claim.objects.get(uuid=uuid)
+        errors += validate_and_process_dedrem_claim(claim, user, False)
+    return errors

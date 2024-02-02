@@ -5,7 +5,7 @@ from collections import namedtuple
 from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail
 from core import utils
 from core.datetimes.shared import datetimedelta
-from core.models import filter_validity
+from core.utils import filter_validity
 from django.db import connection
 from django.db.models import Sum, Q
 from django.db.models.functions import Coalesce

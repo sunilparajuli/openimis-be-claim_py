@@ -1,4 +1,4 @@
-from claim.gql_mutations import set_claims_status, update_claims_dedrems
+from claim.services import update_claims_dedrems, set_claims_status
 from claim.models import Claim, ClaimDedRem, ClaimItem, ClaimDetail, ClaimService
 from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem, \
     mark_test_claim_as_processed, delete_claim_with_itemsvc_dedrem_and_history
