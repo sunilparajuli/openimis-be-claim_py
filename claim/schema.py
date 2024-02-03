@@ -246,7 +246,7 @@ class Query(graphene.ObjectType):
             raise PermissionDenied(_("unauthorized"))
         result = Insuree.objects.filter(
             chf_id=kwargs['insuree_code'],
-            validity_from__lte=kwargs['date_claimed'],
+            *filter_validity(validity=kwargs['date_claimed']),
         ).order_by(F('validity_to').asc(nulls_last=True)).first().health_facility
         return result
 
