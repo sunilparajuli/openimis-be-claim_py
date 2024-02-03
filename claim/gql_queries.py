@@ -141,6 +141,7 @@ class ClaimAttachmentGQLType(DjangoObjectType):
             "date": ["exact", "lt", "lte", "gt", "gte"],
             "filename": ["exact", "icontains"],
             "mime": ["exact", "icontains"],
+            "general_type": ["exact", "icontains"],
             "url": ["exact", "icontains"],
             **prefix_filterset("claim__", ClaimGQLType._meta.filter_fields),
         }
