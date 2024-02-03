@@ -383,9 +383,10 @@ def update_sum_claims( claim):
             service_sum=Sum(F('price_asked')*F('qty_provided'))).values('service_sum').order_by()[:1],
         output_field=FloatField()
     )
-    Claim.objects.filter(uuid=claim.uuid).update(
+    Claim.objects.filter(id=claim.id).update(
         claimed=Coalesce(item_asked, 0) + Coalesce(service_asked, 0)
     )
+
 
 def check_unique_claim_code(code):
     if Claim.objects.filter(code=code, validity_to__isnull=True).exists():
