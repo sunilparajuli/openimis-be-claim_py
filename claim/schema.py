@@ -63,6 +63,12 @@ class Query(graphene.ObjectType):
         claim_code=graphene.String(required=True),
         description="Checks that the specified claim code is unique."
     )
+    fsp_from_claim = graphene.Field(
+        HealthFacilityGQLType,
+        insuree_code=graphene.String(required=True),
+        date_claimed=graphene.Date(required=True),
+        description="Return FSP of insuree during creation of the claim."
+    )
 
     claim_with_same_diagnosis = OrderedDjangoFilterConnectionField(
         ClaimGQLType,
@@ -234,6 +240,15 @@ class Query(graphene.ObjectType):
                 | Q(other_names__icontains=search)
             )
         return qs
+
+    def resolve_fsp_from_claim(self, info, **kwargs):
+        if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
+            raise PermissionDenied(_("unauthorized"))
+        result = Insuree.objects.filter(
+            chf_id=kwargs['insuree_code'],
+            *filter_validity(validity=kwargs['date_claimed']),
+        ).first().health_facility
+        return result
 
     def resolve_claim_with_same_diagnosis(self, info, **kwargs):
         if not info.context.user.has_perms(ClaimConfig.gql_query_claim_officers_perms):
