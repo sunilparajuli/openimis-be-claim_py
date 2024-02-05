@@ -247,7 +247,7 @@ class Query(graphene.ObjectType):
         result = Insuree.objects.filter(
             chf_id=kwargs['insuree_code'],
             *filter_validity(validity=kwargs['date_claimed']),
-        ).order_by(F('validity_to').asc(nulls_last=True)).first().health_facility
+        ).first().health_facility
         return result
 
     def resolve_claim_with_same_diagnosis(self, info, **kwargs):
