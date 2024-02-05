@@ -7,7 +7,7 @@ from location.models import HealthFacility, Location, LocationManager
 from .services import check_unique_claim_code
 import django
 from core.schema import signal_mutation_module_validate, signal_mutation_module_after_mutating
-from django.db.models import OuterRef, Subquery, Avg, Q, F
+from django.db.models import OuterRef, Subquery, Avg, Q
 import graphene_django_optimizer as gql_optimizer
 from core.schema import OrderedDjangoFilterConnectionField, OfficerGQLType
 from core import filter_validity
