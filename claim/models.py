@@ -131,7 +131,7 @@ class Feedback(core_models.VersionedModel):
 
 
 
-signal_claim_rejection = dispatch.Signal(providing_args=["claim"])
+signal_claim_rejection = dispatch.Signal(["claim"])
 
 
 class Claim(core_models.VersionedModel, core_models.ExtendableModel):
