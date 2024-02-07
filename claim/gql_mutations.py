@@ -274,7 +274,8 @@ def create_attachment(claim_id, data):
     data['module'] = 'claim'
     if general_type == GeneralClaimAttachmentType.URL:
         parsed_url = urlparse(data['url'])
-        if not any(domain in parsed_url.path for domain in ClaimConfig.allowed_domains_attachments):
+        if (ClaimConfig.allowed_domains_attachments and
+                not any(domain in parsed_url.path for domain in ClaimConfig.allowed_domains_attachments)):
             raise ValidationError(_("mutation.attachment_url_domain_not_allowed"))
     elif general_type == GeneralClaimAttachmentType.FILE:
         if ClaimConfig.claim_attachments_root_path:

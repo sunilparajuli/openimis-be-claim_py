@@ -32,7 +32,7 @@ DEFAULT_CFG = {
     "autogenerate_func": 'claim.utils.autogenerate_nepali_claim_code',
     "additional_diagnosis_number_allowed": 4,
     "claim_max_restore": None,
-    "allowed_domains_attachments": ["claimdoc.hib.gov.np", "wp.pl"]
+    "allowed_domains_attachments": ["claimdoc.hib.gov.np"]
 }
 
 
