@@ -5,6 +5,7 @@ from collections import namedtuple
 from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail
 from core import utils
 from core.datetimes.shared import datetimedelta
+from core.utils import filter_validity
 from django.db import connection
 from django.db.models import Sum, Q
 from django.db.models.functions import Coalesce
@@ -38,7 +39,7 @@ REJECTION_REASON_MAX_DELIVERIES = 15
 REJECTION_REASON_QTY_OVER_LIMIT = 16
 REJECTION_REASON_WAITING_PERIOD_FAIL = 17
 REJECTION_REASON_MAX_ANTENATAL = 19
-
+REJECTION_REASON_INVALID_CLAIM = 20
 
 def validate_claim(claim, check_max):
     """
@@ -99,6 +100,8 @@ def validate_claim(claim, check_max):
                     'message': _("claim.validation.all_items_and_services_rejected") % {
                         'code': claim.code},
                     'detail': claim.uuid}]
+        if len(detail_errors)>0:
+            errors += detail_errors
         claim.status = Claim.STATUS_REJECTED
         claim.rejection_reason = REJECTION_REASON_INVALID_ITEM_OR_SERVICE
         claim.save()
@@ -934,24 +937,22 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
     # The original code has a pretty complex query here called product_loop that refers to policies while it is
     # actually looping on ClaimItem and ClaimService.
     items_query = claim.items.filter(
-        Q(item__validity_to__isnull=True) | Q(item__validity_to__gte=target_date),
-        validity_to__isnull=True,
+        *filter_validity(validity=target_date, prefix='item__'),
+        *filter_validity(),
+        *filter_validity(prefix='product__'),
         rejection_reason=0,
-        item__validity_from__lte=target_date,
-        product__isnull=False,
-        product__validity_to__isnull=True
     ).values("policy_id", "product_id")
     services_query = claim.services.filter(
-        Q(service__validity_to__isnull=True) | Q(service__validity_to__gte=target_date),
-        validity_to__isnull=True,
+        *filter_validity(validity=target_date, prefix='service__'),
+        *filter_validity(),
+        *filter_validity(prefix='product__'),
         rejection_reason=0,
-        service__validity_from__date__lte=target_date,
-        product__isnull=False, product__validity_to__isnull=True
     ).values("policy_id", "product_id")
     if items_query.count() == 0 and services_query.count() == 0:
         logger.warning(f"claim {claim.uuid} did not have any item or service to valuate.")
     for policy_product in items_query.union(services_query, all=True):
-        product = Product.objects.get(id=policy_product["product_id"])
+        product = Product.objects.get(*filter_validity(validity=target_date), 
+                Q(Q(id=policy_product["product_id"])|Q(legacy_id=policy_product["product_id"])))
         policy_members = InsureePolicy.objects.filter(
             policy_id=policy_product["policy_id"],
             effective_date__isnull=False,
@@ -1088,11 +1089,11 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
         remunerated = 0
         for claim_detail in itertools.chain(
                 claim.items
-                        .filter(validity_to__isnull=True)
-                        .filter(status=ClaimItem.STATUS_PASSED),
+                        .filter(validity_to__isnull=True,
+                                status=ClaimItem.STATUS_PASSED),
                 claim.services
-                        .filter(validity_to__isnull=True)
-                        .filter(status=ClaimService.STATUS_PASSED)):
+                        .filter(validity_to__isnull=True,
+                                status=ClaimService.STATUS_PASSED)):
             detail_is_item = isinstance(claim_detail, ClaimItem)
             itemsvc_quantity = claim_detail.qty_approved \
                 if claim_detail.qty_approved is not None else claim_detail.qty_provided

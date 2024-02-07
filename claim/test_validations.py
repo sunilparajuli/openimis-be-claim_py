@@ -1,7 +1,9 @@
-from claim.gql_mutations import set_claims_status, update_claims_dedrems
+from claim.services import update_claims_dedrems, set_claims_status
 from claim.models import Claim, ClaimDedRem, ClaimItem, ClaimDetail, ClaimService
 from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem, \
     mark_test_claim_as_processed, delete_claim_with_itemsvc_dedrem_and_history
+from core.test_helpers import create_test_officer
+
 from claim.validations import get_claim_category, validate_claim, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, REJECTION_REASON_WAITING_PERIOD_FAIL, REJECTION_REASON_INVALID_ITEM_OR_SERVICE
 from core.models import User, InteractiveUser
@@ -13,6 +15,7 @@ from medical.test_helpers import create_test_service, create_test_item
 from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist, \
     update_pricelist_service_detail_in_hf_pricelist, update_pricelist_item_detail_in_hf_pricelist
 from policy.test_helpers import create_test_policy
+ 
 
 # default arguments should not pass a list or a dict because they're mutable but we don't risk mutating them here:
 # noinspection PyDefaultArgument,DuplicatedCode
@@ -260,7 +263,7 @@ class ValidationTest(TestCase):
 
         # Then
         claim1.refresh_from_db()
-        self.assertEquals(len(errors), 1)
+        self.assertEquals(len(errors), 2)
         self.assertEquals(errors[0]['code'], 1)  # claimed rejected because all services are rejected
         self.assertEquals(claim1.services.first().rejection_reason, 4)  # reason is wrong insuree mask
 
@@ -545,7 +548,7 @@ class ValidationTest(TestCase):
         service1 = create_test_claimservice(claim1, custom_props={"service_id": service.id})
         errors = validate_claim(claim1, True)
 
-        self.assertEqual(len(errors), 1, "An adult visit within the waiting period should be refused")
+        self.assertEqual(len(errors), 2, "An adult visit within the waiting period should be refused")
         self.assertEqual(claim1.services.first().rejection_reason, REJECTION_REASON_WAITING_PERIOD_FAIL)
 
         # a visit after the waiting period should be fine
@@ -1118,7 +1121,10 @@ class ValidationTest(TestCase):
     def test_set_status(self):
         class DummyUser:
             id_for_audit=-1
-        claim = create_test_claim(custom_props={'status':Claim.STATUS_CHECKED})
-        set_claims_status([claim.uuid], 'feedback_status', Claim.FEEDBACK_SELECTED, user = DummyUser())
+        insuree = create_test_insuree()
+        officer = create_test_officer(villages=[insuree.current_village or insuree.family.location])
+        claim = create_test_claim(custom_props={'status':Claim.STATUS_CHECKED, 
+                                                'insuree':insuree})
+        restult =set_claims_status([claim.uuid], 'feedback_status', Claim.FEEDBACK_SELECTED, user = DummyUser())
         claim.refresh_from_db()
         self.assertEqual(claim.feedback_status, Claim.FEEDBACK_SELECTED)
