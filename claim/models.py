@@ -451,14 +451,24 @@ class ClaimItem(core_models.VersionedModel, ClaimDetail, core_models.ExtendableM
         db_table = 'tblClaimItems'
 
 
+class GeneralClaimAttachmentType(models.TextChoices):
+    URL = "URL"
+    FILE = "FILE"
+
+
 class ClaimAttachment(core_models.UUIDModel, core_models.UUIDVersionedModel):
     claim = models.ForeignKey(
         Claim, models.DO_NOTHING, related_name='attachments')
+    general_type = models.CharField(max_length=4, choices=GeneralClaimAttachmentType.choices,
+                                    default=GeneralClaimAttachmentType.FILE)
     type = models.TextField(blank=True, null=True)
     title = models.TextField(blank=True, null=True)
     date = fields.DateField(blank=True, default=TimeUtils.now)
     filename = models.TextField(blank=True, null=True)
     mime = models.TextField(blank=True, null=True)
+    # this is not needed at the moment, but we want to move attachment to core
+    # in that case module information is needed, and we want to avoid writing additional migration
+    module = models.TextField(blank=False, null=True)
     # frontend contributions may lead to externalized (nas) storage for documents
     url = models.TextField(blank=True, null=True)
     # Support of BinaryField is database-related: prefer to stick to b64-encoded

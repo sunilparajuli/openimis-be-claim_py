@@ -2,6 +2,7 @@ import logging
 import uuid
 import pathlib
 import base64
+from urllib.parse import urlparse
 from typing import Callable, Dict
 
 import graphene
@@ -24,7 +25,7 @@ from graphene import InputObjectType
 
 from claim.gql_queries import ClaimGQLType
 from claim.models import Claim, Feedback, FeedbackPrompt, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment, \
-    ClaimDedRem
+    ClaimDedRem, GeneralClaimAttachmentType
 from product.models import ProductItemOrService
 
 from claim.utils import process_items_relations, process_services_relations
@@ -166,6 +167,7 @@ class BaseAttachment:
     date = graphene.Date(required=False)
     filename = graphene.String(required=False)
     mime = graphene.String(required=False)
+    general_type = graphene.String(required=False)
     url = graphene.String(required=False)
 
 
@@ -268,9 +270,19 @@ def create_attachment(claim_id, data):
     data["claim_id"] = claim_id
     from core import datetime
     now = datetime.datetime.now()
-    if ClaimConfig.claim_attachments_root_path:
-        # don't use data date as it may be updated by user afterwards!
-        data['url'] = create_file(now, claim_id, data.pop('document'))
+    general_type = data['general_type']
+    data['module'] = 'claim'
+    if general_type == GeneralClaimAttachmentType.URL:
+        parsed_url = urlparse(data['url'])
+        if (ClaimConfig.allowed_domains_attachments and
+                not any(domain in parsed_url.path for domain in ClaimConfig.allowed_domains_attachments)):
+            raise ValidationError(_("mutation.attachment_url_domain_not_allowed"))
+    elif general_type == GeneralClaimAttachmentType.FILE:
+        if ClaimConfig.claim_attachments_root_path:
+            # don't use data date as it may be updated by user afterwards!
+            data['url'] = create_file(now, claim_id, data.pop('document'))
+    else:
+        raise ValidationError(_("mutation.attachment_general_type_incorrect"))
     data['validity_from'] = now
     ClaimAttachment.objects.create(**data)
 

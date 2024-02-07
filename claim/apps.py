@@ -31,7 +31,8 @@ DEFAULT_CFG = {
     "claim_validation_multiple_services_explanation_required": True,
     "autogenerate_func": 'claim.utils.autogenerate_nepali_claim_code',
     "additional_diagnosis_number_allowed": 4,
-    "claim_max_restore": None
+    "claim_max_restore": None,
+    "allowed_domains_attachments": []
 }
 
 
@@ -69,6 +70,7 @@ class ClaimConfig(AppConfig):
     # Provide absolute path to autogenerating function for claim code
     autogenerate_func = None
     additional_diagnosis_number_allowed = None  # Currently code supports 4 diagnoses maximum, going above will not work
+    allowed_domains_attachments = None
 
     def __load_config(self, cfg):
         for field in cfg:
