@@ -57,5 +57,5 @@ class Migration(migrations.Migration):
             name='predefined_type',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='type_dropdown', to='claim.claimattachmenttype'),
         ),
-        migrations.RunPython(insert_default_type),
+        migrations.RunPython(code=insert_default_type, reverse_code=migrations.RunPython.noop),
     ]
