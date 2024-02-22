@@ -282,7 +282,7 @@ def handle_claimdoc_np_attachment(data):
     return requests.get(url_template, url_params).url
 
 
-attachment_strategies = {"default": None, "claimdoc": handle_claimdoc_np_attachment}
+attachment_strategies = {"claimdoc": handle_claimdoc_np_attachment}
 
 
 def create_attachment(claim_id, data):
