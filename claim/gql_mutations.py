@@ -299,12 +299,14 @@ def create_attachment(claim_id, data):
         if data['predefined_type'] in attachment_strategies:
             data['url'] = attachment_strategies[data['predefined_type']](data)
             data['document'] = data['url']
-            data['predefined_type'] = ClaimAttachmentType.objects.get(validity_to__isnull=True, claim_general_type="URL",
-                                                                      claim_attachment_type=data['predefined_type'])
+        data['predefined_type'] = ClaimAttachmentType.objects.get(validity_to__isnull=True, claim_general_type="URL",
+                                                                  claim_attachment_type=data['predefined_type'])
     elif general_type == GeneralClaimAttachmentType.FILE:
         if ClaimConfig.claim_attachments_root_path:
             # don't use data date as it may be updated by user afterwards!
             data['url'] = create_file(now, claim_id, data.pop('document'))
+        data['predefined_type'] = ClaimAttachmentType.objects.get(validity_to__isnull=True, claim_general_type="FILE",
+                                                                  claim_attachment_type=data['predefined_type'])
     else:
         raise ValidationError(_("mutation.attachment_general_type_incorrect"))
     data['validity_from'] = now
