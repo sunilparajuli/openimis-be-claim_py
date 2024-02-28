@@ -28,6 +28,8 @@ from graphene import InputObjectType
 from claim.gql_queries import ClaimGQLType
 from claim.models import Claim, Feedback, FeedbackPrompt, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment, \
     ClaimDedRem, GeneralClaimAttachmentType, ClaimAttachmentType
+from claim.attachment_strategies import *
+
 from product.models import ProductItemOrService
 
 from claim.utils import process_items_relations, process_services_relations
@@ -262,21 +264,8 @@ def create_file(date, claim_id, document):
     return file_path
 
 
-def handle_claimdoc_np_attachment(data):
-    url_template = 'https://claimdoc.hib.gov.np/upload_documents?'
-    token = os.environ.get("CLAIMDOC_TOKEN", default='testToken')
-    hf_id = None
-    if "claim_id" in data:
-        hf_id = Claim.objects.get(validity_to__isnull=True, id=data["claim_id"]).health_facility.id
-    else:
-        claim = Claim.objects.get(validity_to__isnull=True, uuid=data["claim_uuid"])
-        data["claim_id"] = claim.id
-        hf_id = claim.health_facility.id
-    url_params = {'claim_code': data["claim_id"], 'token': token, 'hf_id': hf_id}
-    return requests.get(url_template, url_params).url
-
-
-attachment_strategies = {"claimdoc": handle_claimdoc_np_attachment}
+# dynamic import from attachment_strategies directory, this will be marked as unresolved reference by most linters
+attachment_strategies = {"claimdoc": handle_claimdoc_attachment}
 
 
 def create_attachment(claim_id, data):
@@ -291,7 +280,7 @@ def create_attachment(claim_id, data):
                 not any(domain in parsed_url.path for domain in ClaimConfig.allowed_domains_attachments)):
             raise ValidationError(_("mutation.attachment_url_domain_not_allowed"))
         if data['predefined_type'] in attachment_strategies:
-            data['url'] = attachment_strategies[data['predefined_type']](data)
+            data['url'] = attachment_strategies[data['predefined_type']].handler(data)
             data['document'] = data['url']
         data['predefined_type'] = ClaimAttachmentType.objects.get(validity_to__isnull=True, claim_general_type="URL",
                                                                   claim_attachment_type=data['predefined_type'])

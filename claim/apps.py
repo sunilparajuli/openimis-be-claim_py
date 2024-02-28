@@ -32,8 +32,7 @@ DEFAULT_CFG = {
     "autogenerate_func": 'claim.utils.autogenerate_nepali_claim_code',
     "additional_diagnosis_number_allowed": 4,
     "claim_max_restore": None,
-    "allowed_domains_attachments": [],
-    "attachments_settings_dict": {'token': 'exampleNepalToken'}
+    "allowed_domains_attachments": []
 }
 
 
@@ -72,7 +71,6 @@ class ClaimConfig(AppConfig):
     autogenerate_func = None
     additional_diagnosis_number_allowed = None  # Currently code supports 4 diagnoses maximum, going above will not work
     allowed_domains_attachments = None
-    attachments_settings_dict = {}
 
     def __load_config(self, cfg):
         for field in cfg:
