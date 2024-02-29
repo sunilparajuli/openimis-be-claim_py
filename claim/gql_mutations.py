@@ -264,10 +264,6 @@ def create_file(date, claim_id, document):
     return file_path
 
 
-# dynamic import from attachment_strategies directory, this will be marked as unresolved reference by most linters
-attachment_strategies_dict = {"claimdoc": handle_claimdoc_attachment}
-
-
 def create_attachment(claim_id, data):
     data["claim_id"] = claim_id
     from core import datetime
