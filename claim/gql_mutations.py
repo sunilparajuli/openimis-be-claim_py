@@ -265,7 +265,7 @@ def create_file(date, claim_id, document):
 
 
 # dynamic import from attachment_strategies directory, this will be marked as unresolved reference by most linters
-attachment_strategies = {"claimdoc": handle_claimdoc_attachment}
+attachment_strategies_dict = {"claimdoc": handle_claimdoc_attachment}
 
 
 def create_attachment(claim_id, data):
@@ -279,8 +279,8 @@ def create_attachment(claim_id, data):
         if (ClaimConfig.allowed_domains_attachments and
                 not any(domain in parsed_url.path for domain in ClaimConfig.allowed_domains_attachments)):
             raise ValidationError(_("mutation.attachment_url_domain_not_allowed"))
-        if data['predefined_type'] in attachment_strategies:
-            data['url'] = attachment_strategies[data['predefined_type']].handler(data)
+        if data['predefined_type'] in attachment_strategies_dict:
+            data['url'] = attachment_strategies_dict[data['predefined_type']].handler(data)
             data['document'] = data['url']
         data['predefined_type'] = ClaimAttachmentType.objects.get(validity_to__isnull=True, claim_general_type="URL",
                                                                   claim_attachment_type=data['predefined_type'])
@@ -424,7 +424,7 @@ class UpdateAttachmentMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             queryset = ClaimAttachment.objects.filter(*filter_validity())
             if settings.ROW_SECURITY:
-                from location.schema import  LocationManager
+                from location.schema import LocationManager
                 queryset = LocationManager().build_user_location_filter_query( user._u, prefix='claim__health_facility__location', queryset = queryset.select_related("claim"), loc_types=['D'])
 
             attachment = queryset \
@@ -434,13 +434,15 @@ class UpdateAttachmentMutation(OpenIMISMutation):
                 raise PermissionDenied(_("unauthorized"))
             general_type = data['general_type']
             data['module'] = 'claim'
+            from core import datetime
+            now = datetime.datetime.now()
             if general_type == GeneralClaimAttachmentType.URL:
                 parsed_url = urlparse(data['url'])
                 if (ClaimConfig.allowed_domains_attachments and
                         not any(domain in parsed_url.path for domain in ClaimConfig.allowed_domains_attachments)):
                     raise ValidationError(_("mutation.attachment_url_domain_not_allowed"))
-                if data['predefined_type'] in attachment_strategies:
-                    data['url'] = attachment_strategies[data['predefined_type']](data)
+                if data['predefined_type'] in attachment_strategies_dict:
+                    data['url'] = attachment_strategies_dict[data['predefined_type']].handler(data)
                     data['document'] = data['url']
                 data['predefined_type'] = ClaimAttachmentType.objects.get(validity_to__isnull=True,
                                                                           claim_general_type="URL",
