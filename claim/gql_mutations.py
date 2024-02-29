@@ -438,7 +438,7 @@ class UpdateAttachmentMutation(OpenIMISMutation):
                         not any(domain in parsed_url.path for domain in ClaimConfig.allowed_domains_attachments)):
                     raise ValidationError(_("mutation.attachment_url_domain_not_allowed"))
                 if data['predefined_type'] in attachment_strategies_dict:
-                    data['url'] = attachment_strategies_dict[data['predefined_type']].handler(data)
+                    data['url'] = attachment_strategies_dict[data['predefined_type']](data)
                     data['document'] = data['url']
                 data['predefined_type'] = ClaimAttachmentType.objects.get(validity_to__isnull=True,
                                                                           claim_general_type="URL",

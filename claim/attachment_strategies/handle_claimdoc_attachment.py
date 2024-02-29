@@ -3,6 +3,7 @@ import requests
 from claim.models import Claim
 # from claim.apps import ClaimConfig
 
+name = 'claimdoc'
 
 def handler(data):
     url_template = 'https://claimdoc.hib.gov.np/upload_documents?'
