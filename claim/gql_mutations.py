@@ -24,7 +24,6 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.utils.translation import gettext as _
 from graphene import InputObjectType
-
 from claim.gql_queries import ClaimGQLType
 from claim.models import Claim, Feedback, FeedbackPrompt, ClaimDetail, ClaimItem, ClaimService, ClaimAttachment, \
     ClaimDedRem, GeneralClaimAttachmentType, ClaimAttachmentType
@@ -36,7 +35,7 @@ from claim.utils import process_items_relations, process_services_relations
 from claim.services import validate_claim_data as service_validate_claim_data, \
         update_or_create_claim as service_update_or_create_claim, check_unique_claim_code, submit_claim,\
             validate_and_process_dedrem_claim as service_validate_and_process_dedrem_claim,\
-            create_feedback_prompt as service_create_feedback_prompt,\
+            create_feedback_prompt as service_create_feedback_prompt, update_claims_dedrems,\
                 set_feedback_prompt_validity_to_to_current_date, set_claims_status
 from django.db import transaction
 import requests
@@ -863,7 +862,7 @@ class ProcessClaimsMutation(OpenIMISMutation, ClaimSubmissionStatsMixin):
         uuids = data.get("uuids", None)
         client_mutation_id = data.get("client_mutation_id", None)
         claims = Claim.objects \
-                .filter(uuid_in=uuids) \
+                .filter(uuid__in=uuids) \
                 .prefetch_related(Prefetch('items', queryset=ClaimItem.objects.filter(*filter_validity())))\
                 .prefetch_related(Prefetch('services', queryset=ClaimService.objects.filter(*filter_validity())))
         remaining_uuid = list(map(str.upper,uuids))
