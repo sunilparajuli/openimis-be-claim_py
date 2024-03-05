@@ -869,15 +869,15 @@ class ProcessClaimsMutation(OpenIMISMutation, ClaimSubmissionStatsMixin):
         for claim in claims:
             remaining_uuid.remove(claim.uuid.upper())
             
-            logger.debug("ProcessClaimsMutation: processing %s", claim_uuid)
+            logger.debug("ProcessClaimsMutation: processing %s", claim.uuid)
             c_errors = []
      
             claim.save_history()
             claim.audit_user_id_process = user.id_for_audit
-            logger.debug("ProcessClaimsMutation: validating claim %s", claim_uuid)
+            logger.debug("ProcessClaimsMutation: validating claim %s", claim.uuid)
             c_errors += validate_and_process_dedrem_claim(claim, user, True)
 
-            logger.debug("ProcessClaimsMutation: claim %s set processed or valuated", claim_uuid)
+            logger.debug("ProcessClaimsMutation: claim %s set processed or valuated", claim.uuid)
             if c_errors:
                 errors.append({
                     'title': claim.code,
