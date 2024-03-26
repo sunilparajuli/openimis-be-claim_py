@@ -32,7 +32,7 @@ def insert_default_type(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('claim', '0029_rename_pcpdate_claimserviceitem_created_date_and_more'),
+        ('claim', '0027_auto_20240203_2339'),
     ]
 
     operations = [
