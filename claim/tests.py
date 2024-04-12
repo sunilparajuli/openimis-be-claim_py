@@ -2,6 +2,7 @@ import base64
 import json
 from dataclasses import dataclass
 from core.models import User
+from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
 from core.utils import filter_validity
 from core.test_helpers import create_test_interactive_user
 from django.conf import settings
@@ -29,8 +30,7 @@ class DummyContext:
     """ Just because we need a context to generate. """
     user: User
 
-class ClaimGraphQLTestCase(GraphQLTestCase):
-    GRAPHQL_URL = f'/{settings.SITE_ROOT()}graphql'
+class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
     # This is required by some version of graphene but is never used. It should be set to the schema but the import
     # is shown as an error in the IDE, so leaving it as True.
     GRAPHQL_SCHEMA = True
@@ -191,6 +191,8 @@ class ClaimGraphQLTestCase(GraphQLTestCase):
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
         
         
+        
+        self.get_mutation_result('3a90436a-d5ea-48e7-bde4-0bcff0240260', self.admin_token )
         claim = Claim.objects.filter(code = 'm-c-claim').first()
         self.assertIsNotNone(claim)
         self.assertEqual(claim.status, Claim.STATUS_ENTERED)
