@@ -167,42 +167,59 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
             }}
                 ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
-        
-        #wait 
-        
-        response = self.query('''
-        
-        {
-        mutationLogs(clientMutationId: "3a90436a-d5ea-48e7-bde4-0bcff0240260")
-        {
-            
-        pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
-        edges
-        {
-        node
-        {
-            id,status,error,clientMutationId,clientMutationLabel,clientMutationDetails,requestDateTime,jsonExt
-        }
-        }
-        }
-        }
-        
-        ''',
-            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
-        
-        
-        
         self.get_mutation_result('3a90436a-d5ea-48e7-bde4-0bcff0240260', self.admin_token )
         claim = Claim.objects.filter(code = 'm-c-claim').first()
         self.assertIsNotNone(claim)
         self.assertEqual(claim.status, Claim.STATUS_ENTERED)
-        
+        response = self.query(
+            f'''
+            mutation {{
+                updateClaim(
+                    input: {{
+                    clientMutationId: "3a90436b-d5ea-48e7-bde4-0bcff0240260"
+                    clientMutationLabel: "Update Claim - m-c-claim" 
+                    code: "m-c-claim"
+                autogenerate: false
+                uuid: "{str(claim.uuid)}"
+                insureeId: {self.insuree.id}
+                adminId: {self.claim_admin.id}
+                dateFrom: "2023-11-06"  
+                icdId: 2 
+                jsonExt: "{{}}"
+                feedbackStatus: 1
+                reviewStatus: 1
+                dateClaimed: "2023-12-06"
+                healthFacilityId: {self.claim_admin.health_facility.id}
+                visitType: "O"
+                services: [
+                {{
+                
+                serviceId: {self.service.id}
+                priceAsked: "10.00"
+                qtyProvided: "1.00"
+                status: 1,
+                serviceItemSet: [],
+                serviceServiceSet: []
+            }}
+                ]
+                items: [
+                ]
+                    }}
+                ) {{
+                    clientMutationId
+                    internalId
+                }}
+            }}
+                ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        self.get_mutation_result('3a90436b-d5ea-48e7-bde4-0bcff0240260', self.admin_token )
+                
         #submit claim 
         response = self.query(f'''
             mutation {{
             submitClaims(
                 input: {{
-                clientMutationId: "d02fff0a-dd95-4413-a2f6-4cf2189dc0d6"
+                clientMutationId: "d02fff0a-dd95-4413-a2f4-4cf2189dc0d6"
                 clientMutationLabel: "Submit claim erterwtw"
                 
                 uuids: ["{claim.uuid}"]
@@ -215,7 +232,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
             ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
         self.assertResponseNoErrors(response)
-
+        self.get_mutation_result('d02fff0a-dd95-4413-a2f4-4cf2189dc0d6', self.admin_token )
         # select for feeback
         claim = Claim.objects.filter(code = 'm-c-claim').first()
         create_test_officer(villages=[claim.insuree.family.location])
@@ -224,7 +241,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
             mutation {{
             selectClaimsForFeedback(
                 input: {{
-                clientMutationId: "f0585e2b-d72d-4001-905a-1cf10e9f1722"
+                clientMutationId: "f0585e2b-d72d-4001-915a-1cf10e9f1722"
                 clientMutationLabel: "Select claim sadddfas for feedback"
                 
                 uuids: ["{claim.uuid}"]
@@ -237,25 +254,8 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
         ''' ,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
         self.assertResponseNoErrors(response)
-
+        self.get_mutation_result('f0585e2b-d72d-4001-915a-1cf10e9f1722', self.admin_token )
         ## check the mutation answer
-        response = self.query('''
-        {
-        mutationLogs(clientMutationId: "f0585e2b-d72d-4001-905a-1cf10e9f1722")
-        {
-            
-        pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
-        edges
-        {
-        node
-        {
-            id,status,error,clientMutationId,clientMutationLabel,clientMutationDetails,requestDateTime,jsonExt
-        }
-        }
-        }
-        }
-            ''',
-            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
-        self.assertResponseNoErrors(response)
+        
         claim = Claim.objects.filter(code = 'm-c-claim').first()
         self.assertEqual(claim.feedback_status, Claim.FEEDBACK_SELECTED)
