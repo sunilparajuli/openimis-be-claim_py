@@ -9,7 +9,7 @@ from medical.test_helpers import create_test_item, create_test_service
 
 from core.services import create_or_update_interactive_user, create_or_update_core_user
 import datetime
-from .services import *
+from claim.services import *
 import core
 from medical.test_helpers import create_test_service, create_test_item
 from claim.utils import service_create_hook, calcul_amount_service, service_update_hook
