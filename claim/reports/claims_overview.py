@@ -3,6 +3,7 @@ from typing import Dict, Union
 
 from django.db.models import Q, Prefetch
 
+from core.utils import filter_validity
 from location.models import Location, HealthFacility
 from product.models import Product
 from claim.models import Claim, ClaimItem, ClaimService
