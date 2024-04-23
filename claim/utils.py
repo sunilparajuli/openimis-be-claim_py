@@ -107,17 +107,17 @@ def service_create_hook(claim_id, service):
             )
 
     if (service_service_set):
-        for serviceserviceS in service_service_set:
-            if "qty_asked" in serviceserviceS:
-                if (math.isnan(serviceserviceS["qty_asked"])):
-                    serviceserviceS["qty_asked"] = 0
-            serviceId = Service.objects.filter(code=serviceserviceS["sub_service_code"]).first()
+        for service_service in service_service_set:
+            if "qty_asked" in service_service:
+                if (math.isnan(service_service["qty_asked"])):
+                    service_service["qty_asked"] = 0
+            serviceId = Service.objects.filter(code=service_service["sub_service_code"]).first()
             ClaimServiceService.objects.create(
                 service=serviceId,
                 claim_service=ClaimServiceId,
-                qty_displayed=serviceserviceS["qty_asked"],
-                qty_provided=serviceserviceS["qty_provided"],
-                price_asked=serviceserviceS["price_asked"],
+                qty_displayed=service_service["qty_asked"],
+                qty_provided=service_service["qty_provided"],
+                price_asked=service_service["price_asked"],
             )
 
 
@@ -141,16 +141,16 @@ def service_update_hook(claim_id, service):
             claimServiceItemId.save()
 
     if (service_service_set):
-        for serviceserviceS in service_service_set:
-            if "qty_asked" in serviceserviceS:
-                if (math.isnan(serviceserviceS["qty_asked"])):
-                    serviceserviceS["qty_asked"] = 0
-            serviceId = Service.objects.filter(code=serviceserviceS["sub_service_code"]).first()
+        for service_service in service_service_set:
+            if "qty_asked" in service_service:
+                if (math.isnan(service_service["qty_asked"])):
+                    service_service["qty_asked"] = 0
+            serviceId = Service.objects.filter(code=service_service["sub_service_code"]).first()
             claimServiceServiceId = ClaimServiceService.objects.filter(
                 service=serviceId,
                 claim_service=ClaimServiceId
             ).first()
-            claimServiceServiceId.qty_displayed = serviceserviceS["qty_asked"]
+            claimServiceServiceId.qty_displayed = service_service["qty_asked"]
             claimServiceServiceId.save()
 
 
