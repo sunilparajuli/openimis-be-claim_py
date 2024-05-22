@@ -1151,7 +1151,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                     try:
                         contunue_service_check = True
                         if claim_detail.service.packagetype == 'P':
-                            service_services = ServiceService.objects.filter(servicelinkedService=claim_detail.service.id).all()
+                            service_services = ServiceService.objects.filter(parent=claim_detail.service.id).all()
                             claim_service_services = ClaimServiceService.objects.filter(claim_service=claim_detail.id).all()
                             if len(service_services) == len(claim_service_services):
                                 for servservice in service_services:
@@ -1172,7 +1172,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
                             logger.debug(f"set_price_adjusted after service check {set_price_adjusted}")
                             if contunue_service_check:
                                 contunue_item_check = True
-                                service_items = ServiceItem.objects.filter(servicelinkedItem=claim_detail.service.id).all()
+                                service_items = ServiceItem.objects.filter(parent=claim_detail.service.id).all()
                                 claim_service_items = ClaimServiceItem.objects.filter(claim_service=claim_detail.id).all()
                                 logger.debug(f"service_items: {service_items}")
                                 logger.debug(f"claim_service_items: {claim_service_items}")

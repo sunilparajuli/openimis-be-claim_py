@@ -1195,7 +1195,7 @@ class ValidationTest(TestCase):
         service.packagetype = "P"
         service.save()
         # serviceservice = ServiceService.objects.create(
-        #     servicelinkedService=service,
+        #     parent=service,
         #     service_id = claimservice1.service_id,
         #     price_asked = 3,
         #     qty_provided = 2
@@ -1215,7 +1215,7 @@ class ValidationTest(TestCase):
             price_asked = 500,
         )
         serviceitem = ServiceItem.objects.create(
-            servicelinkedItem=service,
+            parent=service,
             item = clalimitem1.item,
             price_asked = 12,
             qty_provided = 11
