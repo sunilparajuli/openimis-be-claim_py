@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='feedbackprompt',
             name='phone_number',
-            field=models.CharField(db_column='PhoneNumber', max_length=50),
+            field=models.CharField(db_column='PhoneNumber', max_length=50, null=True, blank=True),
         ),
     ]

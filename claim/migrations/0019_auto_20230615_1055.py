@@ -2,6 +2,7 @@
 
 from django.db import migrations, models
 import django.db.models.deletion
+from claim.models import Claim
 
 
 class Migration(migrations.Migration):
@@ -11,15 +12,21 @@ class Migration(migrations.Migration):
         ('claim', '0018_alter_jsonext_column'),
     ]
 
-    operations = [
-        migrations.AddField(
+    operations = []
+    try:
+        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('refer_from'))
+    except:
+        operations.append(migrations.AddField(
             model_name='claim',
             name='refer_from',
             field=models.ForeignKey(blank=True, db_column='ReferFrom', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='referFromHF', to='location.healthfacility'),
-        ),
-        migrations.AddField(
+        ))
+    try:
+        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('refer_to'))
+    except:    
+        operations.append(migrations.AddField(
             model_name='claim',
             name='refer_to',
             field=models.ForeignKey(blank=True, db_column='ReferTo', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='referToHF', to='location.healthfacility'),
-        ),
-    ]
+        ))
+    

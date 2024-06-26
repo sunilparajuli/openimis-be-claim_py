@@ -2,15 +2,16 @@ import itertools
 import logging
 from collections import namedtuple
 
-from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail
+from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail, ClaimServiceService, ClaimServiceItem
 from core import utils
 from core.datetimes.shared import datetimedelta
+from core.utils import filter_validity
 from django.db import connection
 from django.db.models import Sum, Q
 from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
 from insuree.models import InsureePolicy
-from medical.models import Service
+from medical.models import Service, ServiceService, ServiceItem
 from medical_pricelist.models import ItemsPricelistDetail, ServicesPricelistDetail
 from policy.models import Policy
 from product.models import Product, ProductItem, ProductService, ProductItemOrService
@@ -38,7 +39,7 @@ REJECTION_REASON_MAX_DELIVERIES = 15
 REJECTION_REASON_QTY_OVER_LIMIT = 16
 REJECTION_REASON_WAITING_PERIOD_FAIL = 17
 REJECTION_REASON_MAX_ANTENATAL = 19
-
+REJECTION_REASON_INVALID_CLAIM = 20
 
 def validate_claim(claim, check_max):
     """
@@ -99,6 +100,8 @@ def validate_claim(claim, check_max):
                     'message': _("claim.validation.all_items_and_services_rejected") % {
                         'code': claim.code},
                     'detail': claim.uuid}]
+        if len(detail_errors)>0:
+            errors += detail_errors
         claim.status = Claim.STATUS_REJECTED
         claim.rejection_reason = REJECTION_REASON_INVALID_ITEM_OR_SERVICE
         claim.save()
@@ -109,32 +112,31 @@ def validate_claim(claim, check_max):
 def validate_claimitems(claim):
     errors = []
     target_date = claim.date_from if claim.date_from else claim.date_to
-    for claimitem in claim.items \
-            .filter(validity_to__isnull=True) \
-            .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
-        errors += validate_claimitem_validity(claim, claimitem)
+    for claimitem in claim.items.all():
         if not claimitem.rejection_reason:
-            errors += validate_claimitem_in_price_list(claim, claimitem)
-        if not claimitem.rejection_reason:
-            errors += validate_claimdetail_care_type(claim, claimitem)
-        if not claimitem.rejection_reason:
-            errors += validate_claimdetail_limitation_fail(claim, claimitem)
-        if not claimitem.rejection_reason:
-            errors += validate_claimitem_frequency(claim, claimitem)
-        if not claimitem.rejection_reason:
-            errors += validate_item_product_family(
-                claimitem=claimitem,
-                target_date=target_date,
-                item=claimitem.item,
-                insuree_id=claim.insuree_id,
-                adult=claim.insuree.is_adult(target_date)
-            )
-        if claimitem.rejection_reason:
-            claimitem.status = ClaimItem.STATUS_REJECTED
-        else:
-            claimitem.rejection_reason = 0
-            claimitem.status = ClaimItem.STATUS_PASSED
-        claimitem.save()
+            errors += validate_claimitem_validity(claim, claimitem)
+            if not claimitem.rejection_reason:
+                errors += validate_claimitem_in_price_list(claim, claimitem)
+            if not claimitem.rejection_reason:
+                errors += validate_claimdetail_care_type(claim, claimitem)
+            if not claimitem.rejection_reason:
+                errors += validate_claimdetail_limitation_fail(claim, claimitem)
+            if not claimitem.rejection_reason:
+                errors += validate_claimitem_frequency(claim, claimitem)
+            if not claimitem.rejection_reason:
+                errors += validate_item_product_family(
+                    claimitem=claimitem,
+                    target_date=target_date,
+                    item=claimitem.item,
+                    insuree_id=claim.insuree_id,
+                    adult=claim.insuree.is_adult(target_date)
+                )
+            if claimitem.rejection_reason:
+                claimitem.status = ClaimItem.STATUS_REJECTED
+            else:
+                claimitem.rejection_reason = 0
+                claimitem.status = ClaimItem.STATUS_PASSED
+            claimitem.save()
     return errors
 
 
@@ -143,34 +145,33 @@ def validate_claimservices(claim):
     target_date = claim.date_from if claim.date_from else claim.date_to
     base_category = get_claim_category(claim)
 
-    for claimservice in claim.services \
-            .filter(validity_to__isnull=True) \
-            .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True)):
-        errors += validate_claimservice_validity(claim, claimservice)
+    for claimservice in claim.services.all():
         if not claimservice.rejection_reason:
-            errors += validate_claimservice_in_price_list(claim, claimservice)
-        if not claimservice.rejection_reason:
-            errors += validate_claimdetail_care_type(claim, claimservice)
-        if not claimservice.rejection_reason:
-            errors += validate_claimservice_frequency(claim, claimservice)
-        if not claimservice.rejection_reason:
-            errors += validate_claimdetail_limitation_fail(claim, claimservice)
-        if not claimservice.rejection_reason:
-            errors += validate_service_product_family(
-                claimservice=claimservice,
-                target_date=target_date,
-                service=claimservice.service,
-                insuree_id=claim.insuree_id,
-                adult=claim.insuree.is_adult(target_date),
-                base_category=base_category,
-                claim=claim,
-            )
-        if claimservice.rejection_reason:
-            claimservice.status = ClaimService.STATUS_REJECTED
-        else:
-            claimservice.rejection_reason = 0
-            claimservice.status = ClaimService.STATUS_PASSED
-        claimservice.save()
+            errors += validate_claimservice_validity(claim, claimservice)
+            if not claimservice.rejection_reason:
+                errors += validate_claimservice_in_price_list(claim, claimservice)
+            if not claimservice.rejection_reason:
+                errors += validate_claimdetail_care_type(claim, claimservice)
+            if not claimservice.rejection_reason:
+                errors += validate_claimservice_frequency(claim, claimservice)
+            if not claimservice.rejection_reason:
+                errors += validate_claimdetail_limitation_fail(claim, claimservice)
+            if not claimservice.rejection_reason:
+                errors += validate_service_product_family(
+                    claimservice=claimservice,
+                    target_date=target_date,
+                    service=claimservice.service,
+                    insuree_id=claim.insuree_id,
+                    adult=claim.insuree.is_adult(target_date),
+                    base_category=base_category,
+                    claim=claim,
+                )
+            if claimservice.rejection_reason:
+                claimservice.status = ClaimService.STATUS_REJECTED
+            else:
+                claimservice.rejection_reason = 0
+                claimservice.status = ClaimService.STATUS_PASSED
+            claimservice.save()
     return errors
 
 
@@ -305,7 +306,6 @@ def frequency_check(qs, claim, elt):
                 claim__status__gt=Claim.STATUS_ENTERED
                 ) \
         .exclude(claim__uuid=claim.uuid) \
-        .order_by('-claim__date_from') \
         .exists()
 
 
@@ -934,24 +934,22 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
     # The original code has a pretty complex query here called product_loop that refers to policies while it is
     # actually looping on ClaimItem and ClaimService.
     items_query = claim.items.filter(
-        Q(item__validity_to__isnull=True) | Q(item__validity_to__gte=target_date),
-        validity_to__isnull=True,
+        *filter_validity(validity=target_date, prefix='item__'),
+        *filter_validity(),
+        *filter_validity(prefix='product__'),
         rejection_reason=0,
-        item__validity_from__lte=target_date,
-        product__isnull=False,
-        product__validity_to__isnull=True
     ).values("policy_id", "product_id")
     services_query = claim.services.filter(
-        Q(service__validity_to__isnull=True) | Q(service__validity_to__gte=target_date),
-        validity_to__isnull=True,
+        *filter_validity(validity=target_date, prefix='service__'),
+        *filter_validity(),
+        *filter_validity(prefix='product__'),
         rejection_reason=0,
-        service__validity_from__date__lte=target_date,
-        product__isnull=False, product__validity_to__isnull=True
     ).values("policy_id", "product_id")
     if items_query.count() == 0 and services_query.count() == 0:
         logger.warning(f"claim {claim.uuid} did not have any item or service to valuate.")
     for policy_product in items_query.union(services_query, all=True):
-        product = Product.objects.get(id=policy_product["product_id"])
+        product = Product.objects.get(*filter_validity(validity=target_date), 
+                Q(Q(id=policy_product["product_id"])|Q(legacy_id=policy_product["product_id"])))
         policy_members = InsureePolicy.objects.filter(
             policy_id=policy_product["policy_id"],
             effective_date__isnull=False,
@@ -1088,11 +1086,11 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
         remunerated = 0
         for claim_detail in itertools.chain(
                 claim.items
-                        .filter(validity_to__isnull=True)
-                        .filter(status=ClaimItem.STATUS_PASSED),
+                        .filter(validity_to__isnull=True,
+                                status=ClaimItem.STATUS_PASSED),
                 claim.services
-                        .filter(validity_to__isnull=True)
-                        .filter(status=ClaimService.STATUS_PASSED)):
+                        .filter(validity_to__isnull=True,
+                                status=ClaimService.STATUS_PASSED)):
             detail_is_item = isinstance(claim_detail, ClaimItem)
             itemsvc_quantity = claim_detail.qty_approved \
                 if claim_detail.qty_approved is not None else claim_detail.qty_provided
@@ -1131,13 +1129,73 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False):
 
             if claim_detail.price_approved is not None:
                 set_price_adjusted = claim_detail.price_approved
+            if claim_detail.price_origin == ProductItemOrService.ORIGIN_CLAIM:
+                set_price_adjusted = claim_detail.price_asked
+                if ClaimConfig.native_code_for_services == False:
+                    try:
+                        if claim_detail.service.packagetype == 'F':
+                            service_price = claim_detail.service.price
+                            if claim_detail.price_adjusted is not None:
+                                logger.debug(f"compare {claim_detail.price_adjusted} and {service_price}")
+                                if claim_detail.price_adjusted > service_price:
+                                    set_price_adjusted = service_price
+                            else:
+                                logger.debug(f"compare {claim_detail.price_asked} and {service_price}")
+                                if claim_detail.price_asked > service_price:
+                                    set_price_adjusted = service_price
+                    except:
+                        logger.debug("This it an item element")
             else:
-                if claim_detail.price_origin == ProductItemOrService.ORIGIN_CLAIM:
-                    set_price_adjusted = claim_detail.price_asked
-                else:
-                    set_price_adjusted = pl_price
+                set_price_adjusted = pl_price
+                if ClaimConfig.native_code_for_services == False:
+                    try:
+                        contunue_service_check = True
+                        if claim_detail.service.packagetype == 'P':
+                            service_services = ServiceService.objects.filter(servicelinkedService=claim_detail.service.id).all()
+                            claim_service_services = ClaimServiceService.objects.filter(claim_service=claim_detail.id).all()
+                            if len(service_services) == len(claim_service_services):
+                                for servservice in service_services:
+                                    for claimserviceservice in claim_service_services:
+                                        if servservice.service.id == claimserviceservice.service.id:
+                                            logger.debug(f"comparing serviceservice qty {servservice.qty_provided}\
+                                                and claimserviceservice qty {claimserviceservice.qty_displayed}")
+                                            if servservice.qty_provided != claimserviceservice.qty_displayed:
+                                                set_price_adjusted = 0
+                                                contunue_service_check = False
+                                                break
+                                    if contunue_service_check == False:
+                                        break
+                            else:
+                                # user misconfiguration !
+                                set_price_adjusted = 0
+                                contunue_service_check = False
+                            logger.debug(f"set_price_adjusted after service check {set_price_adjusted}")
+                            if contunue_service_check:
+                                contunue_item_check = True
+                                service_items = ServiceItem.objects.filter(servicelinkedItem=claim_detail.service.id).all()
+                                claim_service_items = ClaimServiceItem.objects.filter(claim_service=claim_detail.id).all()
+                                logger.debug(f"service_items: {service_items}")
+                                logger.debug(f"claim_service_items: {claim_service_items}")
+                                if len(service_items) == len(claim_service_items):
+                                    for serviceitem in service_items:
+                                        for claimservicesitem in claim_service_items:
+                                            if serviceitem.item.id == claimservicesitem.item.id:
+                                                logger.debug(f"comparing serviceitem qty {serviceitem.qty_provided}\
+                                                 and claimservicesitem qty {claimservicesitem.qty_displayed}")
+                                                if serviceitem.qty_provided != claimservicesitem.qty_displayed:
+                                                    set_price_adjusted = 0
+                                                    contunue_item_check = False
+                                                    break
+                                        if contunue_item_check == False:
+                                            break
+                                else:
+                                    # user misconfiguration !
+                                    set_price_adjusted = 0
+                                logger.debug(f"set_price_adjusted after items check {set_price_adjusted}")
+                    except:
+                        logger.debug("This is a ClaimItem element, not a ClaimService")
 
-            work_value = itemsvc_quantity * set_price_adjusted
+            work_value = int(itemsvc_quantity * set_price_adjusted)
 
             if claim_detail.limitation == ProductItemOrService.LIMIT_FIXED_AMOUNT \
                     and claim_detail.limitation_value \
