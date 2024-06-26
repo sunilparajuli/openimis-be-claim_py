@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass
 from core.models import User
 from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
+
 from core.utils import filter_validity
 from core.test_helpers import create_test_interactive_user
 from django.conf import settings
@@ -31,6 +32,7 @@ class DummyContext:
     user: User
 
 class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
+
     # This is required by some version of graphene but is never used. It should be set to the schema but the import
     # is shown as an error in the IDE, so leaving it as True.
     GRAPHQL_SCHEMA = True
@@ -78,6 +80,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                         node
                         {
                             uuid,code,jsonExt,dateClaimed,dateProcessed,feedbackStatus,reviewStatus,claimed,approved,status,restoreId,healthFacility { id uuid name code },insuree{id, uuid, chfId, lastName, otherNames, dob},attachmentsCount
+
                         }
                     }
                 }
@@ -107,6 +110,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                         node
                         {
                             uuid,code,jsonExt,dateClaimed,dateProcessed,feedbackStatus,reviewStatus,claimed,approved,status,restoreId,healthFacility { id uuid name code },insuree{id, uuid, chfId, lastName, otherNames, dob},attachmentsCount
+
                         }
                     }
                 }
@@ -213,7 +217,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                 ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
         self.get_mutation_result('3a90436b-d5ea-48e7-bde4-0bcff0240260', self.admin_token )
-                
+
         #submit claim 
         response = self.query(f'''
             mutation {{
@@ -232,6 +236,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
             ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
         self.assertResponseNoErrors(response)
+
         self.get_mutation_result('d02fff0a-dd95-4413-a2f4-4cf2189dc0d6', self.admin_token )
         # select for feeback
         claim = Claim.objects.filter(code = 'm-c-claim').first()
@@ -256,6 +261,5 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
         self.assertResponseNoErrors(response)
         self.get_mutation_result('f0585e2b-d72d-4001-915a-1cf10e9f1722', self.admin_token )
         ## check the mutation answer
-        
         claim = Claim.objects.filter(code = 'm-c-claim').first()
         self.assertEqual(claim.feedback_status, Claim.FEEDBACK_SELECTED)

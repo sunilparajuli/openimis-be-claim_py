@@ -4,6 +4,7 @@ from claim.test_helpers import create_test_claim, create_test_claimservice, crea
     mark_test_claim_as_processed, delete_claim_with_itemsvc_dedrem_and_history
 from core.test_helpers import create_test_officer
 
+
 from claim.validations import get_claim_category, validate_claim, validate_assign_prod_to_claimitems_and_services, \
     process_dedrem, REJECTION_REASON_WAITING_PERIOD_FAIL, REJECTION_REASON_INVALID_ITEM_OR_SERVICE
 from core.models import User, InteractiveUser
@@ -14,11 +15,12 @@ from location.models import HealthFacility
 from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist
 from medical.models import ServiceItem, ServiceService
 from product.models import ProductItemOrService
+
 from medical.test_helpers import create_test_service, create_test_item
 from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist, \
     update_pricelist_service_detail_in_hf_pricelist, update_pricelist_item_detail_in_hf_pricelist
 from policy.test_helpers import create_test_policy
- 
+
 
 # default arguments should not pass a list or a dict because they're mutable but we don't risk mutating them here:
 # noinspection PyDefaultArgument,DuplicatedCode
@@ -935,7 +937,6 @@ class ValidationTest(TestCase):
         dedrem = ClaimDedRem.objects.filter(claim=claim1).first()
         self.assertIsNotNone(dedrem)
         self.assertEquals(dedrem.rem_g, 200)  # 100*1 + 100*1
-
         # tearDown
         # dedrem.delete() # already done if the test passed
         delete_claim_with_itemsvc_dedrem_and_history(claim1)
