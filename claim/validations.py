@@ -836,7 +836,7 @@ def approved_amount(claim):
             .aggregate(value=ExpressionWrapper(
                 (Sum("total_srv_approved") + Sum("total_itm_approved")) ,
                 output_field=DecimalField()
-            ))["value"]
+            ))["value"] or 0
 
     else:
         return 0
