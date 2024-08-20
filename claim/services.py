@@ -578,6 +578,15 @@ def processing_claim(claim, user, is_process=False, validate=True):
     return errors
 
 
+# refactor back compatibility
+validate_and_process_dedrem_claim = processing_claim
+
+
+# refactor back compatibility
+def submit_claim(claim, user):
+    return ClaimSubmitService(user).submit_claim(claim, user)[1]
+
+
 def set_claim_processed_or_valuated(claim, errors, user):
     try:
         if errors:
