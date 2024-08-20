@@ -12,21 +12,27 @@ class Migration(migrations.Migration):
         ('claim', '0018_alter_jsonext_column'),
     ]
 
-    operations = []
-    try:
-        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('refer_from'))
-    except:
-        operations.append(migrations.AddField(
+    operations = [
+        migrations.AddField(
             model_name='claim',
             name='refer_from',
             field=models.ForeignKey(blank=True, db_column='ReferFrom', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='referFromHF', to='location.healthfacility'),
-        ))
-    try:
-        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('refer_to'))
-    except:    
-        operations.append(migrations.AddField(
+        ),
+        migrations.AddField(
             model_name='claim',
             name='refer_to',
             field=models.ForeignKey(blank=True, db_column='ReferTo', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='referToHF', to='location.healthfacility'),
-        ))
-    
+        )
+        
+    ]
+    # remove the operation if the field already exist
+    try:
+        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('refer_from'))
+        operations.pop(0)
+    except:
+        pass
+    try:
+        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('refer_to'))
+        operations.pop()
+    except:    
+        pass

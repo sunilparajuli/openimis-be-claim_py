@@ -9,15 +9,17 @@ class Migration(migrations.Migration):
         ('claim', '0020_alter_claim_code'),
     ]
 
-    operations = []
-    
-    try:
-        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('care_type'))
-    except:
-        operations = [
+    operations = [
             migrations.AddField(
             model_name='claim',
             name='care_type',
             field=models.CharField(blank=True, db_column='CareType', max_length=4, null=True),
-        )
-    ]
+    )]
+    # remove the operation if the field already exist
+    try:
+        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('care_type'))
+        operations = []
+    except: 
+        pass
+        
+
