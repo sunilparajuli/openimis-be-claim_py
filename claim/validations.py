@@ -3,11 +3,15 @@ import logging
 from collections import namedtuple
 
 from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail, ClaimServiceService, ClaimServiceItem
+from claim.subqueries import (   
+    total_srv_adjusted_subquery, total_itm_adjusted_subquery,
+    total_srv_approved_subquery, total_itm_approved_subquery,
+)
 from core import utils
 from core.datetimes.shared import datetimedelta
 from core.utils import filter_validity
 from django.db import connection
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, ExpressionWrapper, DecimalField
 from django.db.models.functions import Coalesce
 from django.utils.translation import gettext as _
 from insuree.models import InsureePolicy
@@ -41,6 +45,8 @@ REJECTION_REASON_WAITING_PERIOD_FAIL = 17
 REJECTION_REASON_MAX_ANTENATAL = 19
 REJECTION_REASON_INVALID_CLAIM = 20
 
+
+
 def validate_claim(claim, check_max):
     """
     Based on the legacy validation, this method returns standard codes along with details
@@ -55,7 +61,7 @@ def validate_claim(claim, check_max):
     detail_errors = []
     errors += validate_target_date(claim)
     if len(errors) == 0:
-        errors += validate_family(claim, claim.insuree)
+        errors += validate_insuree(claim, claim.insuree)
     if len(errors) == 0:
         detail_errors += validate_claimitems(claim)
         detail_errors += validate_claimservices(claim)
@@ -109,7 +115,7 @@ def validate_claim(claim, check_max):
     return errors
 
 
-def validate_claimitems(claim):
+def validate_claimitems(claim, save=True):
     errors = []
     target_date = claim.date_from if claim.date_from else claim.date_to
     for claimitem in claim.items.all():
@@ -136,11 +142,12 @@ def validate_claimitems(claim):
             else:
                 claimitem.rejection_reason = 0
                 claimitem.status = ClaimItem.STATUS_PASSED
-            claimitem.save()
+            if save:
+                claimitem.save()
     return errors
 
 
-def validate_claimservices(claim):
+def validate_claimservices(claim, save=True):
     errors = []
     target_date = claim.date_from if claim.date_from else claim.date_to
     base_category = get_claim_category(claim)
@@ -171,7 +178,8 @@ def validate_claimservices(claim):
             else:
                 claimservice.rejection_reason = 0
                 claimservice.status = ClaimService.STATUS_PASSED
-            claimservice.save()
+            if save:
+                claimservice.save()
     return errors
 
 
@@ -348,23 +356,11 @@ def validate_target_date(claim):
     return errors
 
 
-def validate_family(claim, insuree):
+def validate_insuree(claim, insuree):
     errors = []
     if insuree.validity_to is not None:
         errors += [{'code': REJECTION_REASON_FAMILY,
                     'message': _("claim.validation.family.insuree_validity") % {
-                        'code': claim.code,
-                        'insuree': str(insuree)},
-                    'detail': claim.uuid}]
-    elif insuree.family is None:
-        errors += [{'code': REJECTION_REASON_FAMILY,
-                    'message': _("claim.validation.family.no_family") % {
-                        'code': claim.code,
-                        'insuree': str(insuree)},
-                    'detail': claim.uuid}]
-    elif insuree.family.validity_to is not None:
-        errors += [{'code': REJECTION_REASON_FAMILY,
-                    'message': _("claim.validation.family.family_validity") % {
                         'code': claim.code,
                         'insuree': str(insuree)},
                     'detail': claim.uuid}]
@@ -833,17 +829,17 @@ def validate_assign_prod_to_claimitems_and_services(claim):
 
 
 def approved_amount(claim):
-    app_item_value = claim.items \
-        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
-        .filter(validity_to__isnull=True, status=ClaimItem.STATUS_PASSED) \
-        .aggregate(Sum("value"))
-    app_service_value = claim.services \
-        .annotate(value=Coalesce("qty_approved", "qty_provided") * Coalesce("price_approved", "price_asked")) \
-        .filter(validity_to__isnull=True, status=ClaimService.STATUS_PASSED) \
-        .aggregate(Sum("value"))
-    return (app_item_value['value__sum'] if app_item_value['value__sum'] else 0) + \
-           (app_service_value['value__sum']
-            if app_service_value['value__sum'] else 0)
+    qs = Claim.objects.filter(id=claim.id)
+    if claim.status != Claim.STATUS_REJECTED:
+        return qs.annotate(total_srv_approved=(total_srv_approved_subquery))\
+            .annotate(total_itm_approved=(total_itm_approved_subquery))\
+            .aggregate(value=ExpressionWrapper(
+                (Sum("total_srv_approved") + Sum("total_itm_approved")) ,
+                output_field=DecimalField()
+            ))["value"]
+
+    else:
+        return 0
 
 
 def _query_product_item_service_limit(target_date, family_id, elt_qs,

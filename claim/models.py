@@ -245,7 +245,7 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
         db_column='AuditUserIDProcess', blank=True, null=True)
     care_type = models.CharField(db_column='CareType', max_length=4, blank=True, null=True)
 
-    # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
+
 
     class Meta:
         managed = True
@@ -383,6 +383,7 @@ class ClaimDetail:
 
     objects = ClaimDetailManager()
 
+    
     @property
     def itemsvc(self):
         if hasattr(self, "item"):
@@ -392,6 +393,13 @@ class ClaimDetail:
         else:
             raise Exception("ClaimDetail has neither item nor service")
 
+
+    def get_value(self):
+        if self.status != self.STATUS_REJECTED and not self.rejection_reason:
+            qty = self.qty_approved or self.qty_provided or 0
+            price = self.price_approved or self.price_adjusted or self.price_asked or 0
+        return qty * price
+    
     class Meta:
         abstract = True
 
