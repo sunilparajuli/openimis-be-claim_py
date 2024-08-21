@@ -14,25 +14,8 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='claim',
-            name='care_type',
-            field=models.CharField(
-                blank=True, db_column='CareType', max_length=4, null=True),
-        ),
-        migrations.AddField(
-            model_name='claim',
             name='pre_authorization',
             field=models.BooleanField(blank=True, default=False, null=True),
         ),
-        migrations.AddField(
-            model_name='claim',
-            name='refer_from',
-            field=models.ForeignKey(blank=True, db_column='ReferFrom', null=True,
-                                    on_delete=django.db.models.deletion.DO_NOTHING, related_name='referFromHF', to='location.healthfacility'),
-        ),
-        migrations.AddField(
-            model_name='claim',
-            name='refer_to',
-            field=models.ForeignKey(blank=True, db_column='ReferTo', null=True,
-                                    on_delete=django.db.models.deletion.DO_NOTHING, related_name='referToHF', to='location.healthfacility'),
-        ),
+
     ]
