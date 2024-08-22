@@ -35,7 +35,7 @@ def create_test_claim(custom_props={}, user = DummyUser(), product=None):
             "icd_id": 116,
             "date_from": datetime.now() - timedelta(days=2),
             "date_claimed": _to,
-            "date_to": _to,
+            "date_to": None,
             "status": 2,
             "validity_from": _to,
             "code": str(uuid4()),
