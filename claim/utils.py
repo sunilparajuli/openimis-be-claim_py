@@ -4,7 +4,8 @@ from medical.models import Item, Service
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 from .apps import ClaimConfig
-
+from core import filter_validity
+from policy.models import Policy
 
 def process_child_relation(user, data_children, claim_id, children, create_hook):
     claimed = 0
@@ -12,13 +13,10 @@ def process_child_relation(user, data_children, claim_id, children, create_hook)
     if __check_if_maximum_amount_overshoot(data_children, children):
         raise ValidationError(_("mutation.claim_item_service_maximum_amount_overshoot"))
     for data_elt in data_children:
-        if ClaimConfig.native_code_for_services == False:
-            if create_hook == service_create_hook:
-                claimed += calcul_amount_service(data_elt)
-            else:
-                claimed += data_elt['qty_provided'] * data_elt['price_asked']
-        else:
-            claimed += data_elt['qty_provided'] * data_elt['price_asked']
+        use_sub = ClaimConfig.native_code_for_services == False and create_hook == service_create_hook
+
+        claimed += calcul_amount_service(data_elt, use_sub)
+        
 
         elt_id = data_elt.pop('id') if 'id' in data_elt else None
         if elt_id:
@@ -45,20 +43,89 @@ def process_child_relation(user, data_children, claim_id, children, create_hook)
 
     return claimed
 
+def get_claim_target_date(claim):
+    return claim.date_to if claim.date_to else claim.date_from
 
-def calcul_amount_service(elt):
-    totalClaimed = elt['price_asked'] * elt['qty_provided']
-    if len(elt['service_item_set']) != 0 and len(elt['service_service_set']) != 0:
-        totalClaimed = 0
-        for service_item_set in elt['service_item_set']:
-            if "qty_asked" in service_item_set:
-                if not (math.isnan(service_item_set["qty_asked"])):
-                    totalClaimed += service_item_set['qty_asked'] * service_item_set['price_asked']
-        for service_service_set in elt['service_service_set']:
-            if "qty_asked" in service_service_set:
-                if not (math.isnan(service_service_set["qty_asked"])):
-                    totalClaimed += service_service_set['qty_asked'] * service_service_set['price_asked']
-    return totalClaimed
+def generic_amount_claimdetail(elt):
+    return  (elt.get('price_approved') or
+        elt.get('price_adjusted') or
+        elt.get('price_asked')) * (
+            elt.get('qty_approved') 
+            or elt.get('qty_provided') 
+    ) or 0
+
+def get_valid_policies_qs(insuree_id, target_date):
+    return Policy.objects.filter(
+        insuree_policies__insuree_id=insuree_id,
+        *filter_validity(validity=target_date),
+        *filter_validity(validity=target_date, prefix='insuree_policies__'),
+        effective_date__lte=target_date, 
+        expiry_date__gte=target_date,
+        status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED],
+        insuree_policies__effective_date__lte=target_date, 
+        insuree_policies__expiry_date__gte=target_date,
+    )
+   
+def calcul_amount_service(elt, use_sub=True):
+    total_claimed = generic_amount_claimdetail(elt)
+    total_claimed_sub = 0
+    sub_found = False
+    if 'service_item_set' in elt and isinstance(elt['service_item_set'], list):
+        for service_item in elt['service_item_set']:
+            sub_found = True
+            total_claimed_sub += generic_amount_claimdetail(service_item)
+    if 'service_service_set' in elt and isinstance(elt['service_service_set'], list):
+        for service_service in elt['service_service_set']:
+            sub_found = True
+            total_claimed_sub += generic_amount_claimdetail(service_service)
+    if use_sub and sub_found:
+        return total_claimed_sub
+    return total_claimed
+
+
+def get_claim_product(claim, adult, target_date=None, items=None, services=None, assigned=False):
+    from product.models import Product, ProductItem, ProductService
+    from django.db.models import ExpressionWrapper, F, DateTimeField, OuterRef, IntegerField, Q, Prefetch
+    from django.db.models.functions import Coalesce
+    if not target_date:
+        target_date = get_claim_target_date(claim)
+    if items is None:
+        items = claim.items.filter(*filter_validity(validity=target_date))    
+    if services is None:
+        services = claim.services.filter(*filter_validity(validity=target_date))    
+
+    qs = Product.objects 
+    if assigned:
+        qs = qs.filter(
+            Q(Q(n=[i.product_id for i in items]) 
+                | Q(id__in=[s.product_id for s in services]))
+        )
+    else:
+        qs = qs.filter(
+            policies__effective_date__lte=target_date, 
+            policies__expiry_date__gte=target_date,
+            policies__status__in=[Policy.STATUS_ACTIVE, Policy.STATUS_EXPIRED],
+            policies__insuree_policies__insuree_id=claim.insuree.id,
+            policies__insuree_policies__effective_date__lte=target_date, 
+            policies__insuree_policies__expiry_date__gte=target_date,
+            *filter_validity(validity=target_date, prefix='policies__'),
+            *filter_validity(validity=target_date, prefix='policies__insuree_policies__')
+        ).filter(
+            Q(Q(items__item__in=[i.item_id for i in items]) 
+                | Q(services__service__in=[s.service_id for s in services]))
+        )
+    return list(qs.prefetch_related(Prefetch(
+            'items', 
+            queryset=ProductItem.objects.filter(
+                *filter_validity(validity=target_date)
+            ).prefetch_related('item'))
+        ).prefetch_related(Prefetch(
+            'services',
+            queryset=ProductService.objects.filter(
+                *filter_validity(validity=target_date)
+            ).prefetch_related('service'))
+        ))
+
 
 
 def __check_if_maximum_amount_overshoot(data_children, children):

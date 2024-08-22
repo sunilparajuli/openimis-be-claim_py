@@ -606,7 +606,7 @@ class ClaimServiceService(models.Model):
 class ClaimDedRem(core_models.VersionedModel):
     id = models.AutoField(db_column='ExpenditureID', primary_key=True)
 
-    policy = models.ForeignKey('policy.Policy', models.DO_NOTHING, db_column='PolicyID', blank=True, null=True,
+    policy = models.ForeignKey('policy.Policy', models.DO_NOTHING, db_column='PolicyID', blank=False, null=False,
                                related_name='claim_ded_rems')
     insuree = models.ForeignKey('insuree.Insuree', models.DO_NOTHING, db_column='InsureeID', blank=True, null=True,
                                 related_name='claim_ded_rems')

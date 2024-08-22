@@ -3,33 +3,49 @@ from claim.validations import get_claim_category, approved_amount
 from claim.services import claim_create, update_sum_claims
 from medical.test_helpers import get_item_of_type, get_service_of_category
 from uuid import uuid4
+from product.models import ProductItem, ProductService, ProductItemOrService
+from product.test_helpers import create_test_product_service, create_test_product_item
+from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist
+from insuree.test_helpers import create_test_insuree
+from policy.test_helpers import create_test_policy2
+from insuree.models import Insuree
 
 class DummyUser:
     def __init__(self):
       self.id_for_audit = 1  
 
-def create_test_claim(custom_props={}, user = DummyUser() ):
-    from core import datetime
-    if 'insuree' not in custom_props and 'insuree_id' not in custom_props:
-        custom_props["insuree_id"]= 2
-
+def create_test_claim(custom_props={}, user = DummyUser(), product=None):
+    from datetime import datetime, timedelta
+    insuree = None
+    if 'insuree' in custom_props:
+        insuree = custom_props['insuree']
+    if 'insuree_id' in custom_props:
+        insuree = Insuree.objects.filter(id=custom_props['insuree_id']).first()
+    else:
+        insuree = create_test_insuree()
+        custom_props["insuree"]= insuree
+        
+    _to = datetime.now() - timedelta(days=1)
+    if product:
+        create_test_policy2(product, insuree)
+    
     return claim_create(
         {
             "health_facility_id": 18,
             "icd_id": 116,
-            "date_from": datetime.datetime(2019, 6, 1),
-            "date_claimed": datetime.datetime(2019, 6, 1),
-            "date_to": datetime.datetime(2019, 6, 1),
+            "date_from": datetime.now() - timedelta(days=2),
+            "date_claimed": _to,
+            "date_to": _to,
             "status": 2,
-            "validity_from": datetime.datetime(2019, 6, 1),
-            "code":  str(uuid4()),
+            "validity_from": _to,
+            "code": str(uuid4()),
             **custom_props
         }, user
     )
 
 
-def create_test_claimitem(claim, item_type, valid=True, custom_props={}):
-    item =  ClaimItem.objects.create(
+def create_test_claimitem(claim, item_type, valid=True, custom_props={}, product=None):
+    item = ClaimItem.objects.create(
         **{
             "claim": claim,
             "qty_provided": 7,
@@ -44,11 +60,23 @@ def create_test_claimitem(claim, item_type, valid=True, custom_props={}):
            }
     )
     update_sum_claims(claim)
+    if product:
+        product_item = create_test_product_item(
+            product,
+            item.item,
+            custom_props={"price_origin": ProductItemOrService.ORIGIN_RELATIVE},
+        )
+        pricelist_detail = add_item_to_hf_pricelist(
+            item.item,
+            hf_id=claim.health_facility.id
+        )
+
+    
     return item
 
 
 
-def create_test_claimservice(claim, category=None, valid=True, custom_props={}):
+def create_test_claimservice(claim, category=None, valid=True, custom_props={}, product=None):
     service =  ClaimService.objects.create(
         **{
             "claim": claim,
@@ -63,6 +91,18 @@ def create_test_claimservice(claim, category=None, valid=True, custom_props={}):
         }
     )    
     update_sum_claims(claim)
+    if product:
+        create_test_product_service(
+            product,
+            service.service,
+            custom_props={"price_origin": ProductItemOrService.ORIGIN_RELATIVE},
+        )
+        add_service_to_hf_pricelist(
+            service.service,
+            hf_id=claim.health_facility.id
+        )
+
+    
     return service
 
 
