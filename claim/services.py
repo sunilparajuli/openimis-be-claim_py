@@ -22,7 +22,8 @@ from claim.utils import (
     process_items_relations,
     process_services_relations,
     get_valid_policies_qs,
-    get_claim_target_date
+    get_claim_target_date,
+    approved_amount
 )
 from .validations import validate_claim, validate_assign_prod_to_claimitems_and_services, process_dedrem, \
     approved_amount, get_claim_category
@@ -577,7 +578,7 @@ def processing_claim(claim, user, is_process=False, validate=True):
             errors = validate_assign_prod_to_claimitems_and_services(claim, policies=policies, items=items, services=services)
             logger.debug("ProcessClaimsMutation: claim %s assigned, nb of errors: %s", claim.uuid, len(errors))
     if len(errors) == 0:    
-        errors += process_dedrem(claim, user.id_for_audit, is_process, policies=policies, items=items, services=services)
+        errors = process_dedrem(claim, user.id_for_audit, is_process, policies=policies, items=items, services=services)
         logger.debug("ProcessClaimsMutation: claim %s processed for dedrem, nb of errors: %s", claim.uuid,
                     len(errors))
     if len(errors) > 0:
@@ -603,9 +604,9 @@ def set_claim_processed_or_valuated(claim, errors, user):
     try:
         if errors:
             claim.status = Claim.STATUS_REJECTED
-        else:
+        if claim.status == Claim.STATUS_CHECKED:
             if with_relative_prices(claim):
-                claim.status = Claim.STATUS_PROCESSED  
+                claim.status = Claim.STATUS_PROCESSED
             else:
                 claim.status = Claim.STATUS_VALUATED
                 claim.valuated = approved_amount(claim)
