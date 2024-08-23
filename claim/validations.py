@@ -3,10 +3,7 @@ import logging
 from collections import namedtuple
 
 from claim.models import ClaimItem, Claim, ClaimService, ClaimDedRem, ClaimDetail, ClaimServiceService, ClaimServiceItem
-from claim.subqueries import (   
-    total_srv_adjusted_exp, total_itm_adjusted_exp,
-    total_srv_approved_exp, total_itm_approved_exp,
-)
+
 from core import utils
 from datetime import datetime
 from core.datetimes.shared import datetimedelta
@@ -22,7 +19,7 @@ from policy.models import Policy
 from product.models import Product, ProductItem, ProductService, ProductItemOrService
 
 from .apps import ClaimConfig
-from .utils import get_queryset_valid_at_date, get_valid_policies_qs, get_claim_target_date
+from .utils import get_queryset_valid_at_date, get_valid_policies_qs, get_claim_target_date, approved_amount
 logger = logging.getLogger(__name__)
 
 REJECTION_REASON_INVALID_ITEM_OR_SERVICE = 1
@@ -856,19 +853,6 @@ def validate_assign_prod_to_claimitems_and_services(claim, policies=None, servic
     return errors
 
 
-def approved_amount(claim):
-
-    if claim.status != Claim.STATUS_REJECTED:
-        return Claim.objects.filter(id=claim.id).annotate(total_srv_approved=(total_srv_approved_exp))\
-            .annotate(total_itm_approved=(total_itm_approved_exp))\
-            .aggregate(value=ExpressionWrapper(
-                (Sum("total_srv_approved") + Sum("total_itm_approved")),
-                output_field=DecimalField()
-            ))["value"] or 0
-
-    else:
-        return 0
-
 
 def _query_product_item_service_limit(target_date, elt_qs,
                                       limitation_field, limitation_type,
@@ -941,16 +925,18 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
     # actually looping on ClaimItem and ClaimService.
     if items is None:
         items = list(claim.items.filter(
-            *filter_validity(validity=target_date, prefix='item__'),
-            *filter_validity(validity=target_date),
-            *filter_validity(validity=target_date, prefix='product__'),
+            item__isnull=False,
+            product__isnull=False,
+            validity_to__isnull=True,
+        ).filter(
             Q(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))
         ))
     if services is None:
         services = list(claim.services.filter(
-            *filter_validity(validity=target_date, prefix='service__'),
-            *filter_validity(validity=target_date),
-            *filter_validity(validity=target_date, prefix='product__'),
+            service__isnull=False,
+            product__isnull=False,
+            validity_to__isnull=True,
+        ).filter(
             Q(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))
         ))
     

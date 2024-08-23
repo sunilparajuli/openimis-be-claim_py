@@ -6,6 +6,12 @@ from django.utils.translation import gettext as _
 from .apps import ClaimConfig
 from core import filter_validity
 from policy.models import Policy
+from claim.subqueries import (   
+    total_elm_approved_exp,
+)
+
+from django.db.models import DecimalField, ExpressionWrapper
+
 
 def process_child_relation(user, data_children, claim_id, children, create_hook):
     claimed = 0
@@ -82,6 +88,16 @@ def calcul_amount_service(elt, use_sub=True):
         return total_claimed_sub
     return total_claimed
 
+
+def approved_amount(claim):
+    if claim.status != Claim.STATUS_REJECTED:
+        return Claim.objects.filter(id=claim.id).aggregate(
+            value=ExpressionWrapper(total_elm_approved_exp('items__') + total_elm_approved_exp('services__')
+            ,output_field=DecimalField())
+        )["value"] or 0
+    else:
+        return 0
+    
 
 def get_claim_product(claim, adult, target_date=None, items=None, services=None, assigned=False):
     from product.models import Product, ProductItem, ProductService

@@ -1,5 +1,6 @@
 from claim.models import Claim, ClaimService, ClaimItem, ClaimDedRem, ClaimAdmin
-from claim.validations import get_claim_category, approved_amount
+from claim.validations import get_claim_category
+from claim.utils import approved_amount
 from claim.services import claim_create, update_sum_claims
 from medical.test_helpers import get_item_of_type, get_service_of_category
 from uuid import uuid4
