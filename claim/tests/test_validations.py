@@ -1022,7 +1022,7 @@ class ValidationTest(TestCase):
         service2 = create_test_service(
             "V", 
             custom_props={
-                "code": "V-DP",
+                "code": "V-DP2",
                 "packagetype": "F",
                 "price": 750,
                 "validity_from": datetime(2000,1,1)
@@ -1031,7 +1031,7 @@ class ValidationTest(TestCase):
         service3 = create_test_service(
             "V", 
             custom_props={
-                "code": "V-DP",
+                "code": "V-DP3",
                 "packagetype": "P",
                 "price": 750,
                 "validity_from": datetime(2000,1,1)

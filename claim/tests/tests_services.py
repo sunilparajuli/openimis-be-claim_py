@@ -301,11 +301,11 @@ class ClaimSubmitServiceTestCase(TestCase):
             end_date=end_date
         )
         service = ClaimSubmitService(user=mock_user)
-        claim = service.enter_and_submit(claim, False)
+        claim = service.enter_and_submit(claim, True)
         expected_claimed = 1000 + 1000  # 2 provisions, both qty = 1, price asked == 1000
 
         self.assertEqual(claim.status, Claim.STATUS_CHECKED)
-        processing_claim(claim, mock_user, True)
+        errors = processing_claim(claim, mock_user, True)
         self.assertEqual(claim.status, Claim.STATUS_VALUATED)
         self.assertEqual(claim.valuated, expected_claimed)
         self.assertEqual(claim.claimed, expected_claimed)
