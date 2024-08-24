@@ -904,6 +904,7 @@ def _get_dedrem(prefix, dedrem_type, field, product, insuree, demrems):
 # - Go through each item and deduce
 # - Go through each service and deduce
 def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, items=None, services=None):
+    errors = []
     logger.debug(f"processing dedrem for claim {claim.uuid}")
     target_date = get_claim_target_date(claim)
     category = get_claim_category(claim)
@@ -1141,9 +1142,10 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
                 set_price_adjusted = claim_detail.price_asked
                 if ClaimConfig.native_code_for_services == False:
                     if not detail_is_item:
+                        service_price = None
                         if claim_detail.service.packagetype == 'F':
                             service_price = claim_detail.service.price
-                        if (claim_detail.price_adjusted or claim_detail.price_asked) > service_price:
+                        if service_price and (claim_detail.price_adjusted or claim_detail.price_asked) > service_price:
                             set_price_adjusted = service_price
             else:
                 set_price_adjusted = pl_price
@@ -1397,7 +1399,13 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
     if not products:
         logger.warning(f"claim {claim.uuid} did not have any item or service to valuate.")
         claim.status = Claim.STATUS_REJECTED
+        errors += [{'code': REJECTION_REASON_NO_PRODUCT_FOUND,
+                            'message': _("claim.validation.product_family.no_product_found") % {
+                            'code': claim.code,
+                            'element': 'all'},
+                        'detail': claim.uuid}]
+
         # amount is 'locked' from the submit
         # ... so re-creating the ClaimDedRem according to adjusted/valuated price
     claim.save()    
-    return []  # process_dedrem will never put the claim in error status (beside technical error and until it changes)
+    return errors  # process_dedrem will never put the claim in error status (beside technical error and until it changes)
