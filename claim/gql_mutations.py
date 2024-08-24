@@ -34,8 +34,8 @@ from medical.models import Item, Service
 
 from claim.utils import process_items_relations, process_services_relations
 from claim.services import validate_claim_data as service_validate_claim_data, \
-        update_or_create_claim as service_update_or_create_claim, check_unique_claim_code, submit_claim,\
-            validate_and_process_dedrem_claim as service_validate_and_process_dedrem_claim,\
+        update_or_create_claim as service_update_or_create_claim, check_unique_claim_code, ClaimSubmitService,\
+            processing_claim as service_processing_claim,\
             create_feedback_prompt as service_create_feedback_prompt, update_claims_dedrems,\
                 set_feedback_prompt_validity_to_to_current_date, set_claims_status
 from django.db import transaction
@@ -596,10 +596,10 @@ class SubmitClaimsMutation(OpenIMISMutation, ClaimSubmissionStatsMixin):
         errors = []
         uuids = data.get("uuids", [])
         client_mutation_id = data.get("client_mutation_id", None)
+        service = ClaimSubmitService(user)
         c_errors = []
-        claims = Claim.objects \
-                .filter(uuid__in=uuids,
-                        validity_to__isnull=True) \
+        claims = Claim.objects.filter(uuid__in=uuids,
+            validity_to__isnull=True) \
             .prefetch_related(Prefetch('items', queryset=ClaimItem.objects.filter(
                 *filter_validity(), 
                 Q(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))))) \
@@ -607,9 +607,12 @@ class SubmitClaimsMutation(OpenIMISMutation, ClaimSubmissionStatsMixin):
                 *filter_validity(),
                 Q(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))))) 
         remaining_uuid = list(map(str.upper,uuids))
+        
         for claim in claims:
             remaining_uuid.remove(claim.uuid.upper())
-            c_errors += submit_claim(claim, user)
+            subm_claim, error = service.submit_claim(claim, user)
+            if error:
+                c_errors += error
             if c_errors:
                 errors.append({
                     'title': claim.code,
@@ -935,22 +938,19 @@ class ProcessClaimsMutation(OpenIMISMutation, ClaimSubmissionStatsMixin):
         remaining_uuid = list(map(str.upper,uuids))
         for claim in claims:
             remaining_uuid.remove(claim.uuid.upper())
-            
-
             logger.debug("ProcessClaimsMutation: processing %s", claim.uuid)
             c_errors = []
-     
             claim.save_history()
             claim.audit_user_id_process = user.id_for_audit
             logger.debug("ProcessClaimsMutation: validating claim %s", claim.uuid)
-            c_errors += validate_and_process_dedrem_claim(claim, user, True)
-
+            c_errors += processing_claim(claim, user, True)
             logger.debug("ProcessClaimsMutation: claim %s set processed or valuated", claim.uuid)
             if c_errors:
                 errors.append({
                     'title': claim.code,
                     'list': c_errors
                 })
+            claim.save()
                 
         if len(remaining_uuid):
                 errors += {
@@ -1018,5 +1018,5 @@ def set_claim_deleted(claim):
 
 
 
-def validate_and_process_dedrem_claim(claim, user, is_process):
-    return service_validate_and_process_dedrem_claim(claim, user, is_process)
+def processing_claim(claim, user, is_process):
+    return service_processing_claim(claim, user, is_process)
