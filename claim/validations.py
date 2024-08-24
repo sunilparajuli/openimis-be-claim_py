@@ -1392,12 +1392,12 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
             if claim.review_status == Claim.REVIEW_SELECTED:
                 claim.review_status = Claim.REVIEW_BYPASSED
 
-            claim.save()
+            
  
     if not products:
         logger.warning(f"claim {claim.uuid} did not have any item or service to valuate.")
         claim.status = Claim.STATUS_REJECTED
         # amount is 'locked' from the submit
         # ... so re-creating the ClaimDedRem according to adjusted/valuated price
-        
+    claim.save()    
     return []  # process_dedrem will never put the claim in error status (beside technical error and until it changes)
