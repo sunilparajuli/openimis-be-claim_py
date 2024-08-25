@@ -2,10 +2,18 @@ from django.test import TestCase
 from unittest import mock
 from location.test_helpers import create_test_location, create_test_health_facility,create_test_village
 from insuree.test_helpers import create_test_insuree
+from policy.test_helpers import create_test_policy2
+from product.test_helpers import (
+    create_test_product,
+    create_test_product_service,
+    create_test_product_item
+)
+from product.models import ProductItemOrService
 from claim.test_helpers import create_test_claim_admin, create_test_claim
 from claim.models import Claim, ClaimItem, ClaimService,ClaimDetail
 from medical.models import  Diagnosis, Item, Service
 from medical.test_helpers import create_test_item, create_test_service
+from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist
 
 from core.services import create_or_update_interactive_user, create_or_update_core_user
 import datetime
@@ -29,17 +37,17 @@ class ClaimSubmitServiceTestCase(TestCase):
     test_district = None
     test_village = None
     test_ward = None
-    
+    test_policy = None
 
     @classmethod
     def setUpTestData(cls):
         if cls.test_region is None:
-            cls.test_village  =create_test_village( )
-            cls.test_ward =cls.test_village.parent
-            cls.test_region =cls.test_village.parent.parent.parent
+            cls.test_village = create_test_village( )
+            cls.test_ward = cls.test_village.parent
+            cls.test_region = cls.test_village.parent.parent.parent
             cls.test_district = cls.test_village.parent.parent
 
-        cls.test_hf=create_test_health_facility("1", cls.test_district.id, valid=True)
+        cls.test_hf = create_test_health_facility("1", cls.test_district.id, valid=True)
         props = dict(
             last_name="name",
             other_names="surname",
@@ -49,8 +57,21 @@ class ClaimSubmitServiceTestCase(TestCase):
         family_props = dict(
             location=cls.test_village,
         )
-        cls.test_insuree= create_test_insuree(is_head=True, custom_props=props, family_custom_props=family_props)
-        cls.test_claim_admin= create_test_claim_admin()
+        cls.test_insuree = create_test_insuree(is_head=True, custom_props=props, family_custom_props=family_props)
+        product = create_test_product(
+            "BCUL0001",
+            custom_props={
+                "name": "simplebatch",
+                "lump_sum": 10_000,
+                "location_id": cls.test_region.id
+            },
+        )
+
+        cls.test_policy = create_test_policy2(
+            product,
+            cls.test_insuree,
+        )
+        cls.test_claim_admin = create_test_claim_admin()
         cls.test_icd = Diagnosis(code='ICD00I', name='diag test', audit_user_id=-1)
         cls.test_icd.save()
         cls.test_claim = Claim.objects.create(
@@ -67,28 +88,42 @@ class ClaimSubmitServiceTestCase(TestCase):
         )
         
         cls.test_claim_item = ClaimItem.objects.create(
-            claim = cls.test_claim,
-            item =create_test_item(
+            claim=cls.test_claim,
+            item=create_test_item(
                 'D',
-                custom_props={"code": "cCode", "price" :1000}
+                custom_props={"code": "cCode", "price":1000}
             ),
-            price_asked = 1000,
+            price_asked=1000,
             qty_provided=1,
             audit_user_id=-1,
             status=ClaimDetail.STATUS_PASSED,
             availability=True
         )
+        add_item_to_hf_pricelist(
+            cls.test_claim_item.item,
+            hf_id=cls.test_claim.health_facility_id,
+            custom_props={}
+        )
+        create_test_product_item(product, cls.test_claim_item.item, valid=True)
+        
         cls.test_claim_service = ClaimService.objects.create(
-            claim = cls.test_claim,
-            service = create_test_service(
+            claim=cls.test_claim,
+            service=create_test_service(
                 'D',
                 custom_props={"code": "sCode", "price" :1000}
             ),
-            price_asked = 1000,
+            price_asked=1000,
             qty_provided=1,
             audit_user_id=-1,
             status=ClaimDetail.STATUS_PASSED
         )
+        add_service_to_hf_pricelist(
+            cls.test_claim_service.service,
+            hf_id=cls.test_claim.health_facility_id,
+            custom_props={}
+        )
+        create_test_product_service(product, cls.test_claim_service.service, valid=True)
+        
 
     def test_minimal_item_claim_submit_xml(self):
         items = [
@@ -198,7 +233,7 @@ class ClaimSubmitServiceTestCase(TestCase):
 
     @mock.patch('django.db.connections')
     def test_claim_submit_error(self, mock_connections):
-        if connection.vendor != 'microsoft':
+        if connection.vendor != 'mssql':
             self.skipTest("This test can only be executed for MSSQL database")
         with mock.patch("claim.services.ClaimSubmitService.hf_scope_check") as mock_security:
             mock_security.return_value = None
@@ -224,7 +259,7 @@ class ClaimSubmitServiceTestCase(TestCase):
 
     @mock.patch('django.db.connections')
     def test_claim_submit_allgood_xml(self, mock_connections):
-        if connection.vendor != 'microsoft':
+        if connection.vendor != 'mssql':
             self.skipTest("This test can only be executed for MSSQL database")
         with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
             # required for all modules tests
@@ -235,12 +270,14 @@ class ClaimSubmitServiceTestCase(TestCase):
                 mock_security.return_value = None
                 mock_user = mock.Mock(is_anonymous=False)
                 mock_user.has_perm = mock.MagicMock(return_value=True)
+                from datetime import datetime,timedelta
+                _to=datetime.now()-timedelta(days=1)
                 claim = ClaimSubmit(
-                    date=core.datetime.date(2020, 1, 9),
+                    date=_to,
                     code="code_ABVCD",
                     icd_code=self.test_icd.code,
                     total=334,
-                    start_date=core.datetime.date(2020, 1, 13),
+                    start_date=datetime.now()-timedelta(days=2),
                     claim_admin_code=self.test_claim_admin.code,
                     insuree_chf_id=self.test_insuree.chf_id,
                     health_facility_code=self.test_hf.code,
@@ -255,20 +292,28 @@ class ClaimSubmitServiceTestCase(TestCase):
         mock_user = mock.Mock(is_anonymous=False)
         mock_user.has_perm = mock.MagicMock(return_value=True)
         mock_user.id_for_audit = -1
-
-        claim = self._get_test_dict(code='e_n_s')
+        from datetime import date, timedelta
+        start_date = date.today() - timedelta(days=2)
+        end_date = date.today() - timedelta(days=1)
+        claim = self._get_test_dict(
+            code='e_n_s',
+            start_date=start_date,
+            end_date=end_date
+        )
         service = ClaimSubmitService(user=mock_user)
-        submitted_claim = service.enter_and_submit(claim, False)
+        claim = service.enter_and_submit(claim, True)
         expected_claimed = 1000 + 1000  # 2 provisions, both qty = 1, price asked == 1000
 
-        self.assertEqual(submitted_claim.status, Claim.STATUS_CHECKED)
-        self.assertEqual(submitted_claim.approved, expected_claimed)
-        self.assertEqual(submitted_claim.claimed, expected_claimed)
-        self.assertEqual(submitted_claim.health_facility.id, self.test_hf.id)
-        self.assertEqual(submitted_claim.items.all().count(), 1)
-        self.assertEqual(submitted_claim.services.all().count(), 1)
-        self.assertEqual(submitted_claim.audit_user_id, -1)
-        self.assertTrue(submitted_claim.id is not None)
+        self.assertEqual(claim.status, Claim.STATUS_CHECKED)
+        errors = processing_claim(claim, mock_user, True)
+        self.assertEqual(claim.status, Claim.STATUS_VALUATED)
+        self.assertEqual(claim.valuated, expected_claimed)
+        self.assertEqual(claim.claimed, expected_claimed)
+        self.assertEqual(claim.health_facility.id, self.test_hf.id)
+        self.assertEqual(claim.items.all().count(), 1)
+        self.assertEqual(claim.services.all().count(), 1)
+        self.assertEqual(claim.audit_user_id, -1)
+        self.assertTrue(claim.id is not None)
 
     @mock.patch("claim.services.ClaimSubmitService._validate_user_hf")
     @mock.patch("claim.services.ClaimCreateService._validate_user_hf")
@@ -277,11 +322,13 @@ class ClaimSubmitServiceTestCase(TestCase):
         mock_user = mock.Mock(is_anonymous=False)
         mock_user.has_perm = mock.MagicMock(return_value=True)
         mock_user.id_for_audit = -1
-
-        claim = self._get_test_dict(code='dup')
+        from datetime import date,timedelta
+        start_date=date.today()-timedelta(days=2)
+        end_date=date.today()-timedelta(days=1)
+        claim = self._get_test_dict(code='dup',start_date=start_date,end_date=end_date)
         service = ClaimSubmitService(user=mock_user)
 
-        service.enter_and_submit(claim, False)
+        submitted_claim = service.enter_and_submit(claim, True)
 
         with self.assertRaises(ValidationError):
             service.enter_and_submit(claim, False)
@@ -292,7 +339,7 @@ class ClaimSubmitServiceTestCase(TestCase):
         claim = create_test_claim()
         service_items_dict = {
             "qty_provided": 7, "price_asked": 11, "service_id": 23,
-            "status": 1, "validity_from": "2019-06-01", "validity_to": None, "audit_user_id": -1,
+            "status": 1, "validity_from": "2019-06-01", "validity_to": None, "audit_user_id": 1,
             "service_item_set": [{"sub_item_code": item.code, "qty_asked":1, "qty_provided": 7, "price_asked": 11}],
             "service_service_set": [{"sub_service_code": service.code, "qty_asked":2, "qty_provided": 3, "price_asked": 20}]
         }
@@ -326,25 +373,25 @@ class ClaimSubmitServiceTestCase(TestCase):
         service = create_test_service("V")
         service_items_dict = {
             "qty_provided": 5, "price_asked": 50, "service_id": 23,
-            "status": 1, "validity_from": "2019-06-01", "validity_to": None, "audit_user_id": -1,
+            "status": 1, "validity_from": "2019-06-01", "validity_to": None, "audit_user_id": 1,
             "service_item_set": [{"sub_item_code": item.code, "qty_asked":1, "qty_provided": 7, "price_asked": 11}],
             "service_service_set": [{"sub_service_code": service.code, "qty_asked":2, "qty_provided": 3, "price_asked": 20}]
         }
         result = calcul_amount_service(service_items_dict)
-        self.assertEqual(result, 51)
+        self.assertEqual(result, 137)
 
-    def _get_test_dict(self, code=None):
+    def _get_test_dict(self, code=None,start_date=None,end_date=None):
         return {
             "health_facility_id": self.test_claim.health_facility_id, 
             "icd_id": self.test_icd.id, 
-            "date_from": self.test_claim.date_from, 
+            "date_from": start_date or self.test_claim.date_from, 
             "code": self.test_claim.code if code is None else code,
-            "date_claimed": self.test_claim.date_claimed, 
-            "date_to": self.test_claim.date_to,
+            "date_claimed": end_date or self.test_claim.date_claimed, 
+            "date_to": end_date or self.test_claim.date_to,
             "audit_user_id": self.test_claim.audit_user_id, 
             "insuree_id": self.test_claim.insuree_id, 
             "status": self.test_claim.status, 
-            "validity_from": self.test_claim.validity_from,
+            "validity_from": start_date or self.test_claim.validity_from,
             "items": [{
                 "qty_provided": self.test_claim_item.qty_provided, 
                 "price_asked": self.test_claim_item.price_asked, 
