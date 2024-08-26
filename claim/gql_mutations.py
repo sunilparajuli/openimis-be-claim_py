@@ -625,7 +625,6 @@ class SubmitClaimsMutation(OpenIMISMutation, ClaimSubmissionStatsMixin):
 
         claims = Claim.objects.filter(uuid__in=uuids,
             validity_to__isnull=True) \
-
             .prefetch_related(Prefetch('items', queryset=ClaimItem.objects.filter(
                 *filter_validity(),
                 Q(Q(rejection_reason=0) | Q(rejection_reason__isnull=True))))) \
