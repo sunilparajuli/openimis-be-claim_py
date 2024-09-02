@@ -263,7 +263,6 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
         db_column='CareType', max_length=4, blank=True, null=True)
     pre_authorization = models.BooleanField(
         default=False, blank=True, null=True)
-
     patient_condition = models.CharField(max_length=2, null=True, blank=True)
 
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
@@ -411,6 +410,7 @@ class ClaimDetail:
 
     objects = ClaimDetailManager()
 
+    
     @property
     def itemsvc(self):
         if hasattr(self, "item"):
@@ -420,6 +420,13 @@ class ClaimDetail:
         else:
             raise Exception("ClaimDetail has neither item nor service")
 
+
+    def get_value(self):
+        if self.status != self.STATUS_REJECTED and not self.rejection_reason:
+            qty = self.qty_approved or self.qty_provided or 0
+            price = self.price_approved or self.price_adjusted or self.price_asked or 0
+        return qty * price
+    
     class Meta:
         abstract = True
 
@@ -632,7 +639,7 @@ class ClaimServiceService(models.Model):
 class ClaimDedRem(core_models.VersionedModel):
     id = models.AutoField(db_column='ExpenditureID', primary_key=True)
 
-    policy = models.ForeignKey('policy.Policy', models.DO_NOTHING, db_column='PolicyID', blank=True, null=True,
+    policy = models.ForeignKey('policy.Policy', models.DO_NOTHING, db_column='PolicyID', blank=False, null=False,
                                related_name='claim_ded_rems')
     insuree = models.ForeignKey('insuree.Insuree', models.DO_NOTHING, db_column='InsureeID', blank=True, null=True,
                                 related_name='claim_ded_rems')
