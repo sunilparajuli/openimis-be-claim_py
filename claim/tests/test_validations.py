@@ -160,11 +160,12 @@ class ValidationTest(TestCase):
         hf_without_pricelist = HealthFacility.objects.filter(items_pricelist__id__isnull=True).first()
         self.assertIsNotNone(hf_without_pricelist, "This test requires a health facility without a price list item")
         # Given
+        
         claim = create_test_claim({"health_facility_id": hf_without_pricelist.id}, product=self.product)
         
-        service1 = create_test_claimservice(claim, "S")
+        service1 = create_test_claimservice(claim, "S", custom_props={})
         
-        item1 = create_test_claimitem(claim, "D", True)
+        item1 = create_test_claimitem(claim, "D", True,  custom_props={})
         # When
         errors = validate_claim(claim, True)
         # Then
@@ -995,6 +996,7 @@ class ValidationTest(TestCase):
     def test_set_status(self):
         class DummyUser:
             id_for_audit=-1
+            id=1
         insuree = create_test_insuree()
         officer = create_test_officer(villages=[insuree.current_village or insuree.family.location])
         claim = create_test_claim(custom_props={'status':Claim.STATUS_CHECKED, 

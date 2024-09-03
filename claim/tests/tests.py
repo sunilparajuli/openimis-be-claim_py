@@ -15,7 +15,7 @@ from graphene import Schema
 
 from claim.models import Claim, ClaimAdmin
 
-
+import datetime
 from policy.models import Policy
 from policy.test_helpers import create_test_policy2
 from product.test_helpers import create_test_product, create_test_product_service
@@ -179,6 +179,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
         self.get_mutation_result(
             '3a90436a-d5ea-48e7-bde4-0bcff0240260', self.admin_token)
         claim = Claim.objects.filter(code='m-c-claim').first()
+        date_from = datetime.date.today() - datetime.timedelta(days=3)
         self.assertIsNotNone(claim)
         self.assertEqual(claim.status, Claim.STATUS_ENTERED)
         response = self.query(
@@ -193,12 +194,12 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                 uuid: "{str(claim.uuid)}"
                 insureeId: {self.insuree.id}
                 adminId: {self.claim_admin.id}
-                dateFrom: "2023-11-06"
+                dateFrom: "{str(date_from)}"
                 icdId: 2
                 jsonExt: "{{}}"
                 feedbackStatus: 1
                 reviewStatus: 1
-                dateClaimed: "2023-12-06"
+                dateClaimed: "{str(date_from)}"
                 healthFacilityId: {self.claim_admin.health_facility.id}
                 visitType: "O"
                 preAuthorization: false

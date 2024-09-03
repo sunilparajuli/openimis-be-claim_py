@@ -23,6 +23,7 @@ from medical.test_helpers import create_test_service, create_test_item
 from claim.utils import service_create_hook, calcul_amount_service, service_update_hook
 from claim.test_helpers import create_test_claim
 from claim.models import ClaimServiceItem, ClaimServiceService
+from django.db import connection
 
 class ClaimSubmitServiceTestCase(TestCase):
     test_hf = None
@@ -307,7 +308,7 @@ class ClaimSubmitServiceTestCase(TestCase):
         self.assertEqual(claim.status, Claim.STATUS_CHECKED)
         errors = processing_claim(claim, mock_user, True)
         self.assertEqual(claim.status, Claim.STATUS_VALUATED)
-        self.assertEqual(claim.valuated, expected_claimed)
+        self.assertEqual(claim.approved, expected_claimed)
         self.assertEqual(claim.claimed, expected_claimed)
         self.assertEqual(claim.health_facility.id, self.test_hf.id)
         self.assertEqual(claim.items.all().count(), 1)

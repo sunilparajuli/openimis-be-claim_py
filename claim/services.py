@@ -605,11 +605,12 @@ def set_claim_processed_or_valuated(claim, errors, user):
         if errors:
             claim.status = Claim.STATUS_REJECTED
         if claim.status == Claim.STATUS_CHECKED:
+            claim.approved = approved_amount(claim)
             if with_relative_prices(claim):
                 claim.status = Claim.STATUS_PROCESSED
             else:
                 claim.status = Claim.STATUS_VALUATED
-                claim.valuated = approved_amount(claim)
+                claim.valuated = claim.approved 
             claim.audit_user_id_process = user.id_for_audit
             from core.utils import TimeUtils
             claim.process_stamp = TimeUtils.now()
