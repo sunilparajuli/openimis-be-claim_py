@@ -958,9 +958,9 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
         ).count()
     
         policy = next(iter([p for p in policies if p.id == policy_id]), None)
-        product = next(iter([p for p in products if p.id == policy.product_id]), None)
+        product = next(iter([p for p in products if p.id == policy.product_id or p.legacy_id == policy.product_id]), None)
         
-
+        
         hospital_visit = ( 
             product.ceiling_interpretation == Product.CEILING_INTERPRETATION_IN_PATIENT 
             and hospitalization == 1
