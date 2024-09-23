@@ -208,7 +208,8 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
 
                 serviceId: {self.service.id}
                 priceAsked: "10.00"
-                qtyProvided: "1.00"
+                explanation: "why not"
+                qtyProvided: "2.00"
                 status: 1,
                 serviceItemSet: [],
                 serviceServiceSet: []
@@ -248,7 +249,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
         self.get_mutation_result(
             'd02fff0a-dd95-4413-a2f4-4cf2189dc0d6', self.admin_token)
         # select for feeback
-        claim = Claim.objects.filter(code='m-c-claim').first()
+        claim.refresh_from_db()
         create_test_officer(villages=[claim.insuree.family.location])
         self.assertEqual(claim.status, Claim.STATUS_CHECKED)
         response = self.query(f'''
@@ -268,9 +269,75 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
         ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
         self.assertResponseNoErrors(response)
+        # check the mutation answer
+        claim.refresh_from_db()
         self.get_mutation_result(
             'f0585e2b-d72d-4001-915a-1cf10e9f1722', self.admin_token)
-        # check the mutation answer
+        # deliver review
+        claim_service = claim.services.first()
+        response = self.query(f"""
+    mutation {{
+      saveClaimReview(
+        input: {{
+          clientMutationId: "d44f5fd2-1f8d-4748-a7c2-7dea38bfde05"
+          clientMutationLabel: "Deliver claim review"
+          services: [
+                {{
+                id: {claim_service.id},
+                serviceId: {claim_service.service_id}
+                priceApproved: "5.00"
+                qtyApproved: "1.00"
+                status: 1
+            }}]
+          claimUuid: "{claim.uuid}"
+          submitReview : false
+          adjustment: "test review"
+        }}
+      ) {{
+        clientMutationId
+        internalId
+      }}
+    }}
+        """,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+        self.get_mutation_result(
+            'd44f5fd2-1f8d-4748-a7c2-7dea38bfde05', self.admin_token)
 
-        claim = Claim.objects.filter(code='m-c-claim').first()
+        claim.refresh_from_db()
+        
+
+        response = self.query(f"""
+    mutation {{
+      saveClaimReview(
+        input: {{
+          clientMutationId: "d44f5fd2-1f8d-4748-a7c2-7dea38bfde06"
+          clientMutationLabel: "Deliver claim review"
+          services: [
+                {{
+                id: {claim_service.id}
+                serviceId: {claim_service.service_id}
+                priceApproved: "5.00"
+                qtyApproved: "1.00"
+                status: 1
+            }}]
+          claimUuid: "{claim.uuid}"
+          submitReview : true
+          adjustment: "test review"
+        }}
+      ) {{
+        clientMutationId
+        internalId
+      }}
+    }}
+        """,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
+
+        self.get_mutation_result(
+            'd44f5fd2-1f8d-4748-a7c2-7dea38bfde06', self.admin_token)
+        
+        
+        
+
+        claim.refresh_from_db()
         self.assertEqual(claim.feedback_status, Claim.FEEDBACK_SELECTED)
+        self.assertEqual(claim.review_status, Claim.REVIEW_DELIVERED)

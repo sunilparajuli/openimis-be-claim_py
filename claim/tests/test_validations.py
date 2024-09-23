@@ -874,7 +874,7 @@ class ValidationTest(TestCase):
         service1.refresh_from_db()
 
         set_claims_status([claim1.uuid], "review_status", Claim.REVIEW_DELIVERED)
-        update_claims_dedrems([claim1.uuid], self.user)
+        update_claims_dedrems(None, self.user, [claim1])
 
         # Then dedrem should have been updated
         dedrem = ClaimDedRem.objects.filter(claim=claim1, *filter_validity()).first()

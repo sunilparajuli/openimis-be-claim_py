@@ -1,7 +1,7 @@
 import logging
 import os
 import urllib.parse
-import uuid
+from uuid import uuid4, UUID
 import pathlib
 import base64
 from urllib.parse import urlparse
@@ -283,7 +283,7 @@ def create_file(date, claim_id, document):
         date_iso[8:10],
         claim_id
     )
-    file_path = '%s/%s' % (file_dir, uuid.uuid4())
+    file_path = '%s/%s' % (file_dir, uuid4())
     pathlib.Path('%s/%s' % (root, file_dir)).mkdir(parents=True, exist_ok=True)
     f = open('%s/%s' % (root, file_path), "xb")
     f.write(base64.b64decode(document))
@@ -845,6 +845,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
         adjustment = graphene.String(required=False)
         items = graphene.List(ClaimItemInputType, required=False)
         services = graphene.List(ClaimServiceInputType, required=False)
+        submit_review = graphene.Boolean(required=False)
 
     @classmethod
     def async_mutate(cls, user, **data):
@@ -852,7 +853,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
         try:
             if not user.has_perms(ClaimConfig.gql_mutation_deliver_claim_review_perms):
                 raise PermissionDenied(_("unauthorized"))
-            claim = Claim.objects.get(uuid=data['claim_uuid'],
+            claim = Claim.objects.get(uuid=UUID(str(data['claim_uuid'])),
                                       validity_to__isnull=True)
             if claim is None:
                 return [{'message': _(
@@ -872,9 +873,9 @@ class SaveClaimReviewMutation(OpenIMISMutation):
             for service in services:
                 service_id = service.pop('id')
                 service_item_set = service.pop('service_service_set', [])
-                logger.debug("service_item_set ", service_item_set)
+                logger.debug(f"service_item_set {service_item_set}")
                 service_service_set = service.pop('service_service_set', [])
-                logger.debug("service_service_set ", service_service_set)
+                logger.debug(f"service_service_set {service_service_set} ")
                 claim.services.filter(id=service_id).update(**service)
                 if ClaimConfig.native_code_for_services == False:
                     for claim_service_service in service_service_set:
@@ -889,7 +890,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                                 claim_service_to_update = claim_service.services.filter(
                                     service=service_element.id)
                                 logger.debug(
-                                    "claim_service_to_update ", claim_service_to_update)
+                                    f"claim_service_to_update {claim_service_to_update}")
                                 if claim_service_to_update:
                                     qty_asked = claim_service_service.pop(
                                         'qty_asked', 0)
@@ -911,8 +912,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                             if item_element:
                                 claim_item_to_update = claim_service.items.filter(
                                     item=item_element.id)
-                                logger.debug("claim_item_to_update ",
-                                             claim_item_to_update)
+                                logger.debug(f"claim_item_to_update {claim_item_to_update}")
                                 if claim_item_to_update:
                                     qty_asked = claim_service_item.pop(
                                         'qty_asked', 0)
@@ -934,7 +934,15 @@ class SaveClaimReviewMutation(OpenIMISMutation):
             claim.audit_user_id_review = user.id_for_audit
             if all_rejected:
                 claim.status = Claim.STATUS_REJECTED
+            submit_review = data.get('submit_review', False)
+            if submit_review:
+                claim.review_status = Claim.REVIEW_DELIVERED
             claim.save()
+            if submit_review:
+                errors = update_claims_dedrems(None, user, [claim])
+                if errors:
+                    return errors
+
             return None
         except Exception as exc:
             return [{
