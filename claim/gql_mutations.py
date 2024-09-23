@@ -871,8 +871,8 @@ class SaveClaimReviewMutation(OpenIMISMutation):
             claim_service_elements = []
             for service in services:
                 service_id = service.pop('id')
-                service_linked = service.pop('service_service_set', [])
-                logger.debug("service_linked ", service_linked)
+                service_item_set = service.pop('service_service_set', [])
+                logger.debug("service_item_set ", service_item_set)
                 service_service_set = service.pop('service_service_set', [])
                 logger.debug("service_service_set ", service_service_set)
                 claim.services.filter(id=service_id).update(**service)
@@ -901,7 +901,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                                     claim_service_to_update.update(
                                         **claim_service_service)
                             claim_service_elements.append(claim_service)
-                    for claim_service_item in service_linked:
+                    for claim_service_item in service_item_set:
                         claim_item_code = claim_service_item.pop('subItemCode')
                         claim_service = claim.services.filter(
                             id=service_id).first()
