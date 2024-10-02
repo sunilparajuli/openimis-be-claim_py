@@ -32,7 +32,7 @@ from django.db.models.functions import Coalesce
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import PermissionDenied, ValidationError, ObjectDoesNotExist
 logger = logging.getLogger(__name__)
-
+from uuid import UUID
 
 @core.comparable
 class ClaimElementSubmit(object):
@@ -727,16 +727,21 @@ def set_feedback_prompt_validity_to_to_current_date(claim_uuid):
         return "No such feedback prompt exist."
 
 
-def update_claims_dedrems(uuids, user):
+def update_claims_dedrems(uuids, user, claims=None):
     # We could do it in one query with filter(claim__uuid__in=uuids) but we'd loose the logging
-    if not uuids:
+    
+    
+    if not uuids and not claims:
         # Additional check, empty uuids results in transaction error if uuids are queryset of uuids.
         return []
+    elif uuids:
+        claims = Claim.objects.filter(uuid__in=uuids)
     errors = []
-    claims = Claim.objects.filter(uuid__in=uuids)
-    remaining_uuid = list(map(str.upper,uuids))
+    
+    remaining_uuid = list(map(UUID,uuids)) if uuids else []
     for claim in claims:
-        remaining_uuid.remove(claim.uuid.upper())       
+        if uuids:
+            remaining_uuid.remove(UUID(claim.uuid))       
         logger.debug(f"delivering review on {claim.uuid}, reprocessing dedrem ({user})")
         errors += processing_claim(claim, user, False)
     if len(remaining_uuid):
