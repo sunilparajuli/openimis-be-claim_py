@@ -265,6 +265,7 @@ class ClaimInputType(OpenIMISMutation.Input):
     feedback = graphene.Field(FeedbackInputType, required=False)
     care_type = graphene.String(required=False)
     pre_authorization = graphene.Boolean(required=False)
+    patient_condition = graphene.String(required=False)
 
     items = graphene.List(ClaimItemInputType, required=False)
     services = graphene.List(ClaimServiceInputType, required=False)
