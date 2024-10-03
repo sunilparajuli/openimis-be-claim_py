@@ -23,8 +23,9 @@ from core import filter_validity
 # default arguments should not pass a list or a dict because they're mutable but we don't risk mutating them here:
 # noinspection PyDefaultArgument,DuplicatedCode
 from product.test_helpers import create_test_product, create_test_product_service, create_test_product_item
+from copy import copy
 
-
+import uuid
 class ValidationTest(TestCase):
     service_H = None
     service_O = None
@@ -160,11 +161,12 @@ class ValidationTest(TestCase):
         hf_without_pricelist = HealthFacility.objects.filter(items_pricelist__id__isnull=True).first()
         self.assertIsNotNone(hf_without_pricelist, "This test requires a health facility without a price list item")
         # Given
+        
         claim = create_test_claim({"health_facility_id": hf_without_pricelist.id}, product=self.product)
         
-        service1 = create_test_claimservice(claim, "S")
+        service1 = create_test_claimservice(claim, "S", custom_props={})
         
-        item1 = create_test_claimitem(claim, "D", True)
+        item1 = create_test_claimitem(claim, "D", True,  custom_props={})
         # When
         errors = validate_claim(claim, True)
         # Then
@@ -530,6 +532,47 @@ class ValidationTest(TestCase):
         errors = validate_claim(claim3, True)
         self.assertEqual(len(errors), 0, "The child has no waiting period")
 
+
+    def __make_history(self, obj, pivot_date):
+        histo = copy(obj)
+        histo.id = None
+        if hasattr(histo, "uuid"):
+            setattr(histo, "uuid", uuid.uuid4())
+        histo.validity_to = pivot_date
+        histo.legacy_id = obj.id
+        histo.save()
+        obj.validity_from=pivot_date
+        obj.save()
+
+    def test_product_time_correlation(self):
+        # When the insuree already reaches his limit of visits
+        # Given
+        insuree = create_test_insuree()
+        self.assertIsNotNone(insuree)
+        product = create_test_product("VISIT", custom_props={})
+
+        policy, insuree_policy = create_test_policy2(product, insuree, link=True)
+        service = create_test_service("V", custom_props={})
+        item = create_test_item("D", custom_props={})
+        product_service = create_test_product_service(product, service)
+        product_item = create_test_product_item(product, item)
+        pricelist_detail1 = add_service_to_hf_pricelist(service)
+        pricelist_detail2 = add_item_to_hf_pricelist(item)
+
+        claim1 = create_test_claim({"insuree_id": insuree.id})
+        claim1.health_facility.care_type = claim1.health_facility.CARE_TYPE_BOTH
+        claim1.health_facility.save()
+        service1 = create_test_claimservice(
+            claim1, custom_props={"service_id": service.id})
+        item1 = create_test_claimitem(
+            claim1, "D", custom_props={"item_id": item.id})
+        errors = validate_claim(claim1, True)
+        errors += validate_assign_prod_to_claimitems_and_services(claim1)
+        self.__make_history(product, (claim1.validity_to or claim1.validity_from) + timedelta(days=1) )
+        errors += process_dedrem(claim1, -1, True)
+        self.assertEqual(len(errors), 0)
+
+
      
     def test_submit_claim_dedrem(self):
         # When the insuree already reaches his limit of visits
@@ -831,7 +874,7 @@ class ValidationTest(TestCase):
         service1.refresh_from_db()
 
         set_claims_status([claim1.uuid], "review_status", Claim.REVIEW_DELIVERED)
-        update_claims_dedrems([claim1.uuid], self.user)
+        update_claims_dedrems(None, self.user, [claim1])
 
         # Then dedrem should have been updated
         dedrem = ClaimDedRem.objects.filter(claim=claim1, *filter_validity()).first()
@@ -995,6 +1038,7 @@ class ValidationTest(TestCase):
     def test_set_status(self):
         class DummyUser:
             id_for_audit=-1
+            id=1
         insuree = create_test_insuree()
         officer = create_test_officer(villages=[insuree.current_village or insuree.family.location])
         claim = create_test_claim(custom_props={'status':Claim.STATUS_CHECKED, 

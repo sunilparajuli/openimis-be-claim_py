@@ -25,14 +25,3 @@ class Migration(migrations.Migration):
         )
         
     ]
-    # remove the operation if the field already exist
-    try:
-        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('refer_from'))
-        operations.pop(0)
-    except:
-        pass
-    try:
-        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('refer_to'))
-        operations.pop()
-    except:    
-        pass

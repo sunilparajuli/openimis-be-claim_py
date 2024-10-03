@@ -99,3 +99,22 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
 * policy.models.Policy
 * product.models.Product
 * report.services.ReportService
+
+
+## price per stage
+
+remunerated* is not a real claim status
+CHECKED and reviewed is not a different status that CHECKED
+
+| claim Stage | elm latest qty | elm latest price | claim value |
+|---|---|---|---|
+| SAVED | qty_provided | price_asked | x |
+| CHECKED | qty_provided | price_adjusted | claimed |
+| CHECKED and reviewed | qty_approved | price_approved | approved | 
+| PROCESSED | qty_approved | price_valuated | approved |
+| VALUATED | qty_approved | price_valuated | valuated |
+| remunerated* | x | remunerated_amount | remunerated |
+
+
+### process steps
+SAVED --Submit--> CHECKED --process--> PROCESSED --batch run--> VALUATED --payment--> remunerated*

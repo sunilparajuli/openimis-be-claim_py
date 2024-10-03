@@ -44,6 +44,8 @@ REJECTION_REASON_INVALID_CLAIM = 20
 REJECTION_REASON_NO_COVERAGE = 21
 
 
+
+
 def validate_claim(claim, check_max, policies=None):
     """
     Based on the legacy validation, this method returns standard codes along with details
@@ -956,9 +958,9 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
         ).count()
     
         policy = next(iter([p for p in policies if p.id == policy_id]), None)
-        product = next(iter([p for p in products if p.id == policy.product_id]), None)
+        product = next(iter([p for p in products if p.id == policy.product_id or p.legacy_id == policy.product_id]), None)
         
-
+        
         hospital_visit = ( 
             product.ceiling_interpretation == Product.CEILING_INTERPRETATION_IN_PATIENT 
             and hospitalization == 1
@@ -1207,7 +1209,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
                     set_price_deducted = work_value
                     deducted += work_value
                     # remunerated += 0 # why ?
-                    set_price_valuated = 0
+                    set_price_approved = 0
                     set_price_remunerated = 0
                 else:
                     # partial coverage
@@ -1309,31 +1311,31 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
                 # here in this case we do not add the amount to be added to the
                 # ceiling --> so exclude from the actual value to be entered against the insert into tblClaimDedRem
                 # in the end of the prod loop
-                set_price_valuated = work_value
+                set_price_approved = work_value
                 set_price_remunerated = work_value
             else:
                 if ceiling and ceiling.amount > 0:
                     if ceiling.amount - prev_remunerated - remunerated > 0:
                         if ceiling.amount - prev_remunerated - remunerated >= work_value:
                             exceed_ceiling_amount = 0
-                            set_price_valuated = work_value
+                            set_price_approved = work_value
                             set_price_remunerated = work_value
                             remunerated += work_value
                         else:
                             total = ceiling.amount - prev_remunerated - remunerated
                             exceed_ceiling_amount = work_value - total
-                            set_price_valuated = total
+                            set_price_approved = total
                             set_price_remunerated = total
                             remunerated += total
                     else:
                         exceed_ceiling_amount = work_value
                         # remunerated += 0
-                        set_price_valuated = 0
+                        set_price_approved = 0
                         set_price_remunerated = 0
                 else:
                     exceed_ceiling_amount = 0
                     remunerated += work_value
-                    set_price_valuated = work_value
+                    set_price_approved = work_value
                     set_price_remunerated = work_value
             # if price adjusted not using approved price in its calculation
             if claim_detail.price_approved is None:
@@ -1347,7 +1349,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
                     # TODO ExceedCeilingAmountCategory = ExceedCeilingAmountCategory ???
                     relative_prices = True
                 else:
-                    claim_detail.price_valuated = set_price_valuated
+                    claim_detail.price_valuated = set_price_approved
                     claim_detail.deductable_amount = set_price_deducted
                     claim_detail.exceed_ceiling_amount = exceed_ceiling_amount
                     # TODO ExceedCeilingAmountCategory = ExceedCeilingAmountCategory ???
@@ -1380,7 +1382,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
         ClaimDedRem.objects.create(**claim_ded_rem_to_create)
 
         if is_process:
-            claim.valuated = remunerated
+            claim.approved = remunerated
             if relative_prices:
                 claim.status = Claim.STATUS_PROCESSED
             else:

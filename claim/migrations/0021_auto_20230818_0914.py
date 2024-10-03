@@ -16,10 +16,5 @@ class Migration(migrations.Migration):
             field=models.CharField(blank=True, db_column='CareType', max_length=4, null=True),
     )]
     # remove the operation if the field already exist
-    try:
-        Claim.objects.filter(pk__lt=10).aggregate(sum=models.Count('care_type'))
-        operations = []
-    except: 
-        pass
-        
+
 
