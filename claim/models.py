@@ -264,6 +264,7 @@ class Claim(core_models.VersionedModel, core_models.ExtendableModel):
     pre_authorization = models.BooleanField(
         default=False, blank=True, null=True)
     patient_condition = models.CharField(max_length=2, null=True, blank=True)
+    referral_code = models.CharField(max_length=50, null=True, blank=True)
 
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
