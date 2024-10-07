@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('claim', '0032_alter_claimdedrem_policy'),
-        ('claim', '0033_claim_care_type_claim_refer_from_claim_refer_to_and_more'),
+        ('claim', '0034_claim_care_type_claim_refer_from_claim_refer_to_and_more'),
     ]
 
     operations = [
