@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('location', '0018_auto_20230925_2243'),
-        ('claim', '0032_claim_care_type_claim_patient_condition_and_more'),
+        ('claim', '0033_claim_care_type_claim_patient_condition_and_more'),
     ]
 
     operations = [
