@@ -84,7 +84,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                     {
                         node
                         {
-                            uuid,code,jsonExt,dateClaimed,dateProcessed,feedbackStatus,reviewStatus,claimed,approved,status,restoreId,healthFacility { id uuid name code },insuree{id, uuid, chfId, lastName, otherNames, dob},attachmentsCount, preAuthorization
+                            uuid,code,jsonExt,dateClaimed,dateProcessed,feedbackStatus,reviewStatus,claimed,approved,status,restoreId,healthFacility { id uuid name code },insuree{id, uuid, chfId, lastName, otherNames, dob},attachmentsCount, preAuthorization, patientCondition, referralCode
                         }
                     }
                 }
@@ -113,7 +113,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                     {
                         node
                         {
-                            uuid,code,jsonExt,dateClaimed,dateProcessed,feedbackStatus,reviewStatus,claimed,approved,status,restoreId,healthFacility { id uuid name code },insuree{id, uuid, chfId, lastName, otherNames, dob},attachmentsCount, preAuthorization
+                            uuid,code,jsonExt,dateClaimed,dateProcessed,feedbackStatus,reviewStatus,claimed,approved,status,restoreId,healthFacility { id uuid name code },insuree{id, uuid, chfId, lastName, otherNames, dob},attachmentsCount, preAuthorization, patientCondition, referralCode
                         }
                     }
                 }
@@ -155,6 +155,8 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                 healthFacilityId: {self.claim_admin.health_facility.id}
                 visitType: "O"
                 preAuthorization: false
+                patientCondition: "R"
+                referralCode: "REF1"
                 services: [
                 {{
 
@@ -203,6 +205,8 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                 healthFacilityId: {self.claim_admin.health_facility.id}
                 visitType: "O"
                 preAuthorization: false
+                patientCondition: "R"
+                referralCode: "REF1"
                 services: [
                 {{
 
