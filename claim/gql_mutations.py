@@ -871,6 +871,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                     all_rejected = False
             services = data.pop('services') if 'services' in data else []
             claimed = 0
+            update_claimed = False
             claim_service_elements = []
             for service in services:
                 service_id = service.pop('id')
@@ -879,57 +880,66 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                 service_service_set = service.pop('service_service_set', [])
                 logger.debug(f"service_service_set {service_service_set} ")
                 claim.services.filter(id=service_id).update(**service)
-                if ClaimConfig.native_code_for_services == False:
-                    for claim_service_service in service_service_set:
-                        claim_service_code = claim_service_service.pop(
-                            'subServiceCode')
-                        claim_service = claim.services.filter(
-                            id=service_id).first()
-                        if claim_service:
-                            service_element = Service.objects.filter(
-                                *filter_validity(), code=claim_service_code).first()
-                            if service_element:
-                                claim_service_to_update = claim_service.services.filter(
-                                    service=service_element.id)
-                                logger.debug(
-                                    f"claim_service_to_update {claim_service_to_update}")
-                                if claim_service_to_update:
-                                    qty_asked = claim_service_service.pop(
-                                        'qty_asked', 0)
-                                    price_asked = claim_service_service.pop(
-                                        'price_asked', 0)
-                                    claim_service_service['qty_displayed'] = qty_asked
-                                    price = qty_asked * price_asked
-                                    claimed += price
-                                    claim_service_to_update.update(
-                                        **claim_service_service)
-                            claim_service_elements.append(claim_service)
-                    for claim_service_item in service_item_set:
-                        claim_item_code = claim_service_item.pop('subItemCode')
-                        claim_service = claim.services.filter(
-                            id=service_id).first()
-                        if claim_service:
-                            item_element = Item.objects.filter(
-                                *filter_validity(), code=claim_item_code).first()
-                            if item_element:
-                                claim_item_to_update = claim_service.items.filter(
-                                    item=item_element.id)
-                                logger.debug(f"claim_item_to_update {claim_item_to_update}")
-                                if claim_item_to_update:
-                                    qty_asked = claim_service_item.pop(
-                                        'qty_asked', 0)
-                                    price_asked = claim_service_item.pop(
-                                        'price_asked', 0)
-                                    claim_service_item['qty_displayed'] = qty_asked
-                                    price = qty_asked * price_asked
-                                    claimed += price
-                                    claim_item_to_update.update(
-                                        **claim_service_item)
+                for claim_service_service in service_service_set:
+                    claim_service_code = claim_service_service.pop(
+                        'subServiceCode')
+                    claim_service = claim.services.filter(
+                        id=service_id).first()
+                    if claim_service:
+                        service_element = Service.objects.filter(
+                            *filter_validity(), code=claim_service_code).first()
+                        if service_element:
+                            claim_service_to_update = claim_service.services.filter(
+                                service=service_element.id)
+                            logger.debug(
+                                f"claim_service_to_update {claim_service_to_update}")
+                            if claim_service_to_update:
+                                update_claimed = True
+                                qty_asked = claim_service_service.pop(
+                                    'qty_asked', 0)
+                                price_asked = claim_service_service.pop(
+                                    'price_asked', 0)
+                                claim_service_service['qty_displayed'] = qty_asked
+                                price = qty_asked * price_asked
+                                service = Service.objects.get(
+                                    id=service_id, validity_to__isnull=True)
+                                if service.manualPrice:
+                                    price = service.price
+                                claimed += price
+                                claim_service_to_update.update(
+                                    **claim_service_service)
+                        claim_service_elements.append(claim_service)
+                for claim_service_item in service_item_set:
+                    claim_item_code = claim_service_item.pop('subItemCode')
+                    claim_service = claim.services.filter(
+                        id=service_id).first()
+                    if claim_service:
+                        item_element = Item.objects.filter(
+                            *filter_validity(), code=claim_item_code).first()
+                        if item_element:
+                            claim_item_to_update = claim_service.items.filter(
+                                item=item_element.id)
+                            logger.debug(f"claim_item_to_update {claim_item_to_update}")
+                            if claim_item_to_update:
+                                update_claimed = True
+                                qty_asked = claim_service_item.pop(
+                                    'qty_asked', 0)
+                                price_asked = claim_service_item.pop(
+                                    'price_asked', 0)
+                                claim_service_item['qty_displayed'] = qty_asked
+                                price = qty_asked * price_asked
+                                service = Service.objects.get(
+                                    id=service_id, validity_to__isnull=True)
+                                if service.manualPrice:
+                                    price = service.price
+                                claimed += price
+                                claim_item_to_update.update(
+                                    **claim_service_item)
 
                 if service['status'] == ClaimService.STATUS_PASSED:
                     all_rejected = False
             claim.approved = approved_amount(claim)
-            if ClaimConfig.native_code_for_services == False:
+            if update_claimed:
                 claim.claimed = claimed
                 for claimservice in claim_service_elements:
                     setattr(claimservice, 'price_adjusted', claimed)

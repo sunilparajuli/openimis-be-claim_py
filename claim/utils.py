@@ -19,7 +19,7 @@ def process_child_relation(user, data_children, claim_id, children, create_hook)
     if __check_if_maximum_amount_overshoot(data_children, children):
         raise ValidationError(_("mutation.claim_item_service_maximum_amount_overshoot"))
     for data_elt in data_children:
-        use_sub = ClaimConfig.native_code_for_services == False and create_hook == service_create_hook
+        use_sub = create_hook == service_create_hook
 
         claimed += calcul_amount_service(data_elt, use_sub)
         
@@ -73,6 +73,11 @@ def get_valid_policies_qs(insuree_id, target_date):
     )
    
 def calcul_amount_service(elt, use_sub=True):
+    if 'service_id' in elt and use_sub:
+        service = Service.objects.get(id=elt['service_id'], validity_to__isnull=True)
+        if service.manualPrice:
+            total_claimed = service.price
+            return total_claimed
     total_claimed = generic_amount_claimdetail(elt)
     total_claimed_sub = 0
     sub_found = False
