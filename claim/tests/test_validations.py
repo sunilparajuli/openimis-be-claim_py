@@ -1049,7 +1049,7 @@ class ValidationTest(TestCase):
     
     def test_submit_claim_with_different_packatypes(self):
         from claim.apps import ClaimConfig
-        ClaimConfig.native_code_for_services=False
+        ClaimConfig.verify_quantities=True
         insuree = create_test_insuree()
         self.assertIsNotNone(insuree)
         product = create_test_product("VISIT", custom_props={})

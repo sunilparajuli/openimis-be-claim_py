@@ -1142,7 +1142,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
                 set_price_adjusted = claim_detail.price_approved
             if claim_detail.price_origin == ProductItemOrService.ORIGIN_CLAIM:
                 set_price_adjusted = claim_detail.price_asked
-                if ClaimConfig.native_code_for_services == False:
+                if ClaimConfig.verify_quantities:
                     if not detail_is_item:
                         service_price = None
                         if claim_detail.service.packagetype == 'F':
@@ -1151,7 +1151,7 @@ def process_dedrem(claim, audit_user_id=-1, is_process=False, policies=None, ite
                             set_price_adjusted = service_price
             else:
                 set_price_adjusted = pl_price
-                if ClaimConfig.native_code_for_services == False:
+                if ClaimConfig.verify_quantities:
                     if not detail_is_item:
                         contunue_service_check = True
                         if claim_detail.service.packagetype == 'P':

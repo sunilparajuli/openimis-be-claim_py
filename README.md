@@ -85,10 +85,9 @@ It is dedicated to be deployed as a module of [openimis-be_py](https://github.co
   * attachments in input are NOT streamed (posted in a GraphQL query and fully read when serving), gateway must be configure to limit request payload size
   * attachments in output are served from the python (django) os process, generating load (memory consumption) on the application server, customisation of the view to output a redirect to a static file server is recommended
   * in an attempt to prevent encoding problems, files are written as binaries on the filesystem, please ensure the mounted file system supports python binary access (wb flag)
-* native_code_for_services: Defines whether the system must check the service & sub-services prices or not. 
+* verify_quantities: Defines whether the system must check the service & sub-services prices or not. 
   * If the packagetype of the service is flat fee bundle, the system checks if claim_detail.price_adjusted or claim_detail.price_asked is higher than the price of the service. If it's the case, the final price of the claim becomes the price of the service.
   * On the other hand, if the service type is Fee-for-service bundle then the system checks all the sub-services of the claim to find out if the qty_provided of the sub-service is indeed equal to the qty_displayed of the claimserviceservice or if the qty_provided of the sub-item is indeed equal to the qty_displayed of the claimserviceitem. If all are not equal then the final price of the claim will be 0.
-  * Also, if this parameter is False, then during the review, the quantities of the sub-services and sub-items will be recalculated, as well as the price_adjusted of the claim.
 
 ## openIMIS Modules Dependencies
 * core.models.VersionedModel
