@@ -643,10 +643,10 @@ def set_claims_status(uuids, field, status, audit_data=None, user=None):
     errors = []
     claims = Claim.objects \
             .filter(uuid__in=uuids,
-                    *filter_validity()) 
-    remaining_uuid = list(map(str.upper,uuids))
+                    *filter_validity())
+    remaining_uuid = list(set(map(str.upper, uuids)))
     for claim in claims:
-        remaining_uuid.remove(claim.uuid.upper())        
+        remaining_uuid.remove(claim.uuid.upper())
         try:
             claim.save_history()
             setattr(claim, field, status)
