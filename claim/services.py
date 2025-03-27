@@ -672,8 +672,9 @@ def set_claims_status(uuids, field, status, audit_data=None, user=None):
                 for m in exc.args:
                     errors.append({'message': m })
     if len(remaining_uuid):
-        errors.append(_(
-            "claim.validation.id_does_not_exist") % {'id': ','.join(remaining_uuid)})
+        errors += [
+            {'message': _("claim.validation.id_does_not_exist") % {'id': ','.join(remaining_uuid)}}
+        ]
 
     return errors
 
