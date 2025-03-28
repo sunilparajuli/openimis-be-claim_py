@@ -38,7 +38,7 @@ from claim.services import validate_claim_data as service_validate_claim_data, \
             processing_claim as service_processing_claim,\
             create_feedback_prompt as service_create_feedback_prompt, update_claims_dedrems,\
                 set_feedback_prompt_validity_to_to_current_date, set_claims_status
-
+from claim.validations import REJECTION_REASON_INVALID_CLAIM
 from django.db import transaction
 import requests
 
