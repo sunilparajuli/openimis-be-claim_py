@@ -2,7 +2,7 @@ import base64
 import json
 from dataclasses import dataclass
 from core.models import User
-from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
+from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase, BaseTestContext
 from core.utils import filter_validity
 from core.test_helpers import create_test_interactive_user
 from django.conf import settings
@@ -26,12 +26,6 @@ from medical.test_helpers import create_test_service
 from medical_pricelist.test_helpers import add_service_to_hf_pricelist
 
 
-@dataclass
-class DummyContext:
-    """ Just because we need a context to generate. """
-    user: User
-
-
 class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
     # This is required by some version of graphene but is never used. It should be set to the schema but the import
     # is shown as an error in the IDE, so leaving it as True.
@@ -52,7 +46,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
         cls.admin_user = create_test_interactive_user(
             username="testLocationAdmin")
         cls.admin_token = get_token(
-            cls.admin_user, DummyContext(user=cls.admin_user))
+            cls.admin_user, BaseTestContext(user=cls.admin_user))
         cls.schema = Schema(
             query=claim_schema.Query,
             mutation=claim_schema.Mutation
@@ -130,7 +124,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
 
     def execute_mutation(self, mutation):
         mutation_result = self.graph_client.execute(
-            mutation, context=DummyContext(user=self.admin_user))
+            mutation, context=BaseTestContext(user=self.admin_user))
         return mutation_result
 
     def test_mutation_create_claim(self):
