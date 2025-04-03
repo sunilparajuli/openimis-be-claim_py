@@ -395,7 +395,7 @@ class ClaimMutation(core_models.UUIDModel):
         db_table = "claim_ClaimMutation"
 
 
-class ClaimDetailManager(models.Manager):
+class ClaimDetailManager(core_models.CachedManager):
 
     def filter(self, *args, **kwargs):
         keys = [x for x in kwargs if "itemsvc" in x]
