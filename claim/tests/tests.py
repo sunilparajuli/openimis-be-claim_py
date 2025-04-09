@@ -13,7 +13,8 @@ from claim import schema as claim_schema
 from graphene.test import Client
 from graphene import Schema
 
-from claim.models import Claim, ClaimAdmin
+from claim.models import Claim
+from core.models.user import ClaimAdmin
 
 import datetime
 from policy.models import Policy
@@ -286,6 +287,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                 priceApproved: "5.00"
                 qtyApproved: "1.00"
                 status: 1
+                serviceServiceSet: [ ]
             }}]
           claimUuid: "{claim.uuid}"
           submitReview : false

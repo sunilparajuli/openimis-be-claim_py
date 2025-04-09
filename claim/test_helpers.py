@@ -1,4 +1,5 @@
-from claim.models import Claim, ClaimService, ClaimItem, ClaimDedRem, ClaimAdmin
+from claim.models import Claim, ClaimService, ClaimItem, ClaimDedRem
+from core.models.user import ClaimAdmin
 from claim.validations import get_claim_category
 from claim.utils import approved_amount
 from claim.services import claim_create, update_sum_claims
