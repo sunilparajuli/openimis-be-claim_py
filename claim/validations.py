@@ -308,7 +308,7 @@ def frequency_check(qs, claim, elt):
         .annotate(target_date=Coalesce("claim__date_to", "claim__date_from")) \
         .filter(Q(rejection_reason=0) | Q(rejection_reason__isnull=True),
                 validity_to__isnull=True,
-                target_date__gte=td - delta,
+                target_date__range=(td - delta, td),
                 status=ClaimDetail.STATUS_PASSED,
                 claim__insuree_id=claim.insuree_id,
                 claim__status__gt=Claim.STATUS_ENTERED

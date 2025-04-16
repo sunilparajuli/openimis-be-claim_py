@@ -882,7 +882,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                 claim.services.filter(id=service_id).update(**service)
                 for claim_service_service in service_service_set:
                     claim_service_code = claim_service_service.pop(
-                        'subServiceCode')
+                        'sub_service_code')
                     claim_service = claim.services.filter(
                         id=service_id).first()
                     if claim_service:
@@ -910,7 +910,7 @@ class SaveClaimReviewMutation(OpenIMISMutation):
                                     **claim_service_service)
                         claim_service_elements.append(claim_service)
                 for claim_service_item in service_item_set:
-                    claim_item_code = claim_service_item.pop('subItemCode')
+                    claim_item_code = claim_service_item.pop('sub_item_code')
                     claim_service = claim.services.filter(
                         id=service_id).first()
                     if claim_service:
