@@ -210,7 +210,6 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                 explanation: "why not"
                 qtyProvided: "2.00"
                 status: 1,
-                serviceItemSet: [],
                 serviceServiceSet: []
             }}
                 ]
@@ -224,7 +223,7 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
             }}
                 ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
-        self.get_mutation_result(
+        response = self.get_mutation_result(
             '3a90436b-d5ea-48e7-bde4-0bcff0240260', self.admin_token)
 
         # submit claim
@@ -287,7 +286,8 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                 priceApproved: "5.00"
                 qtyApproved: "1.00"
                 status: 1
-                serviceServiceSet: [ ]
+                serviceServiceSet: [ ] 
+                serviceItemSet: [ ]
             }}]
           claimUuid: "{claim.uuid}"
           submitReview : false
@@ -319,6 +319,8 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
                 priceApproved: "5.00"
                 qtyApproved: "1.00"
                 status: 1
+                serviceServiceSet: [ ] 
+                serviceItemSet: [ ]
             }}]
           claimUuid: "{claim.uuid}"
           submitReview : true
@@ -332,12 +334,15 @@ class ClaimGraphQLTestCase(openIMISGraphQLTestCase):
         """,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"})
 
-        self.get_mutation_result(
+        result = self.get_mutation_result(
             'd44f5fd2-1f8d-4748-a7c2-7dea38bfde06', self.admin_token)
         
         
-        
+
+
 
         claim.refresh_from_db()
         self.assertEqual(claim.feedback_status, Claim.FEEDBACK_SELECTED)
         self.assertEqual(claim.review_status, Claim.REVIEW_DELIVERED)
+
+
