@@ -242,8 +242,7 @@ def validate_claimservice_in_price_list(claim, claimservice):
     target_date = get_claim_target_date(claim)
     pricelist_detail_qs = ServicesPricelistDetail.objects \
         .filter(service_id=claimservice.service_id,
-                validity_to__gte=target_date,
-                validity_from__lte=target_date,
+                 *filter_validity(validity=target_date)
                 services_pricelist=claim.health_facility.services_pricelist,
                 services_pricelist__validity_to__isnull=True
                 )
